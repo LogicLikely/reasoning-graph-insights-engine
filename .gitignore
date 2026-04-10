@@ -137,3 +137,22 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Backend
+backend/bin/
+backend/obj/
+
+# Env
+.env
+.env.*
+
+# VS Code (keep settings if you want)
+.vscode/*
+!.vscode/settings.json
+
+# OS
+.DS_Store
