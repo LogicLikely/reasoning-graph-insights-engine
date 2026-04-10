@@ -1,0 +1,15 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "Running frontend checks..."
+(
+  cd frontend
+  npm run lint
+  npm run build
+)
+
+echo "Running backend checks..."
+(
+  cd backend
+  dotnet build
+)

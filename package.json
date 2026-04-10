@@ -1,0 +1,25 @@
+{
+  "name": "reasoning-graph-insights-engine",
+  "version": "1.0.0",
+  "description": "Graph-based analysis engine for identifying structural vulnerabilities in reasoning networks using exact and approximation algorithms.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LogicLikely/reasoning-graph-insights-engine.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/LogicLikely/reasoning-graph-insights-engine/issues"
+  },
+  "homepage": "https://github.com/LogicLikely/reasoning-graph-insights-engine#readme",
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}
