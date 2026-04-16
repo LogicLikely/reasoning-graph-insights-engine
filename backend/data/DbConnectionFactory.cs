@@ -14,7 +14,7 @@ public class DbConnectionFactory
         _databaseOptions = databaseOptions.Value;
     }
 
-    public IDbConnection CreateConnection()
+    public virtual IDbConnection CreateConnection()
     {
         if (string.IsNullOrWhiteSpace(_databaseOptions.ConnectionString))
         {

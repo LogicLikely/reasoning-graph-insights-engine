@@ -5,6 +5,7 @@ Graph-based analysis engine for identifying structural vulnerabilities in reason
 # commands (from top-level folder)
 
 dotnet run --project backend/backend.csproj
+dotnet test
 
 # notes
 
