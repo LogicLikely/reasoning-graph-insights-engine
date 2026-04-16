@@ -2,7 +2,11 @@ namespace Backend.Models.Dto;
 
 public class GraphDto
 {
-    public Guid Id { get; set; }
+    public string Slug { get; set; } = string.Empty;
+
+    public string Title { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
 
     public List<GraphNodeDto> Nodes { get; set; } = new();
 

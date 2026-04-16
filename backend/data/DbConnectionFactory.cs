@@ -1,5 +1,7 @@
 using Backend.Configuration;
+using System.Data;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace Backend.Data;
 
@@ -12,5 +14,14 @@ public class DbConnectionFactory
         _databaseOptions = databaseOptions.Value;
     }
 
-    public string? ConnectionString => _databaseOptions.ConnectionString;
+    public IDbConnection CreateConnection()
+    {
+        if (string.IsNullOrWhiteSpace(_databaseOptions.ConnectionString))
+        {
+            throw new InvalidOperationException(
+                "Database:ConnectionString is not configured.");
+        }
+
+        return new NpgsqlConnection(_databaseOptions.ConnectionString);
+    }
 }

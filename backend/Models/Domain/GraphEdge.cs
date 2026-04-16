@@ -2,9 +2,11 @@ namespace Backend.Models.Domain;
 
 public class GraphEdge
 {
-    public Guid Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
-    public Guid SourceNodeId { get; set; }
+    public string From { get; set; } = string.Empty;
 
-    public Guid TargetNodeId { get; set; }
+    public string To { get; set; } = string.Empty;
+
+    public string Kind { get; set; } = string.Empty;
 }

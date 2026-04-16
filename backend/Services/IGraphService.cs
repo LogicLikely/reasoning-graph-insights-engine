@@ -1,8 +1,8 @@
-using Backend.Models.Domain;
+using Backend.Models.Dto;
 
 namespace Backend.Services;
 
 public interface IGraphService
 {
-    Task<Graph?> GetGraphAsync(CancellationToken cancellationToken = default);
+    Task<GraphDto?> GetBySlugAsync(string slug, CancellationToken cancellationToken = default);
 }

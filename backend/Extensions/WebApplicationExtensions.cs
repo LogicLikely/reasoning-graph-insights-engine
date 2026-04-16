@@ -4,6 +4,8 @@ public static class WebApplicationExtensions
 {
     public static WebApplication UseApplicationPipeline(this WebApplication app)
     {
+        app.UseExceptionHandler("/api/error");
+
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();

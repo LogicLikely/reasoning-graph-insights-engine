@@ -4,5 +4,5 @@ namespace Backend.Repositories;
 
 public interface IGraphRepository
 {
-    Task<Graph?> GetGraphAsync(CancellationToken cancellationToken = default);
+    Task<Graph?> GetBySlugAsync(string slug, CancellationToken cancellationToken = default);
 }

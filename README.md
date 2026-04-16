@@ -5,3 +5,9 @@ Graph-based analysis engine for identifying structural vulnerabilities in reason
 # commands (from top-level folder)
 
 dotnet run --project backend/backend.csproj
+
+# notes
+
+DB password is stored like so...
+
+export Database\_\_ConnectionString="Host=localhost;Database=insights;Username=postgres;Password=PasswordGoesHere"
