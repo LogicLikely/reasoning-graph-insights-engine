@@ -10,6 +10,5 @@ echo "Running frontend checks..."
 
 echo "Running backend checks..."
 (
-  cd backend
-  dotnet build
+  dotnet test
 )
