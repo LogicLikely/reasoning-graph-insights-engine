@@ -1,6 +1,6 @@
 export function AboutPage() {
   return (
-    <div className="page-shell">
+    <div className="page-shell" data-testid="about-page">
       <section className="page-hero">
         <span className="eyebrow">About The System</span>
         <h1>A small platform for reasoning graphs and structural insight.</h1>

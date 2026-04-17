@@ -1,6 +1,6 @@
 export function DemoPage() {
   return (
-    <div className="page-shell">
+    <div className="page-shell" data-testid="demo-page">
       <section className="page-hero">
         <span className="eyebrow">Demo Workspace</span>
         <h1>Prepared for graph visualization, without pretending it exists yet.</h1>

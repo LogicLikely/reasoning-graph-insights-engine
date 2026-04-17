@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 
 export function HomePage() {
   return (
-    <div className="page-shell">
+    <div className="page-shell" data-testid="home-page">
       <section className="page-hero">
         <span className="eyebrow">Proof of Concept Platform</span>
         <h1>Map how reasoning structures hold together under pressure.</h1>

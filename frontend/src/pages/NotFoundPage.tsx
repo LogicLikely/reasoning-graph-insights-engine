@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 
 export function NotFoundPage() {
   return (
-    <div className="not-found-layout">
+    <div className="not-found-layout" data-testid="not-found-page">
       <section className="not-found-card">
         <span className="eyebrow">404</span>
         <h1>Page not found</h1>
