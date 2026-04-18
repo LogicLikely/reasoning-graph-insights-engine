@@ -12,7 +12,7 @@ dotnet test
 DB password is stored like so...
 
 ```js
-export Database\_\_ConnectionString="Host=localhost;Database=insights;Username=postgres;Password=PasswordGoesHere"
+export Database__ConnectionString="Host=localhost;Database=insights;Username=postgres;Password=PasswordGoesHere"
 ```
 
 ## future security
@@ -22,13 +22,13 @@ we are letting everything through. But in the backend Program.cs, we can make on
 down. Then set an environment variable like either...
 
 ```js
-export Cors\_\_AllowedOrigins\_\_0=http://localhost:5173
+export Cors__AllowedOrigins__0=http://localhost:5173
 ```
 
 ...or...
 
 ```js
-export Cors\_\_AllowedOrigins\_\_0=http://logiclikely.com
+export Cors__AllowedOrigins__0=http://logiclikely.com
 ```
 
 # frontend commands (from frontend folder)
