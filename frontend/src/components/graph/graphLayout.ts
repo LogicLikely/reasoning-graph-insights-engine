@@ -14,7 +14,7 @@ export function applyDagreLayout<
   const graph = new dagre.graphlib.Graph()
 
   graph.setGraph({
-    rankdir: 'LR',
+    rankdir: 'RL',
     nodesep: 30,
     ranksep: 100,
     marginx: 24,
@@ -40,8 +40,8 @@ export function applyDagreLayout<
 
     return {
       ...node,
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
+      sourcePosition: Position.Left,
+      targetPosition: Position.Right,
       position: {
         x: x - NODE_WIDTH / 2,
         y: y - NODE_HEIGHT / 2,
