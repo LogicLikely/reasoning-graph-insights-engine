@@ -1,16 +1,60 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
-import { sampleGraph } from '../fixtures/sampleGraph'
+import type { GraphFixture } from '../fixtures/sampleGraph'
+import { getGraphBySlug } from '../services/graphService'
 import './DemoPage.css'
 
-const flowGraph = mapGraphToFlow(sampleGraph)
+const DEMO_GRAPH_SLUG = 'sample-medium'
 
 export function DemoPage() {
+  const [graph, setGraph] = useState<GraphFixture | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [reloadKey, setReloadKey] = useState(0)
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
-  const selectedNode = sampleGraph.nodes.find((node) => node.id === selectedNodeId)
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadGraph() {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const result = await getGraphBySlug(DEMO_GRAPH_SLUG)
+
+        if (!isActive) {
+          return
+        }
+
+        setGraph(result)
+        setSelectedNodeId(undefined)
+      } catch {
+        if (!isActive) {
+          return
+        }
+
+        setGraph(null)
+        setError('Unable to load graph data right now.')
+      } finally {
+        if (isActive) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadGraph()
+
+    return () => {
+      isActive = false
+    }
+  }, [reloadKey])
+
+  const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
+  const flowGraph = graph ? mapGraphToFlow(graph) : null
 
   return (
     <div className="page-shell demo-page-shell" data-testid="demo-page">
@@ -23,32 +67,52 @@ export function DemoPage() {
       <section className="demo-visualization-grid">
         <article className="demo-stage demo-stage--live">
           <div className="demo-stage__header">
-            <h2>{sampleGraph.title}</h2>
+            <h2>{graph?.title ?? 'Loading graph demo'}</h2>
           </div>
 
-          <GraphCanvas
-            nodes={flowGraph.nodes}
-            edges={flowGraph.edges}
-            selectedNodeId={selectedNodeId}
-            onNodeSelect={setSelectedNodeId}
-          />
+          {isLoading ? (
+            <div className="demo-state" data-testid="demo-loading-state">
+              <h3>Loading graph…</h3>
+              <p>Fetching the current reasoning graph and preparing the layout.</p>
+            </div>
+          ) : error ? (
+            <div className="demo-state demo-state--error" data-testid="demo-error-state">
+              <h3>Unable to load graph</h3>
+              <p>{error}</p>
+              <button
+                className="secondary-link demo-state__button"
+                onClick={() => setReloadKey((value) => value + 1)}
+                type="button"
+              >
+                Retry
+              </button>
+            </div>
+          ) : flowGraph && graph ? (
+            <GraphCanvas
+              nodes={flowGraph.nodes}
+              edges={flowGraph.edges}
+              selectedNodeId={selectedNodeId}
+              onNodeSelect={setSelectedNodeId}
+            />
+          ) : null}
 
           <p>
             Click a node to inspect its details. Pan and zoom are handled by
             React Flow, with dagre providing the initial layout.
           </p>
-
         </article>
 
         <div className="demo-sidebar-stack">
           <GraphDetailsPanel node={selectedNode} />
-          <GraphOverviewPanel
-            title={sampleGraph.title}
-            description={sampleGraph.description}
-            nodeCount={sampleGraph.nodes.length}
-            edgeCount={sampleGraph.edges.length}
-            fixtureName={sampleGraph.slug}
-          />
+          {graph ? (
+            <GraphOverviewPanel
+              title={graph.title}
+              description={graph.description}
+              nodeCount={graph.nodes.length}
+              edgeCount={graph.edges.length}
+              fixtureName={graph.slug}
+            />
+          ) : null}
         </div>
       </section>
 
