@@ -1,0 +1,41 @@
+.not-found-card {
+  position: relative;
+  overflow: hidden;
+  padding: 2rem;
+  max-width: 42rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1.5rem;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.not-found-card::after {
+  content: '';
+  position: absolute;
+  inset: auto auto -4rem -4rem;
+  width: 9rem;
+  height: 9rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(26, 141, 114, 0.14), transparent 68%);
+  pointer-events: none;
+}
+
+.not-found-card h1 {
+  margin-bottom: 0.8rem;
+}
+
+.not-found-card p {
+  color: var(--color-text-muted);
+}
+
+.not-found-layout {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+}
+
+@media (max-width: 640px) {
+  .not-found-card {
+    border-radius: 1.25rem;
+  }
+}
