@@ -188,7 +188,7 @@ code {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .site-nav__link {
@@ -275,10 +275,12 @@ code {
 
   .site-nav {
     width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .site-nav__link {
-    flex: 1 1 calc(50% - 0.6rem);
+    flex: 0 0 auto;
     text-align: center;
   }
 
@@ -292,9 +294,5 @@ code {
   .site-header__inner,
   .site-footer__inner {
     width: min(1120px, calc(100vw - 1.25rem));
-  }
-
-  .site-nav__link {
-    flex-basis: 100%;
   }
 }
