@@ -47,7 +47,7 @@ export const sampleGraph: GraphFixture = {
     {
       id: 'R1',
       kind: 'root',
-      title: 'Earth is flat',
+      title: 'The Earth is flat',
       bodyText: 'The Earth is flat.',
       tags: ['flat-earth', 'root'],
       prior: 0.2,
@@ -75,7 +75,7 @@ export const sampleGraph: GraphFixture = {
     {
       id: 'C3',
       kind: 'claim',
-      title: 'No obvious curvature from altitude',
+      title: 'No obvious curvature from high-altitude passenger footage',
       bodyText: 'Images from balloons and planes do not show obvious curvature.',
       category: 'visual-observation',
       prior: 0.45,

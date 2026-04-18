@@ -19,6 +19,16 @@ describe('mapGraphToFlow', () => {
     })
   })
 
+  it('truncates long node titles for card display only', () => {
+    const flow = mapGraphToFlow(sampleGraph)
+    const longTitleNode = flow.nodes.find((node) => node.id === 'C3')
+
+    expect(longTitleNode?.data.title).toBe(
+      'No obvious curvature from high-altitude passenger footage',
+    )
+    expect(longTitleNode?.data.displayTitle).toBe('No obvious curvature from high...')
+  })
+
   it('assigns laid out positions instead of leaving every node at the origin', () => {
     const flow = mapGraphToFlow(sampleGraph)
 

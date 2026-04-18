@@ -25,18 +25,25 @@ export function GraphCanvas({
   onNodeSelect,
 }: GraphCanvasProps) {
   const decoratedNodes = nodes.map((node) => ({
-    ...node,
-    selected: node.id === selectedNodeId,
-    data: {
-      ...node.data,
-      label: (
-        <div className="graph-node-card">
-          <span className="graph-node-card__kind">{node.data.kind}</span>
-          <strong className="graph-node-card__title">{node.data.title}</strong>
-          <span className="graph-node-card__id">{node.data.id}</span>
-        </div>
-      ),
-    },
+      ...node,
+      selected: node.id === selectedNodeId,
+      data: {
+        ...node.data,
+        label: (
+          <div className="graph-node-card">
+            <strong className="graph-node-card__title">
+              <span className="graph-node-card__title-text">
+                {node.data.symbol} {node.data.displayTitle}
+              </span>
+            </strong>
+            {node.data.metricLabel && node.data.metricValue ? (
+              <span className="graph-node-card__metric">
+                {node.data.metricLabel}: {node.data.metricValue}
+              </span>
+            ) : null}
+          </div>
+        ),
+      },
   }))
 
   const handleNodeClick: NodeMouseHandler<Node<GraphNodeCardData>> = (_, node) => {

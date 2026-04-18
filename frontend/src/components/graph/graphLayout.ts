@@ -2,7 +2,7 @@ import dagre from 'dagre'
 import { Position, type Edge, type Node } from '@xyflow/react'
 
 const NODE_WIDTH = 230
-const NODE_HEIGHT = 88
+const NODE_HEIGHT = 112
 
 export function applyDagreLayout<
   TNodeData extends Record<string, unknown>,

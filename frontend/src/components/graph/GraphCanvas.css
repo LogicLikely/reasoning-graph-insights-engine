@@ -24,37 +24,43 @@
 
 .graph-node-card {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.55rem;
   padding: 0.9rem 1rem;
+  min-height: 112px;
   border-radius: 1rem;
   border: 1px solid rgba(13, 93, 86, 0.14);
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 16px 28px rgba(39, 74, 67, 0.1);
-}
-
-.graph-node-card__kind,
-.graph-node-card__id {
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.graph-node-card__kind {
-  color: var(--color-accent);
-  font-weight: 800;
+  align-content: start;
 }
 
 .graph-node-card__title {
   color: var(--color-text);
-  line-height: 1.2;
+  font-size: 1.34rem;
+  line-height: 1.3;
+  font-weight: 700;
+  text-align: left;
 }
 
-.graph-node-card__id {
+.graph-node-card__title-text {
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: calc(1.3em * 2);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.graph-node-card__metric {
+  font-size: 1rem;
+  font-weight: 700;
   color: var(--color-text-muted);
+  margin-top: auto;
 }
 
 .graph-node--counter .graph-node-card {
   border-color: rgba(202, 90, 61, 0.22);
+  background: rgba(255, 248, 247, 0.96);
 }
 
 .graph-node--evidence .graph-node-card {
