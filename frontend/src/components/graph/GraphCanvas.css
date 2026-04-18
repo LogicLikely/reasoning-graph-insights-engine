@@ -22,7 +22,16 @@
   padding: 0;
 }
 
+.react-flow__node.graph-node:hover {
+  z-index: 1000 !important;
+}
+
+.react-flow__node.graph-node.selected {
+  z-index: 500 !important;
+}
+
 .graph-node-card {
+  position: relative;
   display: grid;
   gap: 0.55rem;
   padding: 0.9rem 1rem;
@@ -56,6 +65,44 @@
   font-weight: 700;
   color: var(--color-text-muted);
   margin-top: auto;
+}
+
+.graph-node-card__tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.8rem);
+  z-index: 1001;
+  width: 300px;
+  padding: 1rem 1.05rem;
+  border-radius: 0.85rem;
+  background: rgba(22, 48, 44, 0.94);
+  color: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 36px rgba(22, 48, 44, 0.22);
+  font-size: 1.22rem;
+  font-weight: 500;
+  line-height: 1.7;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(6px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.graph-node-card__tooltip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 0.8rem;
+  height: 0.8rem;
+  background: rgba(22, 48, 44, 0.94);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.graph-node-card:hover .graph-node-card__tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .graph-node--counter .graph-node-card {

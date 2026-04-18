@@ -6,6 +6,7 @@ import { applyDagreLayout } from './graphLayout'
 export interface GraphNodeCardData extends Record<string, unknown> {
   title: string
   displayTitle: string
+  bodyText: string
   kind: string
   symbol: string
   metricLabel?: string
@@ -77,6 +78,7 @@ export function mapGraphToFlow(graph: GraphFixture): {
     data: {
       title: node.title,
       displayTitle: getDisplayTitle(node.title),
+      bodyText: node.bodyText,
       kind: formatKind(node.kind),
       symbol: getNodeSymbol(node.kind),
       ...getMetricForNode(node),

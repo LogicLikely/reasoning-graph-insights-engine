@@ -41,6 +41,9 @@ export function GraphCanvas({
                 {node.data.metricLabel}: {node.data.metricValue}
               </span>
             ) : null}
+            <div className="graph-node-card__tooltip" role="tooltip">
+              {node.data.bodyText}
+            </div>
           </div>
         ),
       },

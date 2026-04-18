@@ -27,6 +27,9 @@ describe('mapGraphToFlow', () => {
       'No obvious curvature from high-altitude passenger footage',
     )
     expect(longTitleNode?.data.displayTitle).toBe('No obvious curvature from high...')
+    expect(longTitleNode?.data.bodyText).toBe(
+      'Images from balloons and planes do not show obvious curvature.',
+    )
   })
 
   it('assigns laid out positions instead of leaving every node at the origin', () => {
