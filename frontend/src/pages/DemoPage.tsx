@@ -23,10 +23,7 @@ export function DemoPage() {
       <section className="demo-visualization-grid">
         <article className="demo-stage demo-stage--live">
           <div className="demo-stage__header">
-            <div>
-              <h2>{sampleGraph.title}</h2>
-            </div>
-            <p>{sampleGraph.description}</p>
+            <h2>{sampleGraph.title}</h2>
           </div>
 
           <GraphCanvas
@@ -46,6 +43,8 @@ export function DemoPage() {
         <div className="demo-sidebar-stack">
           <GraphDetailsPanel node={selectedNode} />
           <GraphOverviewPanel
+            title={sampleGraph.title}
+            description={sampleGraph.description}
             nodeCount={sampleGraph.nodes.length}
             edgeCount={sampleGraph.edges.length}
             fixtureName={sampleGraph.slug}
