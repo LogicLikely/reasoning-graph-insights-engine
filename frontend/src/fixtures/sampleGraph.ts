@@ -40,7 +40,7 @@ export interface GraphFixture {
 
 export const sampleGraph: GraphFixture = {
   slug: 'sample-medium',
-  title: 'Sample Medium Reasoning Graph',
+  title: 'Sample Reasoning Graph',
   description:
     'A local fixture that mirrors the upcoming API shape and demonstrates how claims, evidence, and rebuttals relate inside the demo experience.',
   nodes: [

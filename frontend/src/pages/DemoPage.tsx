@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
+import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import { sampleGraph } from '../fixtures/sampleGraph'
 import './DemoPage.css'
@@ -15,24 +16,7 @@ export function DemoPage() {
     <div className="page-shell demo-page-shell" data-testid="demo-page">
       <section className="demo-page-intro">
         <div className="demo-page-intro__copy">
-          <span className="eyebrow">Interactive Graph Demo</span>
-          <h1>{sampleGraph.title}</h1>
-          <p>{sampleGraph.description}</p>
-        </div>
-
-        <div className="demo-page-intro__stats" aria-label="Graph overview">
-          <div className="demo-stat">
-            <strong>{sampleGraph.nodes.length}</strong>
-            <span>Nodes</span>
-          </div>
-          <div className="demo-stat">
-            <strong>{sampleGraph.edges.length}</strong>
-            <span>Edges</span>
-          </div>
-          <div className="demo-stat">
-            <strong>{sampleGraph.slug}</strong>
-            <span>Fixture</span>
-          </div>
+          <span className="eyebrow demo-page-intro__eyebrow">Interactive Graph Demo</span>
         </div>
       </section>
 
@@ -40,13 +24,9 @@ export function DemoPage() {
         <article className="demo-stage demo-stage--live">
           <div className="demo-stage__header">
             <div>
-              <span className="eyebrow">Graph Canvas</span>
-              <h2>Explore the local reasoning graph fixture.</h2>
+              <h2>{sampleGraph.title}</h2>
             </div>
-            <p>
-              Click a node to inspect its details. Pan and zoom are handled by
-              React Flow, with dagre providing the initial layout.
-            </p>
+            <p>{sampleGraph.description}</p>
           </div>
 
           <GraphCanvas
@@ -55,9 +35,22 @@ export function DemoPage() {
             selectedNodeId={selectedNodeId}
             onNodeSelect={setSelectedNodeId}
           />
+
+          <p>
+            Click a node to inspect its details. Pan and zoom are handled by
+            React Flow, with dagre providing the initial layout.
+          </p>
+
         </article>
 
-        <GraphDetailsPanel node={selectedNode} />
+        <div className="demo-sidebar-stack">
+          <GraphDetailsPanel node={selectedNode} />
+          <GraphOverviewPanel
+            nodeCount={sampleGraph.nodes.length}
+            edgeCount={sampleGraph.edges.length}
+            fixtureName={sampleGraph.slug}
+          />
+        </div>
       </section>
 
       <section className="demo-support-strip">

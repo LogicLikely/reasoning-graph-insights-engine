@@ -1,6 +1,4 @@
 .graph-details-panel {
-  position: sticky;
-  top: 6.2rem;
   display: grid;
   gap: 1rem;
   padding: 1.35rem;
@@ -64,12 +62,6 @@
 .graph-evidence-block {
   display: grid;
   gap: 0.4rem;
-}
-
-@media (max-width: 960px) {
-  .graph-details-panel {
-    position: static;
-  }
 }
 
 @media (max-width: 640px) {
