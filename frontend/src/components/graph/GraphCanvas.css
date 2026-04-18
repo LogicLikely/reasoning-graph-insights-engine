@@ -1,0 +1,81 @@
+.graph-canvas-shell {
+  min-height: 34rem;
+  height: 100%;
+  border-radius: 1.35rem;
+  overflow: hidden;
+  border: 1px solid rgba(13, 93, 86, 0.16);
+  background:
+    linear-gradient(180deg, rgba(249, 250, 245, 0.98), rgba(241, 245, 236, 0.98));
+}
+
+.graph-canvas-shell .react-flow {
+  background:
+    radial-gradient(circle at top left, rgba(13, 93, 86, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(250, 251, 247, 0.96), rgba(239, 244, 235, 0.95));
+}
+
+.graph-node {
+  width: 230px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.graph-node-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(13, 93, 86, 0.14);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 28px rgba(39, 74, 67, 0.1);
+}
+
+.graph-node-card__kind,
+.graph-node-card__id {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.graph-node-card__kind {
+  color: var(--color-accent);
+  font-weight: 800;
+}
+
+.graph-node-card__title {
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.graph-node-card__id {
+  color: var(--color-text-muted);
+}
+
+.graph-node--counter .graph-node-card {
+  border-color: rgba(202, 90, 61, 0.22);
+}
+
+.graph-node--evidence .graph-node-card {
+  border-color: rgba(194, 145, 47, 0.24);
+}
+
+.graph-node.selected .graph-node-card {
+  border-color: rgba(13, 93, 86, 0.7);
+  box-shadow:
+    0 18px 36px rgba(13, 93, 86, 0.14),
+    0 0 0 2px rgba(13, 93, 86, 0.16);
+}
+
+.graph-edge path {
+  stroke-width: 2;
+}
+
+.graph-edge--support path {
+  stroke: rgba(13, 93, 86, 0.75);
+}
+
+.graph-edge--rebut path {
+  stroke: rgba(202, 90, 61, 0.75);
+}

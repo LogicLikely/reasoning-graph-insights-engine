@@ -1,3 +1,5 @@
+import './AboutPage.css'
+
 export function AboutPage() {
   return (
     <div className="page-shell" data-testid="about-page">

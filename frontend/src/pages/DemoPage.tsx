@@ -3,6 +3,7 @@ import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import { sampleGraph } from '../fixtures/sampleGraph'
+import './DemoPage.css'
 
 const flowGraph = mapGraphToFlow(sampleGraph)
 

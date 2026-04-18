@@ -1,4 +1,5 @@
 import type { GraphFixtureNode } from '../../fixtures/sampleGraph'
+import './GraphDetailsPanel.css'
 
 interface GraphDetailsPanelProps {
   node?: GraphFixtureNode

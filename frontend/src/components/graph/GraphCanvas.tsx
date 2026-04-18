@@ -9,6 +9,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { GraphNodeCardData } from './graphMapping'
+import './GraphCanvas.css'
 
 interface GraphCanvasProps {
   nodes: Node<GraphNodeCardData>[]
@@ -42,7 +43,7 @@ export function GraphCanvas({
     onNodeSelect(node.id)
   }
 
-  const showMiniMap = false;
+  const showMiniMap = false
 
   return (
     <div className="graph-canvas-shell" data-testid="graph-canvas">
