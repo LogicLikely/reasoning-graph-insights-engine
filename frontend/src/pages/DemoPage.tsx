@@ -1,67 +1,80 @@
+import { useState } from 'react'
+import { GraphCanvas } from '../components/graph/GraphCanvas'
+import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
+import { mapGraphToFlow } from '../components/graph/graphMapping'
+import { sampleGraph } from '../fixtures/sampleGraph'
+
+const flowGraph = mapGraphToFlow(sampleGraph)
+
 export function DemoPage() {
+  const [selectedNodeId, setSelectedNodeId] = useState<string>()
+  const selectedNode = sampleGraph.nodes.find((node) => node.id === selectedNodeId)
+
   return (
-    <div className="page-shell" data-testid="demo-page">
-      <section className="page-hero">
-        <span className="eyebrow">Demo Workspace</span>
-        <h1>Prepared for graph visualization, without pretending it exists yet.</h1>
-        <p>
-          This page establishes the interaction shell for the future graph
-          experience: a main canvas area, contextual operator notes, and room for
-          graph metadata as the frontend moves into visualization work.
-        </p>
+    <div className="page-shell demo-page-shell" data-testid="demo-page">
+      <section className="demo-page-intro">
+        <div className="demo-page-intro__copy">
+          <span className="eyebrow">Interactive Graph Demo</span>
+          <h1>{sampleGraph.title}</h1>
+          <p>{sampleGraph.description}</p>
+        </div>
+
+        <div className="demo-page-intro__stats" aria-label="Graph overview">
+          <div className="demo-stat">
+            <strong>{sampleGraph.nodes.length}</strong>
+            <span>Nodes</span>
+          </div>
+          <div className="demo-stat">
+            <strong>{sampleGraph.edges.length}</strong>
+            <span>Edges</span>
+          </div>
+          <div className="demo-stat">
+            <strong>{sampleGraph.slug}</strong>
+            <span>Fixture</span>
+          </div>
+        </div>
       </section>
 
-      <section className="demo-grid">
-        <article className="demo-stage">
-          <div>
-            <span className="eyebrow">Graph Canvas Placeholder</span>
-            <h2>Visualization surface coming in the next phase.</h2>
+      <section className="demo-visualization-grid">
+        <article className="demo-stage demo-stage--live">
+          <div className="demo-stage__header">
+            <div>
+              <span className="eyebrow">Graph Canvas</span>
+              <h2>Explore the local reasoning graph fixture.</h2>
+            </div>
             <p>
-              React Flow and live graph data are intentionally deferred. This
-              panel reserves the visual space and layout behavior they will need.
+              Click a node to inspect its details. Pan and zoom are handled by
+              React Flow, with dagre providing the initial layout.
             </p>
           </div>
 
-          <div className="demo-canvas" aria-label="Graph canvas placeholder">
-            <div className="demo-canvas-inner">
-              <span className="eyebrow">Reserved Canvas Region</span>
-              <p>
-                Future graph nodes, edges, and layout controls will render here.
-              </p>
-              <div className="demo-pillars">
-                <span>Graph viewport</span>
-                <span>Selection state</span>
-                <span>Interaction controls</span>
-              </div>
-            </div>
-          </div>
+          <GraphCanvas
+            nodes={flowGraph.nodes}
+            edges={flowGraph.edges}
+            selectedNodeId={selectedNodeId}
+            onNodeSelect={setSelectedNodeId}
+          />
         </article>
 
-        <aside className="demo-sidebar">
-          <div>
-            <span className="eyebrow">Operator Panel</span>
-            <h3>Context for the future experience</h3>
-            <p>
-              This sidebar is ready for node details, graph metadata, and
-              explanation summaries once live graph interactions land.
-            </p>
-          </div>
+        <GraphDetailsPanel node={selectedNode} />
+      </section>
 
-          <ul className="signal-list">
-            <li>
-              <strong>Upcoming integration</strong>
-              <p>Graph read endpoints will supply the initial demo dataset.</p>
-            </li>
-            <li>
-              <strong>Layout intent</strong>
-              <p>The canvas remains the focal area while details stay close at hand.</p>
-            </li>
-            <li>
-              <strong>Why a placeholder matters</strong>
-              <p>This keeps the SPA feeling deliberate instead of unfinished.</p>
-            </li>
-          </ul>
-        </aside>
+      <section className="demo-support-strip">
+        <article className="feature-card">
+          <h3>Why this phase matters</h3>
+          <p>
+            The demo page is now graph-first. Later API work can replace the
+            local fixture without changing the overall page composition.
+          </p>
+        </article>
+
+        <article className="feature-card">
+          <h3>Deliberately simple nodes</h3>
+          <p>
+            Nodes stay readable in the canvas while richer context moves into the
+            details panel where it belongs.
+          </p>
+        </article>
       </section>
     </div>
   )
