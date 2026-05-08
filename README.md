@@ -1,39 +1,89 @@
-# reasoning-graph-insights-engine
+# Reasoning Graph Insights Engine
 
-Graph-based analysis engine for identifying structural vulnerabilities in reasoning networks using exact and approximation algorithms.
+A gwaph analysis platform that explores how reasoning networks can be evaluated for structural weaknesses, resilience, and insight generation using exact and approximation algorithms.
 
-# backend commands (from top-level folder)
+This project is part of **LogicLikely**, where structured reasoning systems are being explored as a way to improve online discourse.
 
-dotnet run --project backend/backend.csproj
-dotnet test
+---
 
-## notes
+## Project Structure
 
-DB password is stored like so...
-
-```js
-export Database__ConnectionString="Host=localhost;Database=insights;Username=postgres;Password=PasswordGoesHere"
+```text
+/backend   -> C# Web API + PostgreSQL integration
+/frontend  -> React application for graph visualization
+/docs      -> Project documentation
 ```
 
-## future security
+---
 
-We need to allow the frontend origin to get through CORS to connect to the backend for browsers. Right now
-we are letting everything through. But in the backend Program.cs, we can make one edit to lock things
-down. Then set an environment variable like either...
+## Getting Started
 
-```js
+Clone the repository:
+
+```bash
+git clone git@github.com:LogicLikely/reasoning-graph-insights-engine.git
+cd reasoning-graph-insights-engine
+```
+
+---
+
+# Backend
+
+Run the API from the project root:
+
+```bash
+dotnet run --project backend/backend.csproj
+```
+
+Run backend tests:
+
+```bash
+dotnet test
+```
+
+---
+
+## Database Configuration
+
+Set your PostgreSQL connection string as an environment variable:
+
+```bash
+export Database__ConnectionString="Host=localhost;Database=insights;Username=postgres;Password=YourPasswordHere"
+```
+
+---
+
+## CORS Configuration
+
+The backend currently allows all origins for development purposes.
+
+To restrict frontend access, update `Program.cs` and set an allowed origin:
+
+Local development:
+
+```bash
 export Cors__AllowedOrigins__0=http://localhost:5173
 ```
 
-...or...
+Production example:
 
-```js
-export Cors__AllowedOrigins__0=http://logiclikely.com
+```bash
+export Cors__AllowedOrigins__0=https://logiclikely.com
 ```
 
-# frontend commands (from frontend folder)
+---
 
-```js
+# Frontend
+
+From the `/frontend` directory:
+
+```bash
+npm install
 npm run dev
+```
+
+Run frontend tests:
+
+```bash
 npm run test
 ```
