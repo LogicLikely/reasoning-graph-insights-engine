@@ -34,7 +34,14 @@ public class GraphService : IGraphService
                     Id = node.Id,
                     Kind = node.Kind,
                     Title = node.Title,
-                    BodyText = node.BodyText
+                    BodyText = node.BodyText,
+                    Category = node.Category,
+                    Tags = node.Tags,
+                    Prior = node.Prior,
+                    Confidence = node.Confidence,
+                    Weight = node.Weight,
+                    Importance = node.Importance,
+                    Evidence = node.Evidence
                 })
                 .ToList(),
             Edges = graph.Edges
