@@ -16,8 +16,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("MyCorsPolicy", policy =>
     {
         // we should be using this line, but opting for less config for now
-        // policy.WithOrigins(origins)
-        policy.WithOrigins()
+        policy.WithOrigins(origins)
+        // policy.WithOrigins()
               .AllowAnyHeader()
               .AllowAnyMethod();
     });

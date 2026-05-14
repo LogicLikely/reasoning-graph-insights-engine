@@ -1,6 +1,6 @@
 # Reasoning Graph Insights Engine
 
-A gwaph analysis platform that explores how reasoning networks can be evaluated for structural weaknesses, resilience, and insight generation using exact and approximation algorithms.
+A graph analysis platform that explores how reasoning networks can be evaluated for structural weaknesses, resilience, and insight generation using exact and approximation algorithms.
 
 This project is part of **LogicLikely**, where structured reasoning systems are being explored as a way to improve online discourse.
 
