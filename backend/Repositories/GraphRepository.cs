@@ -1,6 +1,8 @@
 using Backend.Data;
 using Backend.Models.Domain;
 using Dapper;
+using System.Linq;
+using System.Text.Json;
 
 namespace Backend.Repositories;
 
@@ -13,7 +15,18 @@ public class GraphRepository : IGraphRepository
         """;
 
     private const string NodesSql = """
-        SELECT id, kind, title, body_text AS BodyText
+        SELECT 
+            id AS Id,
+            kind AS Kind,
+            title AS Title,
+            body_text AS BodyText,
+            category AS Category,
+            tags AS Tags,
+            prior AS Prior,
+            weight AS Weight,
+            confidence AS Confidence,
+            importance AS Importance,
+            evidence::text AS Evidence
         FROM nodes
         WHERE graph_id = @GraphId
         ORDER BY id;
@@ -61,7 +74,26 @@ public class GraphRepository : IGraphRepository
             new { GraphId = graph.Id },
             cancellationToken: cancellationToken);
 
-        graph.Nodes = (await connection.QueryAsync<GraphNode>(nodesCommand)).AsList();
+        var nodeRows = await connection.QueryAsync<dynamic>(nodesCommand);
+
+        //Individually assigns each property so can do custom stuff with evidence field
+        graph.Nodes = nodeRows.Select(row => new GraphNode
+        {
+            Id = row.Id,
+            Kind = row.Kind,
+            Title = row.Title,
+            BodyText = row.BodyText,
+            Category = row.Category,
+            Tags = (row.Tags as string[])?.ToList() ?? new List<string>(),
+            Prior = row.Prior,
+            Weight = row.Weight,
+            Confidence = row.Confidence,
+            Importance = row.Importance,
+            Evidence = row.Evidence == null
+                ? null
+                : JsonSerializer.Deserialize<GraphEvidenceDetails>((string)row.Evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+        }).ToList();
+
         graph.Edges = (await connection.QueryAsync<GraphEdge>(edgesCommand)).AsList();
 
         return graph;
