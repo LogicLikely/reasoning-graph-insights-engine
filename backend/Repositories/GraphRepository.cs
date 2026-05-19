@@ -9,31 +9,36 @@ namespace Backend.Repositories;
 public class GraphRepository : IGraphRepository
 {
     private const string GraphSql = """
-        SELECT id, slug, title, description
+        SELECT 
+            id, slug, title, description
         FROM graphs
         WHERE slug = @Slug;
         """;
 
     private const string NodesSql = """
         SELECT 
-            id AS Id,
-            kind AS Kind,
-            title AS Title,
-            body_text AS BodyText,
-            category AS Category,
-            tags AS Tags,
-            prior AS Prior,
-            weight AS Weight,
-            confidence AS Confidence,
-            importance AS Importance,
-            evidence::text AS Evidence
+            id,
+            kind,
+            title,
+            body_text,
+            category,
+            tags,
+            prior,
+            weight,
+            confidence,
+            importance,
+            evidence::text AS evidence
         FROM nodes
         WHERE graph_id = @GraphId
         ORDER BY id;
         """;
 
     private const string EdgesSql = """
-        SELECT id, from_node_id AS "From", to_node_id AS "To", kind
+        SELECT 
+            id, 
+            from_node_id, 
+            to_node_id, 
+            kind
         FROM edges
         WHERE graph_id = @GraphId
         ORDER BY id;
@@ -57,7 +62,15 @@ public class GraphRepository : IGraphRepository
             new { Slug = slug },
             cancellationToken: cancellationToken);
 
-        var graph = await connection.QuerySingleOrDefaultAsync<Graph>(command);
+        // Use an intermediate row type to ensure robust mapping from PostgreSQL's lowercase column names
+        var graphRow = await connection.QuerySingleOrDefaultAsync<GraphRow>(command);
+        var graph = graphRow == null ? null : new Graph
+        {
+            Id = graphRow.id,
+            Slug = graphRow.slug,
+            Title = graphRow.title,
+            Description = graphRow.description
+        };
 
         if (graph is null)
         {
@@ -74,28 +87,72 @@ public class GraphRepository : IGraphRepository
             new { GraphId = graph.Id },
             cancellationToken: cancellationToken);
 
-        var nodeRows = await connection.QueryAsync<dynamic>(nodesCommand);
+        var nodeRows = (await connection.QueryAsync<NodeRow>(nodesCommand)).ToList();
 
         //Individually assigns each property so can do custom stuff with evidence field
         graph.Nodes = nodeRows.Select(row => new GraphNode
         {
-            Id = row.Id,
-            Kind = row.Kind,
-            Title = row.Title,
-            BodyText = row.BodyText,
-            Category = row.Category,
-            Tags = (row.Tags as string[])?.ToList() ?? new List<string>(),
-            Prior = row.Prior,
-            Weight = row.Weight,
-            Confidence = row.Confidence,
-            Importance = row.Importance,
-            Evidence = row.Evidence == null
+            Id = row.id,
+            Kind = row.kind,
+            Title = row.title,
+            BodyText = row.body_text,
+            Category = row.category,
+            Tags = row.tags?.ToList() ?? new List<string>(),
+            Prior = row.prior,
+            Weight = row.weight,
+            Confidence = row.confidence,
+            Importance = row.importance,
+            Evidence = string.IsNullOrEmpty(row.evidence)
                 ? null
-                : JsonSerializer.Deserialize<GraphEvidenceDetails>((string)row.Evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                : JsonSerializer.Deserialize<GraphEvidenceDetails>(row.evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
         }).ToList();
 
-        graph.Edges = (await connection.QueryAsync<GraphEdge>(edgesCommand)).AsList();
+        var edgeRows = (await connection.QueryAsync<EdgeRow>(edgesCommand)).ToList();
+        graph.Edges = edgeRows.Select(row => new GraphEdge
+        {
+            Id = row.id,
+            From = row.from_node_id,
+            To = row.to_node_id,
+            Kind = row.kind
+        }).ToList();
 
         return graph;
+    }
+
+    /// <summary>
+    /// Internal helper to match exact Postgres lowercase column names for the main graph object.
+    /// </summary>
+    private sealed class GraphRow
+    {
+        public int id { get; set; }
+        public string slug { get; set; } = default!;
+        public string title { get; set; } = default!;
+        public string? description { get; set; }
+    }
+
+    /// <summary>
+    /// Internal helper to match exact Postgres lowercase column names for edges.
+    /// </summary>
+    private sealed class EdgeRow
+    {
+        public string id { get; set; } = default!;
+        public string from_node_id { get; set; } = default!;
+        public string to_node_id { get; set; } = default!;
+        public string kind { get; set; } = default!;
+    }
+
+    private sealed class NodeRow
+    {
+        public string id { get; set; } = default!;
+        public string kind { get; set; } = default!;
+        public string title { get; set; } = default!;
+        public string body_text { get; set; } = default!;
+        public string? category { get; set; }
+        public string[]? tags { get; set; }
+        public decimal? prior { get; set; }
+        public decimal? weight { get; set; }
+        public decimal? confidence { get; set; }
+        public decimal? importance { get; set; }
+        public string? evidence { get; set; }
     }
 }

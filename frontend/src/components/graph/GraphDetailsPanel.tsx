@@ -6,7 +6,10 @@ interface GraphDetailsPanelProps {
 }
 
 function formatMetric(value?: number) {
-  return value === undefined ? null : value.toFixed(2)
+  if (value === null || value === undefined) {
+    return undefined; // Or an empty string, or a default value like '0.00'
+  }
+  return value.toFixed(2);
 }
 
 export function GraphDetailsPanel({ node }: GraphDetailsPanelProps) {
