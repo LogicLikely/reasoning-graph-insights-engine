@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "./ContactPage.css";
 
 //part 15
 function ContactForm() {
@@ -23,6 +24,34 @@ function ContactForm() {
         topic,
         message,
     };
+
+    const hasRequiredFields =
+        name.trim() &&
+        email.trim() &&
+        topic &&
+        message.trim();
+
+    type TextFieldProps = {
+        label: string;
+        value: string;
+        onChange: (value: string) => void;
+        type?: string;
+    };
+
+    function TextField({ label, value, onChange, type = "text" }: TextFieldProps) {
+        return (
+            <div className="form-group">
+                <label className="form-label">{label}</label>
+                <input
+                    className="form-input"
+                    type={type}
+                    value={value}
+                    onChange={(event) => onChange(event.target.value)}
+                />
+            </div>
+        );
+    }
+
     function isValidEmail(email: string) {
         return email.includes("@") && email.includes(".");
     }
@@ -55,54 +84,52 @@ function ContactForm() {
             setErrorMessage("Message is required.");
             return;
         }
-        setIsSubmitting(true);
-        await new Promise((resolve) => setTimeout(resolve, 500));
         const submission: ContactSubmission = {
             name,
             email,
             topic,
             message,
         };
-        console.log(submission);
-        setSuccessMessage("Contact form submitted. Check the console for the logged data.");
-        setIsSubmitting(false);
+
+        try {
+            setIsSubmitting(true);
+
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            console.log(submission);
+
+            setSuccessMessage("Contact form submitted. Check the console for the logged data.");
+            setName("");
+            setEmail("");
+            setTopic("");
+            setMessage("");
+
+        } finally {
+            setIsSubmitting(false);
+        }
     }
 
     return (
-        <>
+        <section className="contact-form-container">
             {errorMessage && (
-                <p role="alert" style={{ color: "red", fontWeight: "bold" }}>
+                <div role="alert" className="form-alert error">
                     {errorMessage}
-                </p>
+                </div>
             )}
             {successMessage && (
-                <p style={{ color: "green" }}>
+                <div className="form-alert success">
                     {successMessage}
-                </p>
+                </div>
             )}
 
-            <form onSubmit={handleSubmit}>
-                <label>
-                    Name
-                    <input
-                        type="text"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                    />
-                </label>
+            <form onSubmit={handleSubmit} className="contact-card">
+                <TextField label="Name" value={name} onChange={setName} />
+                <TextField label="Email" type="email" value={email} onChange={setEmail} />
 
-                <label>
-                    Email
-                    <input
-                        type="email"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                    />
-                </label>
-
-                <label>
-                    Topic
+                <div className="form-group">
+                    <label className="form-label">Topic</label>
                     <select
+                        className="form-input"
                         value={topic}
                         onChange={(event) => setTopic(event.target.value)}
                     >
@@ -112,36 +139,43 @@ function ContactForm() {
                         <option value="bug">Bug</option>
                         <option value="other">Other</option>
                     </select>
-                </label>
+                </div>
 
-                <label>
-                    Message
+                <div className="form-group">
+                    <label className="form-label">Message</label>
                     <textarea
+                        className="form-input form-textarea"
                         value={message}
                         onChange={(event) => setMessage(event.target.value)}
                     />
-                </label>
+                </div>
 
-                <button type="submit" disabled={isSubmitting}>
+                <button
+                    type="submit"
+                    className="submit-button"
+                    disabled={isSubmitting || !hasRequiredFields}
+                >
                     {isSubmitting ? "Submitting..." : "Submit"}
                 </button>
+
             </form>
 
-            <section>
+            <section className="preview-section">
                 <h2>Preview</h2>
                 <p><strong>Name:</strong> {name || "(none)"}</p>
                 <p><strong>Email:</strong> {email || "(none)"}</p>
                 <p><strong>Topic:</strong> {topic || "(none)"}</p>
                 <p><strong>Message:</strong> {message || "(none)"}</p>
             </section>
-        </>
+        </section>
     );
 }
 
 export function ContactPage() {
     return (
-        <main>
-            <section>
+        <div className="page-shell contact-page-shell" data-testid="contact-page">
+            <section className="page-hero">
+                <span className="eyebrow">Get in Touch</span>
                 <h1>Contact LogicLikely</h1>
                 <p>
                     Use this form to send a question, comment, or idea.
@@ -149,6 +183,6 @@ export function ContactPage() {
             </section>
 
             <ContactForm />
-        </main>
+        </div>
     );
 }
