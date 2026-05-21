@@ -28,4 +28,21 @@ public class GraphsController : ControllerBase
 
         return Ok(graph);
     }
+
+    [HttpDelete("{slug}/nodes/{nodeId}")]
+    public async Task<IActionResult> DeleteNode(
+        string slug,
+        string nodeId,
+        CancellationToken cancellationToken)
+    {
+        // var deleted = await _graphService.DeleteNodeAsync(slug, nodeId, cancellationToken);
+
+        // if (!deleted)
+        // {
+        //     return NotFound(); // Return 404 if the node or graph was not found
+        // }
+        Console.WriteLine("forkwife");
+
+        return NoContent(); // Return 204 No Content for a successful deletion
+    }
 }

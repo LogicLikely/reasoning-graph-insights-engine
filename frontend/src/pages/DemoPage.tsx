@@ -4,7 +4,7 @@ import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import type { GraphFixture } from '../fixtures/sampleGraph'
-import { getGraphBySlug } from '../services/graphService'
+import { deleteNode, getGraphBySlug } from '../services/graphService'
 import './DemoPage.css'
 
 const DEMO_GRAPH_SLUG = 'sample-medium'
@@ -53,6 +53,26 @@ export function DemoPage() {
       isActive = false
     }
   }, [reloadKey])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Prevent trigger if user is typing in an input or textarea
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if (event.key.toLowerCase() === 'd') {
+        console.log("'d' key pressed")
+        if (selectedNodeId !== undefined) {
+          void deleteNode(DEMO_GRAPH_SLUG, selectedNodeId)
+          setSelectedNodeId(undefined)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedNodeId])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null
