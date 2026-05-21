@@ -70,8 +70,13 @@ export function DemoPage() {
             return
           }
 
+          // We only need to call this once. 
           void deleteNode(DEMO_GRAPH_SLUG, selectedNodeId)
-          setSelectedNodeId(undefined)
+            .then(() => {
+              // Trigger the existing loadGraph effect to refresh the data from the server
+              setReloadKey((prev) => prev + 1)
+            })
+            .catch(() => setError('Failed to delete node from the server.'))
         }
       }
     }
