@@ -24,6 +24,7 @@ export function DemoPage() {
       setError(null)
 
       try {
+        //Grabs nodes from backend
         const result = await getGraphBySlug(DEMO_GRAPH_SLUG)
 
         if (!isActive) {
