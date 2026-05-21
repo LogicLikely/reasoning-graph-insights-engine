@@ -64,6 +64,12 @@ export function DemoPage() {
       if (event.key.toLowerCase() === 'd') {
         console.log("'d' key pressed")
         if (selectedNodeId !== undefined) {
+          const hasChildren = graph?.edges.some((e) => e.from === selectedNodeId)
+          if (hasChildren) {
+            alert('Cannot delete a node that has children. Remove its dependencies first.')
+            return
+          }
+
           void deleteNode(DEMO_GRAPH_SLUG, selectedNodeId)
           setSelectedNodeId(undefined)
         }
@@ -72,7 +78,7 @@ export function DemoPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId])
+  }, [selectedNodeId, graph])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null

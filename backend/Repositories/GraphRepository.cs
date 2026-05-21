@@ -66,4 +66,42 @@ public class GraphRepository : IGraphRepository
 
         return graph;
     }
+
+    public async Task<bool> DeleteNodeAsync(string slug, string nodeId, CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            // 1. Delete all edges associated with this node (incoming or outgoing)
+            const string DeleteEdgesSql = """
+                DELETE FROM edges
+                WHERE (from_node_id = @NodeId OR to_node_id = @NodeId)
+                AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
+                """;
+
+            await connection.ExecuteAsync(new CommandDefinition(DeleteEdgesSql,
+                new { NodeId = nodeId, Slug = slug }, transaction, cancellationToken: cancellationToken));
+
+            // 2. Delete the node itself
+            const string DeleteNodeSql = """
+                DELETE FROM nodes
+                WHERE id = @NodeId
+                AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
+                """;
+
+            var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(DeleteNodeSql,
+                new { NodeId = nodeId, Slug = slug }, transaction, cancellationToken: cancellationToken));
+
+            transaction.Commit();
+            return rowsAffected > 0;
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
 }

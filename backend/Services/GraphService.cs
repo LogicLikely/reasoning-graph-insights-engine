@@ -48,4 +48,21 @@ public class GraphService : IGraphService
                 .ToList()
         };
     }
+
+    public async Task<bool> DeleteNodeAsync(
+        string slug,
+        string nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        if (graph is null) return false;
+
+        // Check if node has outgoing edges (children)
+        if (graph.Edges.Any(e => e.From == nodeId))
+        {
+            return false; // Business Rule: Cannot delete nodes with children
+        }
+
+        return await _graphRepository.DeleteNodeAsync(slug, nodeId, cancellationToken);
+    }
 }
