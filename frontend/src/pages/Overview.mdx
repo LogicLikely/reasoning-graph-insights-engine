@@ -1,0 +1,32 @@
+import { Meta, Story } from "@storybook/addon-docs/blocks";
+import * as DemoPageStories from "./DemoPage.stories";
+
+<Meta title="Overview" />
+
+# UI Overview
+
+This Storybook captures the current frontend shell for the Reasoning Graph Insights Engine. The UI is organized around a few reusable layout pieces, a set of graph-focused components, and page-level stories that show how those pieces come together.
+
+The main experience to pay attention to is the demo workspace. That page is where the graph canvas, the details panel, and the overview panel meet, and it is the clearest picture of how the product is meant to feel in use.
+
+## Demo Page Focus
+
+The default demo story is the best single snapshot of the interface right now. It shows the intended graph-first workflow:
+
+- the React Flow canvas is the center of attention
+- the details panel is ready to explain the currently selected node
+- the overview panel summarizes the graph fixture and its size
+- loading and retry states are already modeled in adjacent stories
+
+<Story of={DemoPageStories.Default} />
+
+## How To Read This Storybook
+
+- `pages` shows the full routed screens and is the best place to review end-to-end UI composition
+- `components/graph` isolates the graph canvas and supporting inspector panels
+- `components/layout` covers the shared header, footer, and app shell
+- `Configure your project` is Storybook starter content and sits here as a reference page
+
+## Current Scope
+
+This Storybook is currently most valuable as a UI walkthrough and a lightweight interaction test bed. It demonstrates the intended shell around fixture-backed graph data while the backend integration and richer graph behaviors continue to evolve.
