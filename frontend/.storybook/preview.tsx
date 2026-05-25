@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Preview } from '@storybook/react-vite'
-import { BrowserRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 import { initialize, mswLoader } from 'msw-storybook-addon'
 import { sb } from 'storybook/test'
 import '../src/styles/index.css'
@@ -14,9 +14,9 @@ initialize({ onUnhandledRequest: 'bypass' })
 const preview: Preview = {
   decorators: [
     (Story) => (
-      <BrowserRouter>
+      <MemoryRouter initialEntries={['/']}>
         <Story />
-      </BrowserRouter>
+      </MemoryRouter>
     ),
   ],
   loaders: [mswLoader],

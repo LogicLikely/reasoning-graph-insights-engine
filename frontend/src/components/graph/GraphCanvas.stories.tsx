@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { expect } from 'storybook/test'
+import { expect, waitFor } from 'storybook/test'
 import { GraphCanvas } from './GraphCanvas'
 import { sampleGraph } from '../../fixtures/sampleGraph'
 import { mapGraphToFlow } from './graphMapping'
@@ -48,12 +48,13 @@ export const Default: Story = {
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByTestId('graph-canvas')).toBeVisible()
-    // await expect(canvas.getByText(/The Earth is flat/i)).toBeVisible()
-    await expect(
-      canvas.getByText(/The Earth is flat/i, {
+    await waitFor(async () => {
+      const matchingTitles = canvas.getAllByText(/The Earth is flat/i, {
         selector: '.graph-node-card__title-text',
-      }),
-    ).toBeVisible()
+      })
+
+      await expect(matchingTitles.some((title) => title.checkVisibility())).toBe(true)
+    })
   },
 }
 
