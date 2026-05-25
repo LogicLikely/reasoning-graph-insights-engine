@@ -7,6 +7,7 @@ export class StorybookWorld extends World {
   browser?: Browser
   context?: BrowserContext
   page?: Page
+  currentStoryId?: string
 
   get baseUrl() {
     return process.env.STORYBOOK_BASE_URL ?? DEFAULT_STORYBOOK_URL
