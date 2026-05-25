@@ -10,7 +10,15 @@ const meta = {
     mocked(getGraphBySlug).mockReset()
     mocked(getGraphBySlug).mockResolvedValue(sampleGraph)
   },
-  tags: ['ai-generated', 'needs-work'],
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'Storybook coverage for the demo page. These stories keep fixture-backed graph data enabled while mocking the graph service per story to demonstrate the success, loading, and retry states that users can encounter.',
+      },
+    },
+  },
+  tags: ['autodocs', 'ai-generated', 'needs-work'],
 } satisfies Meta<typeof DemoPage>
 
 export default meta
@@ -18,6 +26,14 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Verifies the normal success path. The mocked graph service resolves with the sample fixture, and the play function confirms that the page intro and the loaded graph heading both appear.',
+      },
+    },
+  },
   play: async ({ canvas }) => {
     await expect(canvas.getByText(/Interactive Graph Demo/i)).toBeVisible()
     await expect(
@@ -27,6 +43,14 @@ export const Default: Story = {
 }
 
 export const LoadingState: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Demonstrates the in-flight loading state. This story makes the mocked graph request never resolve so the page stays in its loading UI, then checks that the loading panel and placeholder heading are visible.',
+      },
+    },
+  },
   beforeEach: async () => {
     mocked(getGraphBySlug).mockReset()
     mocked(getGraphBySlug).mockImplementation(() => new Promise(() => {}))
@@ -38,6 +62,14 @@ export const LoadingState: Story = {
 }
 
 export const RetryFlow: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Exercises the recovery path after a failed load. The first mocked request rejects to show the error state, the test pauses briefly so the failure is visible, then clicks Retry and confirms the second request succeeds and the graph renders.',
+      },
+    },
+  },
   beforeEach: async () => {
     mocked(getGraphBySlug).mockReset()
     mocked(getGraphBySlug)
