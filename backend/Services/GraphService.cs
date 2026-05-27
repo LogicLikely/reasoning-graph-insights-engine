@@ -65,4 +65,18 @@ public class GraphService : IGraphService
 
         return await _graphRepository.DeleteNodeAsync(slug, nodeId, cancellationToken);
     }
+
+    public async Task<bool> AddNodeAsync(
+        string slug,
+        string kind,
+        string title,
+        string bodyText,
+        string? parentID = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Implementation logic will go here.
+        // You can check 'if (parentID == null)' to see if this is a root node.
+
+        throw new NotImplementedException();
+    }
 }

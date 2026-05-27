@@ -45,4 +45,24 @@ public class GraphsController : ControllerBase
         }
         return NoContent(); // Return 204 No Content for a successful deletion
     }
+    [HttpPost("{slug}/nodes")] // Changed to POST and adjusted route
+    public async Task<IActionResult> AddNode(
+        string slug,
+        string kind,
+        string title,
+        string bodyText,
+        string? parentID = null,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Adding node to graph {slug}");
+        var node = await _graphService.AddNodeAsync(slug, kind, title, bodyText, parentID, cancellationToken);
+
+        if (!node)
+        {
+            Console.WriteLine($"Failed to add node to graph {slug}");
+            return NotFound(); // Return 404 if the node or graph was not found
+        }
+        return NoContent(); // Return 204 No Content for a successful addition
+
+    }
 }
