@@ -64,11 +64,13 @@ export function DemoPage() {
       if (event.key.toLowerCase() === 'd') {
         console.log("'d' key pressed")
         if (selectedNodeId !== undefined) {
-          const hasChildren = graph?.edges.some((e) => e.from === selectedNodeId)
-          if (hasChildren) {
-            alert('Cannot delete a node that has children. Remove its dependencies first.')
+          const hasInNeighbors = graph?.edges.some((e) => e.to === selectedNodeId)
+          if (hasInNeighbors) {
+            alert('Cannot delete a node that has incoming neighbors. Remove the nodes pointing to this one first.')
             return
           }
+
+          // alert('deleting');
 
           // We only need to call this once. 
           void deleteNode(DEMO_GRAPH_SLUG, selectedNodeId)

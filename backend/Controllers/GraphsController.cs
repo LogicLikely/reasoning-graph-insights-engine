@@ -35,13 +35,14 @@ public class GraphsController : ControllerBase
         string nodeId,
         CancellationToken cancellationToken)
     {
+        Console.WriteLine($"Deleting node {nodeId} from graph {slug}");
         var deleted = await _graphService.DeleteNodeAsync(slug, nodeId, cancellationToken);
 
         if (!deleted)
         {
+            Console.WriteLine($"Failed to delete node {nodeId} from graph {slug}");
             return NotFound(); // Return 404 if the node or graph was not found
         }
-
         return NoContent(); // Return 204 No Content for a successful deletion
     }
 }
