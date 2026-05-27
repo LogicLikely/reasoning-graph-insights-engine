@@ -78,7 +78,7 @@ public class GraphRepository : IGraphRepository
             Id = row.id,
             Kind = row.kind,
             Title = row.title,
-            BodyText = row.bodytext,
+            BodyText = row.BodyText,
             Category = row.category,
             Tags = (row.tags as string[] ?? Array.Empty<string>()).ToList(),
             Prior = row.prior,
@@ -86,7 +86,7 @@ public class GraphRepository : IGraphRepository
             Confidence = row.confidence,
             Importance = row.importance,
             Evidence = row.evidence != null
-                ? JsonSerializer.Deserialize<GraphEvidence>((string)row.evidence,
+                ? JsonSerializer.Deserialize<GraphEvidence>(row.evidence.ToString(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                 : null
         }).ToList();
@@ -183,7 +183,14 @@ public class GraphRepository : IGraphRepository
                     VALUES (@EdgeId, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, 'support');
                     """;
 
-                var edgeParams = new { EdgeId = $"e-{node.Id}", Slug = slug, From = parentID, To = node.Id };
+                // Invert the From/To so the new Premise points TO the Parent Claim
+                var edgeParams = new
+                {
+                    EdgeId = $"e-{node.Id}",
+                    Slug = slug,
+                    From = node.Id,
+                    To = parentID
+                };
                 await connection.ExecuteAsync(new CommandDefinition(InsertEdgeSql, edgeParams, transaction, cancellationToken: cancellationToken));
             }
 
