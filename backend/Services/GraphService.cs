@@ -34,7 +34,19 @@ public class GraphService : IGraphService
                     Id = node.Id,
                     Kind = node.Kind,
                     Title = node.Title,
-                    BodyText = node.BodyText
+                    BodyText = node.BodyText,
+                    Category = node.Category,
+                    Tags = node.Tags,
+                    Prior = node.Prior,
+                    Weight = node.Weight,
+                    Confidence = node.Confidence,
+                    Importance = node.Importance,
+                    Evidence = node.Evidence != null ? new GraphEvidenceDto
+                    {
+                        Type = node.Evidence.Type,
+                        Score = node.Evidence.Score,
+                        Rationale = node.Evidence.Rationale
+                    } : null
                 })
                 .ToList(),
             Edges = graph.Edges
@@ -68,15 +80,10 @@ public class GraphService : IGraphService
 
     public async Task<bool> AddNodeAsync(
         string slug,
-        string kind,
-        string title,
-        string bodyText,
+        GraphNodeDto node,
         string? parentID = null,
         CancellationToken cancellationToken = default)
     {
-        // Implementation logic will go here.
-        // You can check 'if (parentID == null)' to see if this is a root node.
-
-        throw new NotImplementedException();
+        return await _graphRepository.AddNodeAsync(slug, node, parentID, cancellationToken);
     }
 }

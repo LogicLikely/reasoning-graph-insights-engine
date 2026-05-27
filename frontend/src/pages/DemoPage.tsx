@@ -3,8 +3,8 @@ import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
-import type { GraphFixture } from '../fixtures/sampleGraph'
-import { deleteNode, getGraphBySlug } from '../services/graphService'
+import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
+import { addNode, deleteNode, getGraphBySlug } from '../services/graphService'
 import './DemoPage.css'
 
 const DEMO_GRAPH_SLUG = 'sample-medium'
@@ -70,8 +70,6 @@ export function DemoPage() {
             return
           }
 
-          // alert('deleting');
-
           // We only need to call this once. 
           void deleteNode(DEMO_GRAPH_SLUG, selectedNodeId)
             .then(() => {
@@ -79,6 +77,26 @@ export function DemoPage() {
               setReloadKey((prev) => prev + 1)
             })
             .catch(() => setError('Failed to delete node from the server.'))
+        }
+      }
+      else if (event.key.toLowerCase() === 'a') {
+        console.log("'a' key pressed")
+        if (selectedNodeId !== undefined) {
+          const newNodeId = `node-${Date.now()}`
+          const newNode: GraphFixtureNode = {
+            id: newNodeId,
+            kind: 'premise',
+            title: 'New Supporting Premise',
+            bodyText: 'This is a dynamically added premise to demonstrate the POST capability.',
+            tags: ['dynamic'],
+            confidence: 0.85
+          }
+
+          void addNode(DEMO_GRAPH_SLUG, newNode, selectedNodeId)
+            .then(() => {
+              setReloadKey((prev) => prev + 1)
+            })
+            .catch(() => setError('Failed to add node to the server.'))
         }
       }
     }

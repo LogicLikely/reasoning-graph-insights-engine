@@ -1,4 +1,4 @@
-import type { GraphFixture } from '../fixtures/sampleGraph'
+import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
 import { getGraphBySlugFromApi } from './graphApi'
 import { getGraphBySlugFromFixture } from './graphFixture'
 import { httpClient } from './httpClient'
@@ -17,4 +17,13 @@ export async function getGraphBySlug(slug: string): Promise<GraphFixture> {
 
 export async function deleteNode(slug: string, nodeId: string): Promise<void> {
   await httpClient.delete(`/api/graphs/${slug}/nodes/${nodeId}`)
+}
+export async function addNode(
+  slug: string,
+  node: GraphFixtureNode,
+  parentId?: string,
+): Promise<void> {
+  await httpClient.post(`/api/graphs/${slug}/nodes`, node, {
+    params: { parentID: parentId },
+  })
 }

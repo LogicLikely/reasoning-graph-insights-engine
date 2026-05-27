@@ -5,8 +5,8 @@ interface GraphDetailsPanelProps {
   node?: GraphFixtureNode
 }
 
-function formatMetric(value?: number) {
-  return value === undefined ? null : value.toFixed(2)
+function formatMetric(value?: number | null) {
+  return value == null ? null : value.toFixed(2)
 }
 
 export function GraphDetailsPanel({ node }: GraphDetailsPanelProps) {

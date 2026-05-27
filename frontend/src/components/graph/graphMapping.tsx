@@ -32,8 +32,8 @@ function getNodeSymbol(kind: string) {
   }
 }
 
-function formatMetricValue(value?: number) {
-  return value === undefined ? undefined : value.toFixed(2)
+function formatMetricValue(value?: number | null) {
+  return value == null ? undefined : value.toFixed(2)
 }
 
 function getDisplayTitle(title: string) {
