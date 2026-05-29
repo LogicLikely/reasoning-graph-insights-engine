@@ -1,20 +1,65 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import "./ContactPage.css";
 
+type TextFieldProps = {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    type?: string;
+    id: string;
+};
+
+function TextField({ label, value, onChange, id, type = "text" }: TextFieldProps) {
+    return (
+        <div className="form-group">
+            <label htmlFor={id} className="form-label">{label}</label>
+            <input
+                id={id}
+                className="form-input"
+                type={type}
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+            />
+        </div>
+    );
+}
+
+function isValidEmail(email: string) {
+    return email.includes("@") && email.includes(".");
+}
+
+type ContactSubmission = {
+    name: string;
+    email: string;
+    topic: string;
+    message: string;
+};
+
+type ContactFormProps = {
+    initialName?: string;
+    initialEmail?: string;
+    initialTopic?: string;
+    initialMessage?: string;
+    onSubmit?: (submission: ContactSubmission) => Promise<{ success: boolean; message: string }>;
+};
+
 //part 15
-function ContactForm() {
+export function ContactForm({
+    initialName = "",
+    initialEmail = "",
+    initialTopic = "",
+    initialMessage = "",
+    onSubmit = async (submission) => {
+        console.log("Mock submission:", submission);
+        await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API call
+        return { success: true, message: "Contact form submitted. Check the console for the logged data." };
+    },
+}: ContactFormProps) {
 
-    type ContactSubmission = {
-        name: string;
-        email: string;
-        topic: string;
-        message: string;
-    };
-
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [topic, setTopic] = useState("");
-    const [message, setMessage] = useState("");
+    const [name, setName] = useState(initialName);
+    const [email, setEmail] = useState(initialEmail);
+    const [topic, setTopic] = useState(initialTopic);
+    const [message, setMessage] = useState(initialMessage);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
 
@@ -31,50 +76,24 @@ function ContactForm() {
         topic &&
         message.trim();
 
-    type TextFieldProps = {
-        label: string;
-        value: string;
-        onChange: (value: string) => void;
-        type?: string;
-    };
-
-    function TextField({ label, value, onChange, type = "text" }: TextFieldProps) {
-        return (
-            <div className="form-group">
-                <label className="form-label">{label}</label>
-                <input
-                    className="form-input"
-                    type={type}
-                    value={value}
-                    onChange={(event) => onChange(event.target.value)}
-                />
-            </div>
-        );
-    }
-
-    function isValidEmail(email: string) {
-        return email.includes("@") && email.includes(".");
-    }
-
-
     //State variable can only hold a string or null value
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
 
 
-    async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    async function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setSuccessMessage(null);
         setErrorMessage(null);
 
         if (!name.trim()) {
             setErrorMessage("Name is required.");
-            return;
+            return; // Exit early if validation fails
         }
         if (!isValidEmail(email)) {
-            setErrorMessage("Email is required.");
-            return;
+            setErrorMessage("Invalid email format."); // More specific error message
+            return; // Exit early if validation fails
         }
         if (!topic) {
             setErrorMessage("Topic is required.");
@@ -84,7 +103,7 @@ function ContactForm() {
             setErrorMessage("Message is required.");
             return;
         }
-        const submission: ContactSubmission = {
+        const submissionData: ContactSubmission = {
             name,
             email,
             topic,
@@ -94,15 +113,18 @@ function ContactForm() {
         try {
             setIsSubmitting(true);
 
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            const result = await onSubmit(submissionData);
 
-            console.log(submission);
-
-            setSuccessMessage("Contact form submitted. Check the console for the logged data.");
-            setName("");
-            setEmail("");
-            setTopic("");
-            setMessage("");
+            if (result.success) {
+                setSuccessMessage(result.message);
+                // Clear form only on success
+                setName("");
+                setEmail("");
+                setTopic("");
+                setMessage("");
+            } else {
+                setErrorMessage(result.message);
+            }
 
         } finally {
             setIsSubmitting(false);
@@ -122,13 +144,14 @@ function ContactForm() {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="contact-card">
-                <TextField label="Name" value={name} onChange={setName} />
-                <TextField label="Email" type="email" value={email} onChange={setEmail} />
+            <form onSubmit={handleFormSubmit} className="contact-card">
+                <TextField id="contact-name" label="Name" value={name} onChange={setName} />
+                <TextField id="contact-email" label="Email" type="email" value={email} onChange={setEmail} />
 
                 <div className="form-group">
-                    <label className="form-label">Topic</label>
+                    <label htmlFor="contact-topic" className="form-label">Topic</label>
                     <select
+                        id="contact-topic"
                         className="form-input"
                         value={topic}
                         onChange={(event) => setTopic(event.target.value)}
@@ -142,8 +165,9 @@ function ContactForm() {
                 </div>
 
                 <div className="form-group">
-                    <label className="form-label">Message</label>
+                    <label htmlFor="contact-message" className="form-label">Message</label>
                     <textarea
+                        id="contact-message"
                         className="form-input form-textarea"
                         value={message}
                         onChange={(event) => setMessage(event.target.value)}
