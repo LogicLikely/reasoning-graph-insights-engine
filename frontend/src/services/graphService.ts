@@ -27,3 +27,11 @@ export async function addNode(
     params: { parentID: parentId },
   })
 }
+
+export async function updateNode(
+  slug: string,
+  nodeId: string,
+  data: Partial<GraphFixtureNode>,
+): Promise<void> {
+  await httpClient.patch(`/api/graphs/${slug}/nodes/${nodeId}`, data)
+}

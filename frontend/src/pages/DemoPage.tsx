@@ -4,7 +4,7 @@ import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
-import { addNode, deleteNode, getGraphBySlug } from '../services/graphService'
+import { addNode, deleteNode, getGraphBySlug, updateNode } from '../services/graphService'
 import './DemoPage.css'
 
 const DEMO_GRAPH_SLUG = 'sample-medium'
@@ -33,6 +33,10 @@ export function DemoPage() {
 
         setGraph(result)
         setSelectedNodeId(undefined)
+        // We remove the explicit reset here so that updates and additions
+        // don't lose the user's current focus/selection during a reload.
+        // Deletions still handle their own cleanup.
+
       } catch {
         if (!isActive) {
           return
@@ -54,6 +58,54 @@ export function DemoPage() {
     }
   }, [reloadKey])
 
+  const handleDeleteNode = async (nodeId: string) => {
+    const hasInNeighbors = graph?.edges.some((e) => e.to === nodeId)
+    if (hasInNeighbors) {
+      alert('Cannot delete a node that has incoming neighbors. Remove the nodes pointing to this one first.')
+      return
+    }
+
+    if (!window.confirm('Are you sure you want to delete this node? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      await deleteNode(DEMO_GRAPH_SLUG, nodeId)
+      setReloadKey((prev) => prev + 1)
+      setSelectedNodeId(undefined)
+    } catch {
+      setError('Failed to delete node from the server.')
+    }
+  }
+
+  const handleUpdateNode = async (nodeId: string, data: Partial<GraphFixtureNode>) => {
+    try {
+      await updateNode(DEMO_GRAPH_SLUG, nodeId, data)
+      setReloadKey((prev) => prev + 1)
+    } catch {
+      setError('Failed to update node on the server.')
+    }
+  }
+
+  const handleAddSupportingNode = async (parentId: string, data: Partial<GraphFixtureNode> = {}) => {
+    const newNodeId = `node-${Date.now()}`
+    const newNode: GraphFixtureNode = {
+      ...data,
+      id: newNodeId,
+      kind: data.kind ?? 'premise',
+      title: data.title ?? 'New Node',
+      bodyText: data.bodyText ?? '',
+    } as GraphFixtureNode
+
+    try {
+      await addNode(DEMO_GRAPH_SLUG, newNode, parentId)
+      setReloadKey((prev) => prev + 1)
+      setSelectedNodeId(newNodeId)
+    } catch {
+      setError('Failed to add node to the server.')
+    }
+  }
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Prevent trigger if user is typing in an input or textarea
@@ -62,41 +114,13 @@ export function DemoPage() {
       }
 
       if (event.key.toLowerCase() === 'd') {
-        console.log("'d' key pressed")
         if (selectedNodeId !== undefined) {
-          const hasInNeighbors = graph?.edges.some((e) => e.to === selectedNodeId)
-          if (hasInNeighbors) {
-            alert('Cannot delete a node that has incoming neighbors. Remove the nodes pointing to this one first.')
-            return
-          }
-
-          // We only need to call this once. 
-          void deleteNode(DEMO_GRAPH_SLUG, selectedNodeId)
-            .then(() => {
-              // Trigger the existing loadGraph effect to refresh the data from the server
-              setReloadKey((prev) => prev + 1)
-            })
-            .catch(() => setError('Failed to delete node from the server.'))
+          void handleDeleteNode(selectedNodeId)
         }
       }
       else if (event.key.toLowerCase() === 'a') {
-        console.log("'a' key pressed")
         if (selectedNodeId !== undefined) {
-          const newNodeId = `node-${Date.now()}`
-          const newNode: GraphFixtureNode = {
-            id: newNodeId,
-            kind: 'premise',
-            title: 'New Supporting Premise',
-            bodyText: 'This is a dynamically added premise to demonstrate the POST capability.',
-            tags: ['dynamic'],
-            confidence: 0.85
-          }
-
-          void addNode(DEMO_GRAPH_SLUG, newNode, selectedNodeId)
-            .then(() => {
-              setReloadKey((prev) => prev + 1)
-            })
-            .catch(() => setError('Failed to add node to the server.'))
+          void handleAddSupportingNode(selectedNodeId)
         }
       }
     }
@@ -155,7 +179,12 @@ export function DemoPage() {
         </article>
 
         <div className="demo-sidebar-stack">
-          <GraphDetailsPanel node={selectedNode} />
+          <GraphDetailsPanel
+            node={selectedNode}
+            onDelete={handleDeleteNode}
+            onAddSupporting={handleAddSupportingNode}
+            onUpdate={handleUpdateNode}
+          />
           {graph ? (
             <GraphOverviewPanel
               title={graph.title}
