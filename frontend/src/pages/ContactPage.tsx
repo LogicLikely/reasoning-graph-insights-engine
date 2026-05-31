@@ -1,29 +1,46 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import "./ContactPage.css";
 
-//part 15
+type ContactSubmission = {
+    name: string;
+    email: string;
+    topic: string;
+    message: string;
+};
+
+type TextFieldProps = {
+    id: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    type?: string;
+};
+
+function TextField({ id, label, value, onChange, type = "text" }: TextFieldProps) {
+    return (
+        <div className="form-group">
+            <label className="form-label" htmlFor={id}>{label}</label>
+            <input
+                id={id}
+                className="form-input"
+                type={type}
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+            />
+        </div>
+    );
+}
+
+function isValidEmail(email: string) {
+    return email.includes("@") && email.includes(".");
+}
+
 function ContactForm() {
-
-    type ContactSubmission = {
-        name: string;
-        email: string;
-        topic: string;
-        message: string;
-    };
-
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [topic, setTopic] = useState("");
     const [message, setMessage] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-
-    const submission: ContactSubmission = {
-        name,
-        email,
-        topic,
-        message,
-    };
 
     const hasRequiredFields =
         name.trim() &&
@@ -31,39 +48,10 @@ function ContactForm() {
         topic &&
         message.trim();
 
-    type TextFieldProps = {
-        label: string;
-        value: string;
-        onChange: (value: string) => void;
-        type?: string;
-    };
-
-    function TextField({ label, value, onChange, type = "text" }: TextFieldProps) {
-        return (
-            <div className="form-group">
-                <label className="form-label">{label}</label>
-                <input
-                    className="form-input"
-                    type={type}
-                    value={value}
-                    onChange={(event) => onChange(event.target.value)}
-                />
-            </div>
-        );
-    }
-
-    function isValidEmail(email: string) {
-        return email.includes("@") && email.includes(".");
-    }
-
-
-    //State variable can only hold a string or null value
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-
-
-    async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setSuccessMessage(null);
         setErrorMessage(null);
@@ -123,12 +111,13 @@ function ContactForm() {
             )}
 
             <form onSubmit={handleSubmit} className="contact-card">
-                <TextField label="Name" value={name} onChange={setName} />
-                <TextField label="Email" type="email" value={email} onChange={setEmail} />
+                <TextField id="contact-name" label="Name" value={name} onChange={setName} />
+                <TextField id="contact-email" label="Email" type="email" value={email} onChange={setEmail} />
 
                 <div className="form-group">
-                    <label className="form-label">Topic</label>
+                    <label className="form-label" htmlFor="contact-topic">Topic</label>
                     <select
+                        id="contact-topic"
                         className="form-input"
                         value={topic}
                         onChange={(event) => setTopic(event.target.value)}
@@ -142,8 +131,9 @@ function ContactForm() {
                 </div>
 
                 <div className="form-group">
-                    <label className="form-label">Message</label>
+                    <label className="form-label" htmlFor="contact-message">Message</label>
                     <textarea
+                        id="contact-message"
                         className="form-input form-textarea"
                         value={message}
                         onChange={(event) => setMessage(event.target.value)}
