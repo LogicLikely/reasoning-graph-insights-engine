@@ -2,6 +2,7 @@ using Backend.Data;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Dapper;
+using System.Linq;
 using System.Text.Json;
 
 namespace Backend.Repositories;
@@ -9,28 +10,36 @@ namespace Backend.Repositories;
 public class GraphRepository : IGraphRepository
 {
     private const string GraphSql = """
-        SELECT id, slug, title, description
+        SELECT 
+            id, slug, title, description
         FROM graphs
         WHERE slug = @Slug;
         """;
 
     private const string NodesSql = """
         SELECT 
-            id, kind, title, body_text AS BodyText,
-            category, 
-            tags, 
-            prior, 
-            weight, 
-            confidence, 
-            importance, 
-            evidence
+            id,
+            kind,
+            title,
+            body_text,
+            category,
+            tags,
+            prior,
+            weight,
+            confidence,
+            importance,
+            evidence::text AS evidence
         FROM nodes
         WHERE graph_id = @GraphId
         ORDER BY id;
         """;
 
     private const string EdgesSql = """
-        SELECT id, from_node_id AS "From", to_node_id AS "To", kind
+        SELECT 
+            id, 
+            from_node_id, 
+            to_node_id, 
+            kind
         FROM edges
         WHERE graph_id = @GraphId
         ORDER BY id;
@@ -54,7 +63,15 @@ public class GraphRepository : IGraphRepository
             new { Slug = slug },
             cancellationToken: cancellationToken);
 
-        var graph = await connection.QuerySingleOrDefaultAsync<Graph>(command);
+        // Use an intermediate row type to ensure robust mapping from PostgreSQL's lowercase column names
+        var graphRow = await connection.QuerySingleOrDefaultAsync<GraphRow>(command);
+        var graph = graphRow == null ? null : new Graph
+        {
+            Id = graphRow.id,
+            Slug = graphRow.slug,
+            Title = graphRow.title,
+            Description = graphRow.description
+        };
 
         if (graph is null)
         {
@@ -71,68 +88,68 @@ public class GraphRepository : IGraphRepository
             new { GraphId = graph.Id },
             cancellationToken: cancellationToken);
 
-        // Using dynamic to handle the explicit deserialization of the JSONB evidence column
-        var nodeRows = await connection.QueryAsync<dynamic>(nodesCommand);
+        var nodeRows = (await connection.QueryAsync<NodeRow>(nodesCommand)).ToList();
+
+        //Individually assigns each property so can do custom stuff with evidence field
         graph.Nodes = nodeRows.Select(row => new GraphNode
         {
             Id = row.id,
             Kind = row.kind,
             Title = row.title,
-            BodyText = row.BodyText,
+            BodyText = row.body_text,
             Category = row.category,
-            Tags = (row.tags as string[] ?? Array.Empty<string>()).ToList(),
+            Tags = row.tags?.ToList() ?? new List<string>(),
             Prior = row.prior,
             Weight = row.weight,
             Confidence = row.confidence,
             Importance = row.importance,
-            Evidence = row.evidence != null
-                ? JsonSerializer.Deserialize<GraphEvidence>(row.evidence.ToString(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                : null
+            Evidence = string.IsNullOrEmpty(row.evidence)
+                ? null
+                : JsonSerializer.Deserialize<GraphEvidenceDetails>(row.evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
         }).ToList();
 
-        graph.Edges = (await connection.QueryAsync<GraphEdge>(edgesCommand)).AsList();
+
+        var edgeRows = (await connection.QueryAsync<EdgeRow>(edgesCommand)).ToList();
+        graph.Edges = edgeRows.Select(row => new GraphEdge
+        {
+            Id = row.id,
+            From = row.from_node_id,
+            To = row.to_node_id,
+            Kind = row.kind
+        }).ToList();
+
+        // graph.Nodes = (await connection.QueryAsync<GraphNode>(nodesCommand)).AsList();
+        // graph.Edges = (await connection.QueryAsync<GraphEdge>(edgesCommand)).AsList();
 
         return graph;
     }
 
-    public async Task<bool> DeleteNodeAsync(string slug, string nodeId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Internal helper to match exact Postgres lowercase column names for edges.
+    /// </summary>
+    private sealed class EdgeRow
     {
-        using var connection = _dbConnectionFactory.CreateConnection();
-        connection.Open();
-        using var transaction = connection.BeginTransaction();
-
-        try
-        {
-            // 1. Delete all edges associated with this node (incoming or outgoing)
-            const string DeleteEdgesSql = """
-                DELETE FROM edges
-                WHERE (from_node_id = @NodeId OR to_node_id = @NodeId)
-                AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
-                """;
-
-            await connection.ExecuteAsync(new CommandDefinition(DeleteEdgesSql,
-                new { NodeId = nodeId, Slug = slug }, transaction, cancellationToken: cancellationToken));
-
-            // 2. Delete the node itself
-            const string DeleteNodeSql = """
-                DELETE FROM nodes
-                WHERE id = @NodeId
-                AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
-                """;
-
-            var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(DeleteNodeSql,
-                new { NodeId = nodeId, Slug = slug }, transaction, cancellationToken: cancellationToken));
-
-            transaction.Commit();
-            return rowsAffected > 0;
-        }
-        catch
-        {
-            transaction.Rollback();
-            throw;
-        }
+        public string id { get; set; } = default!;
+        public string from_node_id { get; set; } = default!;
+        public string to_node_id { get; set; } = default!;
+        public string kind { get; set; } = default!;
     }
+
+    private sealed class NodeRow
+    {
+        public string id { get; set; } = default!;
+        public string kind { get; set; } = default!;
+        public string title { get; set; } = default!;
+        public string body_text { get; set; } = default!;
+        public string? category { get; set; }
+        public string[]? tags { get; set; }
+        public decimal? prior { get; set; }
+        public decimal? weight { get; set; }
+        public decimal? confidence { get; set; }
+        public decimal? importance { get; set; }
+        public string? evidence { get; set; }
+    }
+
 
     public async Task<bool> AddNodeAsync(
         string slug,

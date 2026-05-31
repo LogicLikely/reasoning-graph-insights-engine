@@ -1,0 +1,8 @@
+namespace Backend.Models.Domain;
+
+public class GraphEvidenceDetails
+{
+    public string Type { get; set; } = string.Empty;
+    public decimal? Score { get; set; }
+    public string? Rationale { get; set; }
+}

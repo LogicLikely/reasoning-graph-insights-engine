@@ -11,6 +11,12 @@ interface GraphDetailsPanelProps {
 
 type PanelMode = 'view' | 'add' | 'edit'
 
+function formatMetric(value?: number) {
+  if (value === null || value === undefined) {
+    return undefined; // Or an empty string, or a default value like '0.00'
+  }
+  return value.toFixed(2);
+}
 export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }: GraphDetailsPanelProps) {
   const [mode, setMode] = useState<PanelMode>('view')
   const [formData, setFormData] = useState({

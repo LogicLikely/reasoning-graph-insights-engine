@@ -36,17 +36,17 @@ public class GraphService : IGraphService
                     Title = node.Title,
                     BodyText = node.BodyText,
                     Category = node.Category,
-                    Tags = node.Tags,
+                    Tags = node.Tags.ToList(),
                     Prior = node.Prior,
-                    Weight = node.Weight,
                     Confidence = node.Confidence,
+                    Weight = node.Weight,
                     Importance = node.Importance,
-                    Evidence = node.Evidence != null ? new GraphEvidenceDto
+                    Evidence = node.Evidence == null ? null : new GraphEvidenceDto
                     {
                         Type = node.Evidence.Type,
                         Score = node.Evidence.Score,
                         Rationale = node.Evidence.Rationale
-                    } : null
+                    }
                 })
                 .ToList(),
             Edges = graph.Edges

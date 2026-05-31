@@ -149,6 +149,7 @@ backend/obj/
 backend.Tests/TestResults/
 backend.Tests/bin/
 backend.Tests/obj/
+*.lscache
 
 # Env
 .env
