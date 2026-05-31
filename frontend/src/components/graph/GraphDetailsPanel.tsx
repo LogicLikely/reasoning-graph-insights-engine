@@ -32,10 +32,16 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
 
   if (!node) {
     return (
-      <div className="graph-details-panel graph-details-panel--empty" data-testid="graph-details-panel">
-        <h3>Node Details</h3>
-        <p className="empty-hint">Select a node in the graph to view its details and available actions.</p>
-      </div>
+      <aside className="graph-details-panel" data-testid="graph-details-panel">
+        <span className="eyebrow">Node Details</span>
+        <div className="graph-details-panel__empty">
+          <h3>Select a node to view details</h3>
+          <p>
+            Click any node in the graph to inspect its role, supporting text, and
+            any attached metadata in this panel.
+          </p>
+        </div>
+      </aside>
     )
   }
 
@@ -148,42 +154,77 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
   }
 
   return (
-    <div className="graph-details-panel" data-testid="graph-details-panel">
-      <header className="node-header">
-        <div className="node-kind-row">
-          <span className={`node-kind-tag node-kind-tag--${node.kind}`}>{node.kind}</span>
-          <span className="node-id">ID: {node.id}</span>
-        </div>
-        <h2>{node.title}</h2>
-      </header>
+    <aside className="graph-details-panel" data-testid="graph-details-panel">
+      <span className="eyebrow">Node Details</span>
 
-      <section className="node-section">
-        <h4>Description</h4>
-        <p className="node-body-text">{node.bodyText}</p>
-      </section>
-
-      <section className="node-section node-metadata">
-        <h4>Metadata</h4>
-        <div className="metadata-grid">
-          {node.confidence !== undefined && (
-            <div className="metadata-item">
-              <span className="label">Confidence</span>
-              <span className="value">{(node.confidence * 100).toFixed(0)}%</span>
-            </div>
-          )}
-          {node.importance !== undefined && (
-            <div className="metadata-item">
-              <span className="label">Importance</span>
-              <span className="value">{node.importance}</span>
-            </div>
-          )}
+      <div className="graph-details-panel__header">
+        <h3>{node.title}</h3>
+        <div className="graph-details-panel__meta">
+          <span>{node.kind}</span>
+          <span>{node.id}</span>
         </div>
-        {node.tags && node.tags.length > 0 && (
-          <div className="node-tags">
-            {node.tags.map(tag => <span key={tag} className="tag-pill">{tag}</span>)}
-          </div>
-        )}
-      </section>
+      </div>
+
+      <p className="graph-details-panel__body">{node.bodyText}</p>
+
+      <dl className="graph-details-list">
+        {node.category ? (
+          <>
+            <dt>Category</dt>
+            <dd>{node.category}</dd>
+          </>
+        ) : null}
+        {node.tags?.length ? (
+          <>
+            <dt>Tags</dt>
+            <dd>
+              <div className="graph-tag-list">
+                {node.tags.map((tag) => (
+                  <span key={tag} className="graph-tag">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </dd>
+          </>
+        ) : null}
+        {formatMetric(node.prior) ? (
+          <>
+            <dt>Prior</dt>
+            <dd>{formatMetric(node.prior)}</dd>
+          </>
+        ) : null}
+        {formatMetric(node.confidence) ? (
+          <>
+            <dt>Confidence</dt>
+            <dd>{formatMetric(node.confidence)}</dd>
+          </>
+        ) : null}
+        {formatMetric(node.weight) ? (
+          <>
+            <dt>Weight</dt>
+            <dd>{formatMetric(node.weight)}</dd>
+          </>
+        ) : null}
+        {formatMetric(node.importance) ? (
+          <>
+            <dt>Importance</dt>
+            <dd>{formatMetric(node.importance)}</dd>
+          </>
+        ) : null}
+        {node.evidence ? (
+          <>
+            <dt>Evidence</dt>
+            <dd className="graph-evidence-block">
+              <strong>{node.evidence.type}</strong>
+              {node.evidence.score !== undefined ? (
+                <span>Score: {node.evidence.score.toFixed(2)}</span>
+              ) : null}
+              {node.evidence.rationale ? <p>{node.evidence.rationale}</p> : null}
+            </dd>
+          </>
+        ) : null}
+      </dl>
 
       <section className="node-section node-actions">
         <h4>Node Actions</h4>
@@ -209,6 +250,6 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
         </div>
         <p className="action-hint">Shortcut: Press 'A' to add or 'D' to delete while a node is selected.</p>
       </section>
-    </div>
+    </aside>
   )
 }
