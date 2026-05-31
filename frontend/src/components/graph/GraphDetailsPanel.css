@@ -101,12 +101,20 @@
   background: #ede9fe;
 }
 
+.node-actions {
+  display: grid;
+  gap: 0.8rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
 .node-section h4 {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.875rem;
-  color: #64748b;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  letter-spacing: 0.025em;
 }
 
 .actions-button-group {
@@ -114,6 +122,87 @@
   flex-direction: column;
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+.node-actions .actions-button-group {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0;
+}
+
+.node-actions .btn {
+  position: relative;
+  width: 5.75rem;
+}
+
+.node-actions .btn::before,
+.node-actions .btn::after {
+  position: absolute;
+  left: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 0.25rem);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+  z-index: 1;
+}
+
+.node-actions .btn::before {
+  content: attr(data-tooltip);
+  bottom: calc(100% + 0.65rem);
+  width: max-content;
+  max-width: min(16rem, 76vw);
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.7rem;
+  background: rgba(253, 253, 248, 0.98);
+  box-shadow: var(--shadow-panel);
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: center;
+}
+
+.node-actions .btn::after {
+  content: '';
+  bottom: calc(100% + 0.34rem);
+  border: 0.35rem solid transparent;
+  border-top-color: rgba(253, 253, 248, 0.98);
+}
+
+.node-actions .btn:hover::before,
+.node-actions .btn:hover::after,
+.node-actions .btn:focus-visible::before,
+.node-actions .btn:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.node-actions .btn:first-child::before {
+  left: 0;
+  transform: translate(0, 0.25rem);
+  text-align: left;
+}
+
+.node-actions .btn:first-child:hover::before,
+.node-actions .btn:first-child:focus-visible::before {
+  transform: translate(0, 0);
+}
+
+.node-actions .btn:last-child::before {
+  right: 0;
+  left: auto;
+  transform: translate(0, 0.25rem);
+  text-align: right;
+}
+
+.node-actions .btn:last-child:hover::before,
+.node-actions .btn:last-child:focus-visible::before {
+  transform: translate(0, 0);
 }
 
 .form-group {
@@ -142,48 +231,75 @@
 }
 
 .btn {
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.62rem 0.95rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--color-text);
   font-weight: 600;
   cursor: pointer;
-  border: none;
-  transition: all 0.2s;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
 }
 
 .btn--primary {
-  background: var(--color-text);
-  color: white;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-soft);
+  color: var(--color-accent);
 }
 
-.btn--primary:hover {
-  opacity: 0.9;
+.btn:hover,
+.btn:focus-visible {
+  border-color: var(--color-border-strong);
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
 }
 
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 .btn--secondary {
-  background: transparent;
-  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.58);
   color: var(--color-text);
 }
 
 .btn--danger {
-  background: #fee2e2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  border-color: rgba(154, 50, 42, 0.24);
+  background: rgba(154, 50, 42, 0.06);
+  color: #9a322a;
 }
 
-.btn--danger:hover {
-  background: #dc2626;
-  color: white;
+.btn--danger:hover,
+.btn--danger:focus-visible {
+  border-color: rgba(154, 50, 42, 0.38);
+  background: rgba(154, 50, 42, 0.1);
+  color: #7c241e;
 }
 
 .action-hint {
   font-size: 0.75rem;
-  color: #94a3b8;
-  margin-top: 1rem;
+  color: var(--color-text-muted);
+  margin: 0;
   font-style: italic;
+}
+
+@media (max-width: 640px) {
+  .node-actions .actions-button-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .node-actions .btn {
+    width: 100%;
+  }
 }

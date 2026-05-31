@@ -231,21 +231,27 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
         <div className="actions-button-group">
           <button
             className="btn btn--primary"
+            aria-label="Add a child node connected to this selected node"
+            data-tooltip="Add a child node connected to this selected node."
             onClick={enterAddMode}
           >
-            Add Supporting Premise
+            Add
           </button>
           <button
             className="btn btn--secondary"
+            aria-label="Edit this node's title, type, and description"
+            data-tooltip="Edit this node's title, type, and description."
             onClick={enterEditMode}
           >
-            Edit Node
+            Edit
           </button>
           <button
             className="btn btn--danger"
+            aria-label="Delete this node from the graph"
+            data-tooltip="Delete this node from the graph."
             onClick={() => onDelete?.(node.id)}
           >
-            Delete This Node
+            Delete
           </button>
         </div>
         <p className="action-hint">Shortcut: Press 'A' to add or 'D' to delete while a node is selected.</p>
