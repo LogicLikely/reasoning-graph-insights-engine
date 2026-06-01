@@ -42,3 +42,17 @@ When('I click the submit button', async function (this: StorybookWorld) {
 Then('I should see the validation message {string}', async function (this: StorybookWorld, message: string) {
     await expect(this.storyPage.getByText(message)).toBeVisible()
 })
+
+Given('the contact form is empty', async function (this: StorybookWorld) {
+    await ensureStorybookIsAvailable(this)
+    this.currentStoryId = STORY_IDS.contactForm
+    await openCurrentStory(this)
+})
+
+When('I try to submit the contact form', async function (this: StorybookWorld) {
+    await this.storyPage.getByRole('button', { name: /submit/i }).click()
+})
+
+Then('I should see that name is required', async function (this: StorybookWorld) {
+    await expect(this.storyPage.getByText(/Name is required/i)).toBeVisible()
+})
