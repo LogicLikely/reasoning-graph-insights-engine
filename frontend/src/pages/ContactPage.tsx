@@ -1,15 +1,22 @@
 import { useState, type FormEvent } from "react";
 import "./ContactPage.css";
 
+type ContactSubmission = {
+    name: string;
+    email: string;
+    topic: string;
+    message: string;
+};
+
 type TextFieldProps = {
+    id: string;
     label: string;
     value: string;
     onChange: (value: string) => void;
     type?: string;
-    id: string;
 };
 
-function TextField({ label, value, onChange, id, type = "text" }: TextFieldProps) {
+function TextField({ id, label, value, onChange, type = "text" }: TextFieldProps) {
     return (
         <div className="form-group">
             <label htmlFor={id} className="form-label">{label}</label>
@@ -28,13 +35,6 @@ function isValidEmail(email: string) {
     return email.includes("@") && email.includes(".");
 }
 
-type ContactSubmission = {
-    name: string;
-    email: string;
-    topic: string;
-    message: string;
-};
-
 type ContactFormProps = {
     initialName?: string;
     initialEmail?: string;
@@ -43,7 +43,6 @@ type ContactFormProps = {
     onSubmit?: (submission: ContactSubmission) => Promise<{ success: boolean; message: string }>;
 };
 
-//part 15
 export function ContactForm({
     initialName = "",
     initialEmail = "",
@@ -62,25 +61,14 @@ export function ContactForm({
     const [message, setMessage] = useState(initialMessage);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-
-    const submission: ContactSubmission = {
-        name,
-        email,
-        topic,
-        message,
-    };
-
     const hasRequiredFields =
         name.trim() &&
         email.trim() &&
         topic &&
         message.trim();
 
-    //State variable can only hold a string or null value
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-
 
     async function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
