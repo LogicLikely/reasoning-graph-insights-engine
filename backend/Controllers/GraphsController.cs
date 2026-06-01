@@ -1,3 +1,4 @@
+using Backend.Models.Dto;
 using Backend.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,5 +28,40 @@ public class GraphsController : ControllerBase
         }
 
         return Ok(graph);
+    }
+
+    [HttpDelete("{slug}/nodes/{nodeId}")]
+    public async Task<IActionResult> DeleteNode(
+        string slug,
+        string nodeId,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Deleting node {nodeId} from graph {slug}");
+        var deleted = await _graphService.DeleteNodeAsync(slug, nodeId, cancellationToken);
+
+        if (!deleted)
+        {
+            Console.WriteLine($"Failed to delete node {nodeId} from graph {slug}");
+            return NotFound(); // Return 404 if the node or graph was not found
+        }
+        return NoContent(); // Return 204 No Content for a successful deletion
+    }
+    [HttpPost("{slug}/nodes")]
+    public async Task<IActionResult> AddNode(
+        string slug,
+        [FromBody] GraphNodeDto nodeDto,
+        CancellationToken cancellationToken,
+        [FromQuery] string? parentID = null)
+    {
+        Console.WriteLine($"Adding node to graph {slug}");
+        var success = await _graphService.AddNodeAsync(slug, nodeDto, parentID, cancellationToken);
+
+        if (!success)
+        {
+            Console.WriteLine($"Failed to add node to graph {slug}");
+            return NotFound();
+        }
+
+        return CreatedAtAction(nameof(GetBySlug), new { slug }, nodeDto);
     }
 }

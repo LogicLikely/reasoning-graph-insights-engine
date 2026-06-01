@@ -60,4 +60,30 @@ public class GraphService : IGraphService
                 .ToList()
         };
     }
+
+    public async Task<bool> DeleteNodeAsync(
+        string slug,
+        string nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        if (graph is null) return false;
+
+        // Check if node has incoming edges (IN neighbors)
+        if (graph.Edges.Any(e => e.To == nodeId))
+        {
+            return false; // Business Rule: Cannot delete nodes that have incoming dependencies
+        }
+
+        return await _graphRepository.DeleteNodeAsync(slug, nodeId, cancellationToken);
+    }
+
+    public async Task<bool> AddNodeAsync(
+        string slug,
+        GraphNodeDto node,
+        string? parentID = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _graphRepository.AddNodeAsync(slug, node, parentID, cancellationToken);
+    }
 }
