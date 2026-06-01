@@ -89,57 +89,59 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
     const isEdit = mode === 'edit'
 
     return (
-      <div className="graph-details-panel" data-testid="graph-details-panel">
+      <div className="graph-details-panel graph-details-panel--form" data-testid="graph-details-panel">
         <header className="node-header">
           {isEdit ? (
             <>
               <span className="eyebrow">Editing node {node.id}</span>
-              <h2>Modify Node</h2>
+              <h3>Modify Node</h3>
             </>
           ) : (
             <>
               <span className="eyebrow">Adding support to {node.id}</span>
-              <h2>New Node Details</h2>
+              <h3>New Node Details</h3>
             </>
           )}
         </header>
 
-        <div className="form-group">
-          <label htmlFor="node-title">Title</label>
-          <input
-            id="node-title"
-            className="form-input"
-            value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            placeholder="Enter title..."
-          />
+        <div className="node-form">
+          <div className="form-group">
+            <label htmlFor="node-title">Title</label>
+            <input
+              id="node-title"
+              className="form-input"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              placeholder="Enter title..."
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="node-kind">Type</label>
+            <select
+              id="node-kind"
+              className="form-input"
+              value={formData.kind}
+              onChange={(e) => setFormData({ ...formData, kind: e.target.value as any })}
+            >
+              <option value="premise">Premise</option>
+              <option value="evidence">Evidence</option>
+              <option value="counter">Counter</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="node-body">Description</label>
+            <textarea
+              id="node-body"
+              className="form-input form-input--textarea"
+              value={formData.bodyText}
+              onChange={(e) => setFormData({ ...formData, bodyText: e.target.value })}
+            />
+          </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="node-kind">Type</label>
-          <select
-            id="node-kind"
-            className="form-input"
-            value={formData.kind}
-            onChange={(e) => setFormData({ ...formData, kind: e.target.value as any })}
-          >
-            <option value="premise">Premise</option>
-            <option value="evidence">Evidence</option>
-            <option value="counter">Counter</option>
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="node-body">Description</label>
-          <textarea
-            id="node-body"
-            className="form-input form-input--textarea"
-            value={formData.bodyText}
-            onChange={(e) => setFormData({ ...formData, bodyText: e.target.value })}
-          />
-        </div>
-
-        <div className="actions-button-group">
+        <div className="actions-button-group form-actions">
           <button
             className="btn btn--primary"
             onClick={handleSave}
