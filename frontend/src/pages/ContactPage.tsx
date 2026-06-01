@@ -35,31 +35,18 @@ function isValidEmail(email: string) {
     return email.includes("@") && email.includes(".");
 }
 
-type ContactFormProps = {
-    initialName?: string;
-    initialEmail?: string;
-    initialTopic?: string;
-    initialMessage?: string;
-    onSubmit?: (submission: ContactSubmission) => Promise<{ success: boolean; message: string }>;
-};
-
-export function ContactForm({
-    initialName = "",
-    initialEmail = "",
-    initialTopic = "",
-    initialMessage = "",
-    onSubmit = async (submission) => {
-        console.log("Mock submission:", submission);
-        await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API call
-        return { success: true, message: "Contact form submitted. Check the console for the logged data." };
-    },
-}: ContactFormProps) {
-
-    const [name, setName] = useState(initialName);
-    const [email, setEmail] = useState(initialEmail);
-    const [topic, setTopic] = useState(initialTopic);
-    const [message, setMessage] = useState(initialMessage);
+function ContactForm() {
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [topic, setTopic] = useState("");
+    const [message, setMessage] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const hasRequiredFields =
+        name.trim() &&
+        email.trim() &&
+        topic &&
+        message.trim();
 
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -95,19 +82,15 @@ export function ContactForm({
         try {
             setIsSubmitting(true);
 
-            const result = await onSubmit(submissionData);
+            await new Promise((resolve) => setTimeout(resolve, 500));
 
-            if (result.success) {
-                setSuccessMessage(result.message);
-                // Clear form only on success
-                setName("");
-                setEmail("");
-                setTopic("");
-                setMessage("");
-            } else {
-                setErrorMessage(result.message);
-            }
+            console.log(submissionData);
 
+            setSuccessMessage("Contact form submitted. Check the console for the logged data.");
+            setName("");
+            setEmail("");
+            setTopic("");
+            setMessage("");
         } finally {
             setIsSubmitting(false);
         }
@@ -159,7 +142,7 @@ export function ContactForm({
                 <button
                     type="submit"
                     className="submit-button"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !hasRequiredFields}
                 >
                     {isSubmitting ? "Submitting..." : "Submit"}
                 </button>
