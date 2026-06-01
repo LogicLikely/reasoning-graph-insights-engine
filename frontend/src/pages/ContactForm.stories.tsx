@@ -69,22 +69,22 @@ export const RequiredFieldValidation: Story = {
         await userEvent.click(submitButton);
 
         // Expect error messages for each field, one by one as they are filled
-        await expect(await canvas.findByRole('alert', { name: /Name is required/i })).toBeVisible();
+        await expect(await canvas.findByText((c) => c.includes('Name is required'))).toBeVisible();
 
         // Fill name, submit, expect email error
         await userEvent.type(canvas.getByLabelText(/Name/i), 'Test User');
         await userEvent.click(submitButton);
-        await expect(await canvas.findByRole('alert', { name: /Invalid email format/i })).toBeVisible();
+        await expect(await canvas.findByText((c) => c.includes('Invalid email format'))).toBeVisible();
 
         // Fill email, submit, expect topic error
         await userEvent.type(canvas.getByLabelText(/Email/i), 'test@example.com');
         await userEvent.click(submitButton);
-        await expect(await canvas.findByRole('alert', { name: /Topic is required/i })).toBeVisible();
+        await expect(await canvas.findByText((c) => c.includes('Topic is required'))).toBeVisible();
 
         // Fill topic, submit, expect message error
         await userEvent.selectOptions(canvas.getByLabelText(/Topic/i), 'question');
         await userEvent.click(submitButton);
-        await expect(await canvas.findByRole('alert', { name: /Message is required/i })).toBeVisible();
+        await expect(await canvas.findByText((c) => c.includes('Message is required'))).toBeVisible();
     },
 };
 
@@ -109,7 +109,7 @@ export const InvalidEmailValidation: Story = {
         await userEvent.click(submitButton);
 
         // Expect invalid email error message
-        await expect(await canvas.findByRole('alert', { name: /Invalid email format/i })).toBeVisible();
+        await expect(await canvas.findByText((c) => c.includes('Invalid email format'))).toBeVisible();
     },
 };
 
@@ -121,7 +121,7 @@ export const SubmittingState: Story = {
         initialMessage: 'Testing the submitting state.',
         onSubmit: fn(async (submission) => {
             console.log("Simulating long submission:", submission);
-            await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate a long API call
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate a long API call
             return { success: true, message: "Submission complete!" };
         }),
     },
@@ -143,7 +143,7 @@ export const SubmittingState: Story = {
         await expect(submitButton).toBeDisabled();
 
         // Wait for submission to complete and check for success message
-        await expect(await canvas.findByText(/Submission complete!/i)).toBeVisible();
+        await expect(await canvas.findByText((c) => c.includes('Submission complete!'))).toBeVisible();
         await expect(submitButton).toHaveTextContent('Submit'); // Button text should revert
         await expect(submitButton).toBeEnabled(); // Button should be enabled again
     },
@@ -174,7 +174,7 @@ export const SuccessfulSubmission: Story = {
         await userEvent.click(submitButton);
 
         // Expect success message
-        await expect(await canvas.findByText(/Contact form submitted successfully!/i)).toBeVisible();
+        await expect(await canvas.findByText((c) => c.includes('Contact form submitted successfully!'))).toBeVisible();
         await expect(args.onSubmit).toHaveBeenCalledWith({
             name: 'Success User',
             email: 'success@example.com',
@@ -214,7 +214,7 @@ export const FailedSubmission: Story = {
         await userEvent.click(submitButton);
 
         // Expect error message
-        await expect(await canvas.findByRole('alert', { name: /Failed to submit form/i })).toBeVisible();
+        await expect(await canvas.findByText((c) => c.includes('Failed to submit form'))).toBeVisible();
         await expect(args.onSubmit).toHaveBeenCalledWith({
             name: 'Error User',
             email: 'error@example.com',

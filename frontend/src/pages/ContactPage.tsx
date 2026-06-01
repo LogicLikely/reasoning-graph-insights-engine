@@ -61,12 +61,6 @@ export function ContactForm({
     const [message, setMessage] = useState(initialMessage);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const hasRequiredFields =
-        name.trim() &&
-        email.trim() &&
-        topic &&
-        message.trim();
-
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -132,7 +126,7 @@ export function ContactForm({
                 </div>
             )}
 
-            <form onSubmit={handleFormSubmit} className="contact-card">
+            <form onSubmit={handleFormSubmit} className="contact-card" noValidate>
                 <TextField id="contact-name" label="Name" value={name} onChange={setName} />
                 <TextField id="contact-email" label="Email" type="email" value={email} onChange={setEmail} />
 
@@ -165,7 +159,7 @@ export function ContactForm({
                 <button
                     type="submit"
                     className="submit-button"
-                    disabled={isSubmitting || !hasRequiredFields}
+                    disabled={isSubmitting}
                 >
                     {isSubmitting ? "Submitting..." : "Submit"}
                 </button>

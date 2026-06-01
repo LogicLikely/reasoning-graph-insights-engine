@@ -40,8 +40,11 @@ export const FormValidation: Story = {
     play: async ({ canvas }) => {
         const submitButton = canvas.getByRole('button', { name: /Submit/i })
 
-        // Submit empty form (should be disabled by hasRequiredFields, but we check role)
-        await expect(submitButton).toBeDisabled()
+        // Try to submit an empty form
+        await userEvent.click(submitButton)
+
+        // Expect validation error
+        await expect(await canvas.findByText((c) => c.includes('Name is required'))).toBeVisible()
     },
 }
 
