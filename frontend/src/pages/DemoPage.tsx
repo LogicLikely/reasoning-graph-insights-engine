@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
@@ -58,7 +58,7 @@ export function DemoPage() {
     }
   }, [reloadKey])
 
-  const handleDeleteNode = async (nodeId: string) => {
+  const handleDeleteNode = useCallback(async (nodeId: string) => {
     const hasInNeighbors = graph?.edges.some((e) => e.to === nodeId)
     if (hasInNeighbors) {
       alert('Cannot delete a node that has incoming neighbors. Remove the nodes pointing to this one first.')
@@ -76,18 +76,18 @@ export function DemoPage() {
     } catch {
       setError('Failed to delete node from the server.')
     }
-  }
+  }, [graph?.edges])
 
-  const handleUpdateNode = async (nodeId: string, data: Partial<GraphFixtureNode>) => {
+  const handleUpdateNode = useCallback(async (nodeId: string, data: Partial<GraphFixtureNode>) => {
     try {
       await updateNode(DEMO_GRAPH_SLUG, nodeId, data)
       setReloadKey((prev) => prev + 1)
     } catch {
       setError('Failed to update node on the server.')
     }
-  }
+  }, [])
 
-  const handleAddSupportingNode = async (parentId: string, data: Partial<GraphFixtureNode> = {}) => {
+  const handleAddSupportingNode = useCallback(async (parentId: string, data: Partial<GraphFixtureNode> = {}) => {
     const newNodeId = `node-${Date.now()}`
     const newNode: GraphFixtureNode = {
       ...data,
@@ -104,7 +104,7 @@ export function DemoPage() {
     } catch {
       setError('Failed to add node to the server.')
     }
-  }
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -127,7 +127,7 @@ export function DemoPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, graph])
+  }, [selectedNodeId, handleDeleteNode, handleAddSupportingNode])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null

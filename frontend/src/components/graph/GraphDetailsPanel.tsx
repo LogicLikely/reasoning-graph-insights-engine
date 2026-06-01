@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { GraphFixtureNode } from '../../fixtures/sampleGraph'
 import './GraphDetailsPanel.css'
 
@@ -10,6 +10,19 @@ interface GraphDetailsPanelProps {
 }
 
 type PanelMode = 'view' | 'add' | 'edit'
+type PanelModeState = {
+  nodeId?: string
+  mode: PanelMode
+}
+
+const emptyFormData = {
+  title: '',
+  bodyText: '',
+  kind: 'premise' as GraphFixtureNode['kind'],
+  confidence: 0.5
+}
+
+const editableNodeKinds = ['premise', 'evidence', 'counter'] satisfies GraphFixtureNode['kind'][]
 
 function formatMetric(value?: number) {
   if (value === null || value === undefined) {
@@ -18,17 +31,9 @@ function formatMetric(value?: number) {
   return value.toFixed(2);
 }
 export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }: GraphDetailsPanelProps) {
-  const [mode, setMode] = useState<PanelMode>('view')
-  const [formData, setFormData] = useState({
-    title: '',
-    bodyText: '',
-    kind: 'premise' as GraphFixtureNode['kind'],
-    confidence: 0.5
-  })
-
-  useEffect(() => {
-    setMode('view')
-  }, [node?.id])
+  const [modeState, setModeState] = useState<PanelModeState>({ mode: 'view' })
+  const [formData, setFormData] = useState(emptyFormData)
+  const mode = node && modeState.nodeId === node.id ? modeState.mode : 'view'
 
   if (!node) {
     return (
@@ -66,13 +71,13 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
     } else if (mode === 'edit') {
       onUpdate?.(node.id, submissionData)
     }
-    setMode('view')
-    setFormData({ title: '', bodyText: '', kind: 'premise', confidence: 0.5 })
+    setModeState({ nodeId: node.id, mode: 'view' })
+    setFormData(emptyFormData)
   }
 
   const enterAddMode = () => {
-    setFormData({ title: '', bodyText: '', kind: 'premise', confidence: 0.5 })
-    setMode('add')
+    setFormData(emptyFormData)
+    setModeState({ nodeId: node.id, mode: 'add' })
   }
 
   const enterEditMode = () => {
@@ -82,7 +87,7 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
       kind: node.kind,
       confidence: node.confidence ?? 0.5
     })
-    setMode('edit')
+    setModeState({ nodeId: node.id, mode: 'edit' })
   }
 
   if (mode !== 'view') {
@@ -122,12 +127,14 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
               id="node-kind"
               className="form-input"
               value={formData.kind}
-              onChange={(e) => setFormData({ ...formData, kind: e.target.value as any })}
-            >
-              <option value="premise">Premise</option>
-              <option value="evidence">Evidence</option>
-              <option value="counter">Counter</option>
-            </select>
+                onChange={(e) => setFormData({ ...formData, kind: e.target.value as GraphFixtureNode['kind'] })}
+              >
+                {editableNodeKinds.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kind}
+                  </option>
+                ))}
+              </select>
           </div>
 
           <div className="form-group">
@@ -149,7 +156,7 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
           >
             {isEdit ? 'Save Changes' : 'Create Node'}
           </button>
-          <button className="btn btn--secondary" onClick={() => setMode('view')}>Cancel</button>
+          <button className="btn btn--secondary" onClick={() => setModeState({ nodeId: node.id, mode: 'view' })}>Cancel</button>
         </div>
       </div>
     )
