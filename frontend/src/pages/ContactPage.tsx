@@ -35,7 +35,7 @@ function isValidEmail(email: string) {
     return email.includes("@") && email.includes(".");
 }
 
-function ContactForm() {
+export function ContactForm() {
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [topic, setTopic] = useState("");
@@ -142,7 +142,7 @@ function ContactForm() {
                 <button
                     type="submit"
                     className="submit-button"
-                    disabled={isSubmitting || !hasRequiredFields}
+                    disabled={isSubmitting}
                 >
                     {isSubmitting ? "Submitting..." : "Submit"}
                 </button>

@@ -56,3 +56,39 @@ When('I try to submit the contact form', async function (this: StorybookWorld) {
 Then('I should see that name is required', async function (this: StorybookWorld) {
     await expect(this.storyPage.getByText(/Name is required/i)).toBeVisible()
 })
+
+Given('the contact form has an invalid email address', async function (this: StorybookWorld) {
+    await ensureStorybookIsAvailable(this)
+    this.currentStoryId = STORY_IDS.contactForm
+    await openCurrentStory(this)
+    await this.storyPage.getByLabel(/Name/i).fill('Test User')
+    await this.storyPage.getByLabel(/Email/i).fill('invalid-email')
+    await this.storyPage.getByLabel(/Topic/i).selectOption('question')
+    await this.storyPage.getByLabel(/Message/i).fill('I have a question.')
+})
+
+Then('I should see that the email address is invalid', async function (this: StorybookWorld) {
+    await expect(this.storyPage.getByText(/Invalid email format/i)).toBeVisible()
+})
+
+Given('the contact form has valid values', async function (this: StorybookWorld) {
+    await ensureStorybookIsAvailable(this)
+    this.currentStoryId = STORY_IDS.contactForm
+    await openCurrentStory(this)
+    await this.storyPage.getByLabel(/Name/i).fill('Jacob')
+    await this.storyPage.getByLabel(/Email/i).fill('jacob@example.com')
+    await this.storyPage.getByLabel(/Topic/i).selectOption('idea')
+    await this.storyPage.getByLabel(/Message/i).fill('This is a valid submission test.')
+})
+
+When('I submit the contact form', async function (this: StorybookWorld) {
+    await this.storyPage.getByRole('button', { name: /submit/i }).click()
+})
+
+Then('I should see a successful submission message', async function (this: StorybookWorld) {
+    await expect(this.storyPage.getByText(/Contact form submitted/i)).toBeVisible()
+})
+
+Then('I should not be able to submit the contact form', async function (this: StorybookWorld) {
+    await expect(this.storyPage.getByRole('button', { name: /submit/i })).toBeDisabled()
+})
