@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import "./ContactPage.css";
 
 type ContactSubmission = {
@@ -6,6 +6,19 @@ type ContactSubmission = {
     email: string;
     topic: string;
     message: string;
+};
+
+type ContactSubmitResult = {
+    success: boolean;
+    message: string;
+};
+
+type ContactFormProps = {
+    initialName?: string;
+    initialEmail?: string;
+    initialTopic?: string;
+    initialMessage?: string;
+    onSubmit?: (submission: ContactSubmission) => Promise<ContactSubmitResult> | ContactSubmitResult;
 };
 
 type TextFieldProps = {
@@ -19,7 +32,7 @@ type TextFieldProps = {
 function TextField({ id, label, value, onChange, type = "text" }: TextFieldProps) {
     return (
         <div className="form-group">
-            <label className="form-label" htmlFor={id}>{label}</label>
+            <label htmlFor={id} className="form-label">{label}</label>
             <input
                 id={id}
                 className="form-input"
@@ -35,34 +48,43 @@ function isValidEmail(email: string) {
     return email.includes("@") && email.includes(".");
 }
 
-function ContactForm() {
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [topic, setTopic] = useState("");
-    const [message, setMessage] = useState("");
+async function defaultSubmitContactForm(submission: ContactSubmission): Promise<ContactSubmitResult> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    console.log(submission);
+
+    return {
+        success: true,
+        message: "Contact form submitted. Check the console for the logged data.",
+    };
+}
+
+export function ContactForm({
+    initialName = "",
+    initialEmail = "",
+    initialTopic = "",
+    initialMessage = "",
+    onSubmit = defaultSubmitContactForm,
+}: ContactFormProps) {
+    const [name, setName] = useState(initialName);
+    const [email, setEmail] = useState(initialEmail);
+    const [topic, setTopic] = useState(initialTopic);
+    const [message, setMessage] = useState(initialMessage);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const hasRequiredFields =
-        name.trim() &&
-        email.trim() &&
-        topic &&
-        message.trim();
-
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    async function handleFormSubmit(event: SubmitEvent<HTMLFormElement>) {
         event.preventDefault();
         setSuccessMessage(null);
         setErrorMessage(null);
 
         if (!name.trim()) {
             setErrorMessage("Name is required.");
-            return;
+            return; // Exit early if validation fails
         }
         if (!isValidEmail(email)) {
-            setErrorMessage("Email is required.");
-            return;
+            setErrorMessage("Invalid email format."); // More specific error message
+            return; // Exit early if validation fails
         }
         if (!topic) {
             setErrorMessage("Topic is required.");
@@ -72,7 +94,7 @@ function ContactForm() {
             setErrorMessage("Message is required.");
             return;
         }
-        const submission: ContactSubmission = {
+        const submissionData: ContactSubmission = {
             name,
             email,
             topic,
@@ -81,17 +103,17 @@ function ContactForm() {
 
         try {
             setIsSubmitting(true);
+            const result = await onSubmit(submissionData);
 
-            await new Promise((resolve) => setTimeout(resolve, 500));
-
-            console.log(submission);
-
-            setSuccessMessage("Contact form submitted. Check the console for the logged data.");
-            setName("");
-            setEmail("");
-            setTopic("");
-            setMessage("");
-
+            if (result.success) {
+                setSuccessMessage(result.message);
+                setName("");
+                setEmail("");
+                setTopic("");
+                setMessage("");
+            } else {
+                setErrorMessage(result.message);
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -110,12 +132,12 @@ function ContactForm() {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="contact-card">
+            <form onSubmit={handleFormSubmit} className="contact-card" noValidate>
                 <TextField id="contact-name" label="Name" value={name} onChange={setName} />
                 <TextField id="contact-email" label="Email" type="email" value={email} onChange={setEmail} />
 
                 <div className="form-group">
-                    <label className="form-label" htmlFor="contact-topic">Topic</label>
+                    <label htmlFor="contact-topic" className="form-label">Topic</label>
                     <select
                         id="contact-topic"
                         className="form-input"
@@ -131,7 +153,7 @@ function ContactForm() {
                 </div>
 
                 <div className="form-group">
-                    <label className="form-label" htmlFor="contact-message">Message</label>
+                    <label htmlFor="contact-message" className="form-label">Message</label>
                     <textarea
                         id="contact-message"
                         className="form-input form-textarea"
@@ -143,7 +165,7 @@ function ContactForm() {
                 <button
                     type="submit"
                     className="submit-button"
-                    disabled={isSubmitting || !hasRequiredFields}
+                    disabled={isSubmitting}
                 >
                     {isSubmitting ? "Submitting..." : "Submit"}
                 </button>
