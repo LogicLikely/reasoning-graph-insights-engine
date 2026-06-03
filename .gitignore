@@ -159,7 +159,5 @@ backend.Tests/obj/
 .vscode/*
 !.vscode/settings.json
 
-.husky/
-
 # OS
 .DS_Store

@@ -4,5 +4,3 @@ echo "Running frontend checks..."
 )
 
 echo "Running backend checks..."
-(
-)
