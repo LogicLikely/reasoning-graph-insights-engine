@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import "./ContactPage.css";
 
 type ContactSubmission = {
@@ -73,7 +73,7 @@ export function ContactForm({
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-    async function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    async function handleFormSubmit(event: SubmitEvent<HTMLFormElement>) {
         event.preventDefault();
         setSuccessMessage(null);
         setErrorMessage(null);
