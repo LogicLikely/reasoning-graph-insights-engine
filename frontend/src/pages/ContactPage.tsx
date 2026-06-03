@@ -8,6 +8,19 @@ type ContactSubmission = {
     message: string;
 };
 
+type ContactSubmitResult = {
+    success: boolean;
+    message: string;
+};
+
+type ContactFormProps = {
+    initialName?: string;
+    initialEmail?: string;
+    initialTopic?: string;
+    initialMessage?: string;
+    onSubmit?: (submission: ContactSubmission) => Promise<ContactSubmitResult> | ContactSubmitResult;
+};
+
 type TextFieldProps = {
     id: string;
     label: string;
@@ -35,19 +48,28 @@ function isValidEmail(email: string) {
     return email.includes("@") && email.includes(".");
 }
 
-export function ContactForm() {
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [topic, setTopic] = useState("");
-    const [message, setMessage] = useState("");
+async function defaultSubmitContactForm(submission: ContactSubmission): Promise<ContactSubmitResult> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    console.log(submission);
+
+    return {
+        success: true,
+        message: "Contact form submitted. Check the console for the logged data.",
+    };
+}
+
+export function ContactForm({
+    initialName = "",
+    initialEmail = "",
+    initialTopic = "",
+    initialMessage = "",
+    onSubmit = defaultSubmitContactForm,
+}: ContactFormProps) {
+    const [name, setName] = useState(initialName);
+    const [email, setEmail] = useState(initialEmail);
+    const [topic, setTopic] = useState(initialTopic);
+    const [message, setMessage] = useState(initialMessage);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const hasRequiredFields =
-        name.trim() &&
-        email.trim() &&
-        topic &&
-        message.trim();
-
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -81,16 +103,17 @@ export function ContactForm() {
 
         try {
             setIsSubmitting(true);
+            const result = await onSubmit(submissionData);
 
-            await new Promise((resolve) => setTimeout(resolve, 500));
-
-            console.log(submissionData);
-
-            setSuccessMessage("Contact form submitted. Check the console for the logged data.");
-            setName("");
-            setEmail("");
-            setTopic("");
-            setMessage("");
+            if (result.success) {
+                setSuccessMessage(result.message);
+                setName("");
+                setEmail("");
+                setTopic("");
+                setMessage("");
+            } else {
+                setErrorMessage(result.message);
+            }
         } finally {
             setIsSubmitting(false);
         }

@@ -1,10 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, fn } from 'storybook/test';
-import { ContactForm } from './ContactPage'; // Import ContactForm directly
+import { ContactForm } from './ContactPage';
+
+type ContactFormValues = {
+    name: string;
+    email: string;
+    topic: string;
+    message: string;
+};
 
 const meta = {
     component: ContactForm,
-    title: 'Contact/ContactForm', // Group under Contact, separate from ContactPage
+    title: 'Contact/ContactForm',
     parameters: {
         docs: {
             description: {
@@ -13,14 +20,19 @@ const meta = {
         },
     },
     tags: ['autodocs'],
-    args: {
-        onSubmit: fn(), // Mock the onSubmit prop for all stories by default
-    },
 } satisfies Meta<typeof ContactForm>;
 
 export default meta;
 
 type Story = StoryObj<typeof meta>;
+type StoryPlayContext = Parameters<NonNullable<Story['play']>>[0];
+
+async function fillContactForm(canvas: StoryPlayContext['canvas'], values: ContactFormValues) {
+    await userEvent.type(canvas.getByLabelText(/Name/i), values.name);
+    await userEvent.type(canvas.getByLabelText(/Email/i), values.email);
+    await userEvent.selectOptions(canvas.getByLabelText(/Topic/i), values.topic);
+    await userEvent.type(canvas.getByLabelText(/Message/i), values.message);
+}
 
 export const Default: Story = {
     parameters: {
@@ -236,10 +248,12 @@ export const FilledOut: Story = {
         },
     },
     play: async ({ canvas }) => {
-        await userEvent.type(canvas.getByLabelText(/Name/i), 'Jacob');
-        await userEvent.type(canvas.getByLabelText(/Email/i), 'jacob@example.com');
-        await userEvent.selectOptions(canvas.getByLabelText(/Topic/i), 'question');
-        await userEvent.type(canvas.getByLabelText(/Message/i), 'This is a test message.');
+        await fillContactForm(canvas, {
+            name: 'Jacob',
+            email: 'jacob@example.com',
+            topic: 'question',
+            message: 'This is a test message.',
+        });
 
         // Verify the form fields and the preview section are in sync
         await expect(canvas.getByLabelText(/Name/i)).toHaveValue('Jacob');
