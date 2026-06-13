@@ -45,6 +45,8 @@ export const Default: Story = {
     edges: flowGraph.edges,
     selectedNodeId: 'R1',
     onNodeSelect: () => undefined,
+    isExpanded: false,
+    onToggleExpanded: () => undefined,
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByTestId('graph-canvas')).toBeVisible()
@@ -72,6 +74,8 @@ export const Unselected: Story = {
     edges: flowGraph.edges,
     selectedNodeId: undefined,
     onNodeSelect: () => undefined,
+    isExpanded: false,
+    onToggleExpanded: () => undefined,
   },
 }
 
@@ -89,5 +93,7 @@ export const WithSelectedNode: Story = {
     edges: flowGraph.edges,
     selectedNodeId: 'C1',
     onNodeSelect: () => undefined,
+    isExpanded: false,
+    onToggleExpanded: () => undefined,
   },
 }
