@@ -1,5 +1,6 @@
 import {
   Background,
+  ControlButton,
   Controls,
   MiniMap,
   ReactFlow,
@@ -16,6 +17,8 @@ interface GraphCanvasProps {
   edges: Edge[]
   selectedNodeId?: string
   onNodeSelect: (nodeId: string) => void
+  isExpanded: boolean
+  onToggleExpanded: () => void
 }
 
 export function GraphCanvas({
@@ -23,6 +26,8 @@ export function GraphCanvas({
   edges,
   selectedNodeId,
   onNodeSelect,
+  isExpanded,
+  onToggleExpanded,
 }: GraphCanvasProps) {
   const decoratedNodes = nodes.map((node) => ({
       ...node,
@@ -82,7 +87,23 @@ export function GraphCanvas({
             }
           />
         )}
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false}>
+          <ControlButton
+            aria-label={isExpanded ? 'Restore graph size' : 'Expand graph to viewport'}
+            onClick={onToggleExpanded}
+            title={isExpanded ? 'Restore graph size' : 'Expand graph to viewport'}
+          >
+            {isExpanded ? (
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5" />
+              </svg>
+            ) : (
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
+              </svg>
+            )}
+          </ControlButton>
+        </Controls>
       </ReactFlow>
     </div>
   )

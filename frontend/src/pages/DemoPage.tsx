@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
@@ -160,6 +161,43 @@ export function DemoPage() {
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null
+  const detailsSheet = (
+    <div
+      className={`demo-details-sheet${isGraphExpanded ? ' demo-details-sheet--sheet-mode' : ''}${selectedNode ? ' demo-details-sheet--open' : ''}`}
+      data-testid="demo-details-sheet"
+    >
+      <button
+        aria-label="Dismiss node details"
+        className="demo-details-sheet__backdrop"
+        onClick={dismissNodeDetails}
+        tabIndex={-1}
+        type="button"
+      />
+      <div
+        aria-label="Node details"
+        className="demo-details-sheet__surface"
+        role="region"
+      >
+        <div className="demo-details-sheet__mobile-header">
+          <span className="demo-details-sheet__handle" aria-hidden="true" />
+          <button
+            aria-label="Close node details"
+            className="demo-details-sheet__close"
+            onClick={dismissNodeDetails}
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+        <GraphDetailsPanel
+          node={selectedNode}
+          onDelete={handleDeleteNode}
+          onAddSupporting={handleAddSupportingNode}
+          onUpdate={handleUpdateNode}
+        />
+      </div>
+    </div>
+  )
 
   return (
     <div className="page-shell demo-page-shell" data-testid="demo-page">
@@ -213,41 +251,7 @@ export function DemoPage() {
         </article>
 
         <div className="demo-sidebar-stack">
-          <div
-            className={`demo-details-sheet${selectedNode ? ' demo-details-sheet--open' : ''}`}
-            data-testid="demo-details-sheet"
-          >
-            <button
-              aria-label="Dismiss node details"
-              className="demo-details-sheet__backdrop"
-              onClick={dismissNodeDetails}
-              tabIndex={-1}
-              type="button"
-            />
-            <div
-              aria-label="Node details"
-              className="demo-details-sheet__surface"
-              role="region"
-            >
-              <div className="demo-details-sheet__mobile-header">
-                <span className="demo-details-sheet__handle" aria-hidden="true" />
-                <button
-                  aria-label="Close node details"
-                  className="demo-details-sheet__close"
-                  onClick={dismissNodeDetails}
-                  type="button"
-                >
-                  Close
-                </button>
-              </div>
-              <GraphDetailsPanel
-                node={selectedNode}
-                onDelete={handleDeleteNode}
-                onAddSupporting={handleAddSupportingNode}
-                onUpdate={handleUpdateNode}
-              />
-            </div>
-          </div>
+          {isGraphExpanded ? null : detailsSheet}
           {graph ? (
             <GraphOverviewPanel
               title={graph.title}
@@ -259,6 +263,8 @@ export function DemoPage() {
           ) : null}
         </div>
       </section>
+
+      {isGraphExpanded ? createPortal(detailsSheet, document.body) : null}
 
       <section className="demo-support-strip">
         <article className="feature-card">

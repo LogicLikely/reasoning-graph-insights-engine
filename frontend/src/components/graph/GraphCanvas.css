@@ -14,6 +14,16 @@
     linear-gradient(180deg, rgba(250, 251, 247, 0.96), rgba(239, 244, 235, 0.95));
 }
 
+.graph-canvas-shell .react-flow__controls-button svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .graph-node {
   width: 230px;
   border: none;
