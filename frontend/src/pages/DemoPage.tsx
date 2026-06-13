@@ -15,6 +15,28 @@ export function DemoPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [reloadKey, setReloadKey] = useState(0)
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
+  const [isGraphExpanded, setIsGraphExpanded] = useState(false)
+
+  const dismissNodeDetails = useCallback(() => {
+    setSelectedNodeId(undefined)
+  }, [])
+
+  const toggleGraphExpanded = useCallback(() => {
+    setIsGraphExpanded((isExpanded) => !isExpanded)
+  }, [])
+
+  useEffect(() => {
+    if (!isGraphExpanded) {
+      return
+    }
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isGraphExpanded])
 
   useEffect(() => {
     let isActive = true
@@ -113,7 +135,14 @@ export function DemoPage() {
         return
       }
 
-      if (event.key.toLowerCase() === 'd') {
+      if (event.key === 'Escape') {
+        if (isGraphExpanded) {
+          setIsGraphExpanded(false)
+        } else {
+          dismissNodeDetails()
+        }
+      }
+      else if (event.key.toLowerCase() === 'd') {
         if (selectedNodeId !== undefined) {
           void handleDeleteNode(selectedNodeId)
         }
@@ -127,7 +156,7 @@ export function DemoPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, handleDeleteNode, handleAddSupportingNode])
+  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null
@@ -141,7 +170,10 @@ export function DemoPage() {
       </section>
 
       <section className="demo-visualization-grid">
-        <article className="demo-stage demo-stage--live">
+        <article
+          className={`demo-stage demo-stage--live${isGraphExpanded ? ' demo-stage--expanded' : ''}`}
+          data-testid="demo-graph-stage"
+        >
           <div className="demo-stage__header">
             <h2>{graph?.title ?? 'Loading graph demo'}</h2>
           </div>
@@ -169,6 +201,8 @@ export function DemoPage() {
               edges={flowGraph.edges}
               selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
+              isExpanded={isGraphExpanded}
+              onToggleExpanded={toggleGraphExpanded}
             />
           ) : null}
 
@@ -179,12 +213,41 @@ export function DemoPage() {
         </article>
 
         <div className="demo-sidebar-stack">
-          <GraphDetailsPanel
-            node={selectedNode}
-            onDelete={handleDeleteNode}
-            onAddSupporting={handleAddSupportingNode}
-            onUpdate={handleUpdateNode}
-          />
+          <div
+            className={`demo-details-sheet${selectedNode ? ' demo-details-sheet--open' : ''}`}
+            data-testid="demo-details-sheet"
+          >
+            <button
+              aria-label="Dismiss node details"
+              className="demo-details-sheet__backdrop"
+              onClick={dismissNodeDetails}
+              tabIndex={-1}
+              type="button"
+            />
+            <div
+              aria-label="Node details"
+              className="demo-details-sheet__surface"
+              role="region"
+            >
+              <div className="demo-details-sheet__mobile-header">
+                <span className="demo-details-sheet__handle" aria-hidden="true" />
+                <button
+                  aria-label="Close node details"
+                  className="demo-details-sheet__close"
+                  onClick={dismissNodeDetails}
+                  type="button"
+                >
+                  Close
+                </button>
+              </div>
+              <GraphDetailsPanel
+                node={selectedNode}
+                onDelete={handleDeleteNode}
+                onAddSupporting={handleAddSupportingNode}
+                onUpdate={handleUpdateNode}
+              />
+            </div>
+          </div>
           {graph ? (
             <GraphOverviewPanel
               title={graph.title}
