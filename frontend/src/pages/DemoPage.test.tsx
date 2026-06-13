@@ -9,6 +9,25 @@ vi.mock('../services/graphService', () => ({
   getGraphBySlug: (slug: string) => getGraphBySlugMock(slug),
 }))
 
+vi.mock('../components/graph/GraphCanvas', () => ({
+  GraphCanvas: ({
+    onNodeSelect,
+    isExpanded,
+    onToggleExpanded,
+  }: {
+    onNodeSelect: (nodeId: string) => void
+    isExpanded: boolean
+    onToggleExpanded: () => void
+  }) => (
+    <div data-testid="graph-canvas">
+      <button onClick={() => onNodeSelect('E1')} type="button">Select evidence node</button>
+      <button onClick={onToggleExpanded} type="button">
+        {isExpanded ? 'Restore graph size' : 'Expand graph to viewport'}
+      </button>
+    </div>
+  ),
+}))
+
 describe('DemoPage', () => {
   beforeEach(() => {
     getGraphBySlugMock.mockReset()
@@ -49,5 +68,43 @@ describe('DemoPage', () => {
     })
 
     expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
+  })
+
+  it('opens node details on selection and allows them to be dismissed', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
+
+    expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--open')
+    expect(screen.getByRole('region', { name: 'Node details' })).toBeInTheDocument()
+    expect(screen.getByText('Photographs from beaches')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close node details' }))
+
+    expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--open')
+    expect(screen.getByRole('region', { name: 'Node details' })).toBeInTheDocument()
+  })
+
+  it('expands the graph to the viewport and restores its original size', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand graph to viewport' }))
+
+    expect(screen.getByTestId('demo-graph-stage')).toHaveClass('demo-stage--expanded')
+    expect(document.body).toHaveStyle({ overflow: 'hidden' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore graph size' }))
+
+    expect(screen.getByTestId('demo-graph-stage')).not.toHaveClass('demo-stage--expanded')
+    expect(document.body).not.toHaveStyle({ overflow: 'hidden' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand graph to viewport' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(screen.getByTestId('demo-graph-stage')).not.toHaveClass('demo-stage--expanded')
   })
 })
