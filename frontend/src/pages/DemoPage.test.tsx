@@ -95,11 +95,20 @@ describe('DemoPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Expand graph to viewport' }))
 
     expect(screen.getByTestId('demo-graph-stage')).toHaveClass('demo-stage--expanded')
+    expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--sheet-mode')
+    expect(screen.getByTestId('demo-details-sheet').parentElement).toBe(document.body)
     expect(document.body).toHaveStyle({ overflow: 'hidden' })
 
+    fireEvent.click(screen.getByRole('button', { name: 'Select evidence node' }))
+
+    expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--open')
+    expect(screen.getByText('Photographs from beaches')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close node details' }))
     fireEvent.click(screen.getByRole('button', { name: 'Restore graph size' }))
 
     expect(screen.getByTestId('demo-graph-stage')).not.toHaveClass('demo-stage--expanded')
+    expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--sheet-mode')
     expect(document.body).not.toHaveStyle({ overflow: 'hidden' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand graph to viewport' }))
