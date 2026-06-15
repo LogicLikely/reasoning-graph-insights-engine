@@ -86,4 +86,8 @@ Run frontend tests:
 
 ```bash
 npm run test
+npm run lint
+npm run storybook
+npm run func
+npm run chromatic
 ```
