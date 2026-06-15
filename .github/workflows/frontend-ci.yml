@@ -3,6 +3,10 @@ name: Frontend CI
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "frontend/**"
+      - ".nvmrc"
+      - ".github/workflows/frontend-ci.yml"
   workflow_dispatch:
 
 jobs:

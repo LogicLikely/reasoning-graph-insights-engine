@@ -51,7 +51,7 @@ export const Default: Story = {
   play: async ({ canvas }) => {
     await expect(canvas.getByTestId('graph-canvas')).toBeVisible()
     await waitFor(async () => {
-      const matchingTitles = canvas.getAllByText(/The Earth be flat/i, {
+      const matchingTitles = canvas.getAllByText(/The Earth is flat/i, {
         selector: '.graph-node-card__title-text',
       })
 
