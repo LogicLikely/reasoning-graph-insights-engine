@@ -30,6 +30,14 @@ public class GraphsController : ControllerBase
         return Ok(graph);
     }
 
+    [HttpPost("reset")]
+    public async Task<IActionResult> ResetDatabase(CancellationToken cancellationToken)
+    {
+        await _graphService.ResetDatabaseAsync(cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpDelete("{slug}/nodes/{nodeId}")]
     public async Task<IActionResult> DeleteNode(
         string slug,
@@ -63,5 +71,24 @@ public class GraphsController : ControllerBase
         }
 
         return CreatedAtAction(nameof(GetBySlug), new { slug }, nodeDto);
+    }
+
+    [HttpPatch("{slug}/nodes/{nodeId}")]
+    public async Task<IActionResult> UpdateNode(
+        string slug,
+        string nodeId,
+        [FromBody] GraphNodeUpdateDto nodeDto,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Updating node {nodeId} in graph {slug}");
+        var success = await _graphService.UpdateNodeAsync(slug, nodeId, nodeDto, cancellationToken);
+
+        if (!success)
+        {
+            Console.WriteLine($"Failed to update node {nodeId} in graph {slug}");
+            return NotFound();
+        }
+
+        return NoContent();
     }
 }

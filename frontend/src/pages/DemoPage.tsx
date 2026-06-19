@@ -5,7 +5,7 @@ import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
-import { addNode, deleteNode, getGraphBySlug, updateNode } from '../services/graphService'
+import { addNode, deleteNode, getGraphBySlug, resetDatabase, updateNode } from '../services/graphService'
 import './DemoPage.css'
 
 const DEMO_GRAPH_SLUG = 'sample-medium'
@@ -17,6 +17,7 @@ export function DemoPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
   const [isGraphExpanded, setIsGraphExpanded] = useState(false)
+  const [isResettingDatabase, setIsResettingDatabase] = useState(false)
 
   const dismissNodeDetails = useCallback(() => {
     setSelectedNodeId(undefined)
@@ -126,6 +127,25 @@ export function DemoPage() {
       setSelectedNodeId(newNodeId)
     } catch {
       setError('Failed to add node to the server.')
+    }
+  }, [])
+
+  const handleResetDatabase = useCallback(async () => {
+    if (!window.confirm('Are you sure you want to reset the database? This will restore the default seed data.')) {
+      return
+    }
+
+    setIsResettingDatabase(true)
+    setError(null)
+
+    try {
+      await resetDatabase()
+      setSelectedNodeId(undefined)
+      setReloadKey((prev) => prev + 1)
+    } catch {
+      setError('Failed to reset the database.')
+    } finally {
+      setIsResettingDatabase(false)
     }
   }, [])
 
@@ -259,6 +279,8 @@ export function DemoPage() {
               nodeCount={graph.nodes.length}
               edgeCount={graph.edges.length}
               fixtureName={graph.slug}
+              isResettingDatabase={isResettingDatabase}
+              onResetDatabase={handleResetDatabase}
             />
           ) : null}
         </div>

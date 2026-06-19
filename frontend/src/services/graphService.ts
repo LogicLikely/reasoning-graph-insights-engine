@@ -35,3 +35,7 @@ export async function updateNode(
 ): Promise<void> {
   await httpClient.patch(`/api/graphs/${slug}/nodes/${nodeId}`, data)
 }
+
+export async function resetDatabase(): Promise<void> {
+  await httpClient.post('/api/graphs/reset')
+}

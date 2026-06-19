@@ -1,8 +1,12 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GraphOverviewPanel } from './GraphOverviewPanel'
 
 describe('GraphOverviewPanel', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('renders graph stats in a separate overview panel', () => {
     render(
       <GraphOverviewPanel
@@ -21,5 +25,74 @@ describe('GraphOverviewPanel', () => {
     expect(screen.getByText('10')).toBeInTheDocument()
     expect(screen.getByText('9')).toBeInTheDocument()
     expect(screen.getByText('sample-medium')).toBeInTheDocument()
+  })
+
+  it('labels the data source as Fixture when the fixture env is true', () => {
+    vi.stubEnv('VITE_USE_FIXTURE', 'true')
+
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A local fixture description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+      />,
+    )
+
+    expect(screen.getByText('Fixture')).toBeInTheDocument()
+  })
+
+  it('labels the data source as Database when the fixture env is false', () => {
+    vi.stubEnv('VITE_USE_FIXTURE', 'false')
+
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A database graph description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+      />,
+    )
+
+    expect(screen.getByText('Database')).toBeInTheDocument()
+  })
+
+  it('shows the reset database button when the database is active', () => {
+    vi.stubEnv('VITE_USE_FIXTURE', 'false')
+    const onResetDatabase = vi.fn()
+
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A database graph description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+        onResetDatabase={onResetDatabase}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset database' }))
+
+    expect(onResetDatabase).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides the reset database button when the fixture is active', () => {
+    vi.stubEnv('VITE_USE_FIXTURE', 'true')
+
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A local fixture description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+        onResetDatabase={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Reset database' })).not.toBeInTheDocument()
   })
 })

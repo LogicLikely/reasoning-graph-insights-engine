@@ -1,5 +1,7 @@
 using Backend.Data;
+using Backend.Models.Dto;
 using Backend.Repositories;
+using Microsoft.Extensions.Hosting;
 using Moq;
 
 namespace backend.Tests.Repositories;
@@ -18,7 +20,7 @@ public class GraphRepositoryTests
             .Setup(factory => factory.CreateConnection())
             .Returns(connection);
 
-        var repository = new GraphRepository(connectionFactoryMock.Object);
+        var repository = CreateRepository(connectionFactoryMock.Object);
 
         var result = await repository.GetBySlugAsync("missing", CancellationToken.None);
 
@@ -80,7 +82,7 @@ public class GraphRepositoryTests
             .Setup(factory => factory.CreateConnection())
             .Returns(connection);
 
-        var repository = new GraphRepository(connectionFactoryMock.Object);
+        var repository = CreateRepository(connectionFactoryMock.Object);
 
         var result = await repository.GetBySlugAsync("sample-medium", CancellationToken.None);
 
@@ -103,5 +105,47 @@ public class GraphRepositoryTests
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual(1, connection.ExecutedCommands[1].Parameters["GraphId"]);
         Assert.AreEqual(1, connection.ExecutedCommands[2].Parameters["GraphId"]);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_UpdatesEditableFieldsForGraphNode()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var update = new GraphNodeUpdateDto
+        {
+            Kind = "premise",
+            Title = "Updated title",
+            BodyText = "Updated body",
+            Confidence = 0.75m
+        };
+
+        var result = await repository.UpdateNodeAsync("sample-medium", "P1", update, CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE nodes"));
+        Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
+        Assert.AreEqual("P1", connection.ExecutedCommands[0].Parameters["NodeId"]);
+        Assert.AreEqual("premise", connection.ExecutedCommands[0].Parameters["Kind"]);
+        Assert.AreEqual("Updated title", connection.ExecutedCommands[0].Parameters["Title"]);
+        Assert.AreEqual("Updated body", connection.ExecutedCommands[0].Parameters["BodyText"]);
+        Assert.AreEqual(0.75m, connection.ExecutedCommands[0].Parameters["Confidence"]);
+    }
+
+    private static GraphRepository CreateRepository(DbConnectionFactory connectionFactory)
+    {
+        var hostEnvironmentMock = new Mock<IHostEnvironment>();
+        hostEnvironmentMock
+            .Setup(environment => environment.ContentRootPath)
+            .Returns(Directory.GetCurrentDirectory());
+
+        return new GraphRepository(connectionFactory, hostEnvironmentMock.Object);
     }
 }

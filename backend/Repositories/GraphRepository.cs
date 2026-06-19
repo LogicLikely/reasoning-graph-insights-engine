@@ -2,7 +2,6 @@ using Backend.Data;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Dapper;
-using System.Linq;
 using System.Text.Json;
 
 namespace Backend.Repositories;
@@ -45,11 +44,19 @@ public class GraphRepository : IGraphRepository
         ORDER BY id;
         """;
 
-    private readonly DbConnectionFactory _dbConnectionFactory;
+    private const string ResetDatabaseSql = """
+        DROP TABLE IF EXISTS public.edges, public.nodes, public.graphs CASCADE;
+        """;
 
-    public GraphRepository(DbConnectionFactory dbConnectionFactory)
+    private readonly DbConnectionFactory _dbConnectionFactory;
+    private readonly IHostEnvironment _hostEnvironment;
+
+    public GraphRepository(
+        DbConnectionFactory dbConnectionFactory,
+        IHostEnvironment hostEnvironment)
     {
         _dbConnectionFactory = dbConnectionFactory;
+        _hostEnvironment = hostEnvironment;
     }
 
     public async Task<Graph?> GetBySlugAsync(
@@ -263,6 +270,82 @@ public class GraphRepository : IGraphRepository
         {
             transaction.Rollback();
             return false;
+        }
+    }
+
+    public async Task<bool> UpdateNodeAsync(
+        string slug,
+        string nodeId,
+        GraphNodeUpdateDto node,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        const string UpdateNodeSql = """
+            UPDATE nodes
+            SET
+                kind = COALESCE(@Kind, kind),
+                title = COALESCE(@Title, title),
+                body_text = COALESCE(@BodyText, body_text),
+                confidence = COALESCE(@Confidence, confidence),
+                updated_at = now()
+            WHERE id = @NodeId
+            AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
+            """;
+
+        var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(
+            UpdateNodeSql,
+            new
+            {
+                Slug = slug,
+                NodeId = nodeId,
+                node.Kind,
+                node.Title,
+                node.BodyText,
+                node.Confidence
+            },
+            cancellationToken: cancellationToken));
+
+        return rowsAffected > 0;
+    }
+
+    public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
+    {
+        var seedSqlPath = Path.Combine(
+            _hostEnvironment.ContentRootPath,
+            "Data",
+            "Sql",
+            "insights_seed.sql");
+
+        if (!File.Exists(seedSqlPath))
+        {
+            throw new FileNotFoundException("Database seed SQL file was not found.", seedSqlPath);
+        }
+
+        var seedSql = await File.ReadAllTextAsync(seedSqlPath, cancellationToken);
+
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                ResetDatabaseSql,
+                transaction: transaction,
+                cancellationToken: cancellationToken));
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                seedSql,
+                transaction: transaction,
+                cancellationToken: cancellationToken));
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
         }
     }
 }

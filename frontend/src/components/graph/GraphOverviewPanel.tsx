@@ -6,6 +6,8 @@ interface GraphOverviewPanelProps {
   nodeCount: number
   edgeCount: number
   fixtureName: string
+  isResettingDatabase?: boolean
+  onResetDatabase?: () => void
 }
 
 export function GraphOverviewPanel({
@@ -14,7 +16,12 @@ export function GraphOverviewPanel({
   nodeCount,
   edgeCount,
   fixtureName,
+  isResettingDatabase = false,
+  onResetDatabase,
 }: GraphOverviewPanelProps) {
+  const isUsingFixture = import.meta.env.VITE_USE_FIXTURE === 'true'
+  const dataSourceLabel = isUsingFixture ? 'Fixture' : 'Database'
+
   return (
     <aside className="graph-overview-panel" data-testid="graph-overview-panel">
       <span className="eyebrow">Graph Overview</span>
@@ -33,9 +40,19 @@ export function GraphOverviewPanel({
         </div>
         <div className="graph-summary-stat graph-summary-stat--full">
           <strong>{fixtureName}</strong>
-          <span>Fixture</span>
+          <span>{dataSourceLabel}</span>
         </div>
       </div>
+      {!isUsingFixture && onResetDatabase ? (
+        <button
+          className="graph-overview-panel__reset-button"
+          disabled={isResettingDatabase}
+          onClick={onResetDatabase}
+          type="button"
+        >
+          {isResettingDatabase ? 'Resetting database' : 'Reset database'}
+        </button>
+      ) : null}
     </aside>
   )
 }

@@ -1,12 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sampleGraph } from '../fixtures/sampleGraph'
 import { DemoPage } from './DemoPage'
 
 const getGraphBySlugMock = vi.fn()
+const resetDatabaseMock = vi.fn()
 
 vi.mock('../services/graphService', () => ({
   getGraphBySlug: (slug: string) => getGraphBySlugMock(slug),
+  resetDatabase: () => resetDatabaseMock(),
 }))
 
 vi.mock('../components/graph/GraphCanvas', () => ({
@@ -31,6 +33,11 @@ vi.mock('../components/graph/GraphCanvas', () => ({
 describe('DemoPage', () => {
   beforeEach(() => {
     getGraphBySlugMock.mockReset()
+    resetDatabaseMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('shows a loading state while the graph is loading', () => {
@@ -115,5 +122,36 @@ describe('DemoPage', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
 
     expect(screen.getByTestId('demo-graph-stage')).not.toHaveClass('demo-stage--expanded')
+  })
+
+  it('confirms and resets the database before reloading the graph', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    resetDatabaseMock.mockResolvedValue(undefined)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset database' }))
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      'Are you sure you want to reset the database? This will restore the default seed data.',
+    )
+
+    await waitFor(() => {
+      expect(resetDatabaseMock).toHaveBeenCalledTimes(1)
+      expect(getGraphBySlugMock).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('does not reset the database when confirmation is declined', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset database' }))
+
+    expect(resetDatabaseMock).not.toHaveBeenCalled()
+    expect(getGraphBySlugMock).toHaveBeenCalledTimes(1)
   })
 })

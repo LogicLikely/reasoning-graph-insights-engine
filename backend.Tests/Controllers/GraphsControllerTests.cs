@@ -53,6 +53,57 @@ public class GraphsControllerTests
         Assert.AreSame(dto, okResult.Value);
     }
 
+    [TestMethod]
+    public async Task UpdateNode_ReturnsNoContent_WhenUpdateSucceeds()
+    {
+        var serviceMock = new Mock<IGraphService>();
+        var update = new GraphNodeUpdateDto
+        {
+            Kind = "premise",
+            Title = "Updated title",
+            BodyText = "Updated body",
+            Confidence = 0.75m
+        };
+
+        serviceMock
+            .Setup(service => service.UpdateNodeAsync(
+                "sample-medium",
+                "P1",
+                update,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.UpdateNode("sample-medium", "P1", update, CancellationToken.None);
+
+        Assert.IsInstanceOfType<NoContentResult>(result);
+    }
+
+    [TestMethod]
+    public async Task UpdateNode_ReturnsNotFound_WhenUpdateFails()
+    {
+        var serviceMock = new Mock<IGraphService>();
+        var update = new GraphNodeUpdateDto
+        {
+            Title = "Updated title"
+        };
+
+        serviceMock
+            .Setup(service => service.UpdateNodeAsync(
+                "sample-medium",
+                "missing",
+                update,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.UpdateNode("sample-medium", "missing", update, CancellationToken.None);
+
+        Assert.IsInstanceOfType<NotFoundResult>(result);
+    }
+
     private static GraphsController CreateControllerWithServiceMock(string slug, GraphDto? dto)
     {
         var serviceMock = new Mock<IGraphService>();

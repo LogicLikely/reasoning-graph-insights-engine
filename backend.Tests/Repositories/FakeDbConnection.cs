@@ -107,7 +107,14 @@ public sealed class FakeDbConnection : DbConnection
 
         public override int ExecuteNonQuery()
         {
-            throw new NotSupportedException();
+            _connection.ExecutedCommands.Add(
+                new ExecutedCommand(
+                    CommandText,
+                    _parameters.Items.ToDictionary(
+                        parameter => parameter.ParameterName,
+                        parameter => parameter.Value)));
+
+            return 1;
         }
 
         public override object? ExecuteScalar()

@@ -50,4 +50,20 @@ describe('graphService', () => {
     expect(apiSpy).toHaveBeenCalledWith('sample-medium')
     expect(fixtureSpy).not.toHaveBeenCalled()
   })
+
+  it('posts to the reset endpoint when resetting the database', async () => {
+    const postSpy = vi.fn().mockResolvedValue({})
+
+    vi.doMock('./httpClient', () => ({
+      httpClient: {
+        post: postSpy,
+      },
+    }))
+
+    const { resetDatabase } = await import('./graphService')
+
+    await resetDatabase()
+
+    expect(postSpy).toHaveBeenCalledWith('/api/graphs/reset')
+  })
 })
