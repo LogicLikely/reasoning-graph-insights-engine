@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   ControlButton,
@@ -7,6 +8,7 @@ import {
   type Edge,
   type Node,
   type NodeMouseHandler,
+  useNodesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { GraphNodeCardData } from './graphMapping'
@@ -29,7 +31,24 @@ export function GraphCanvas({
   isExpanded,
   onToggleExpanded,
 }: GraphCanvasProps) {
-  const decoratedNodes = nodes.map((node) => ({
+  const [nodesDraggable, setNodesDraggable] = useState(true)
+  const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(nodes)
+  const incomingLayoutSignature = useMemo(
+    () => nodes.map((node) => `${node.id}:${node.position.x}:${node.position.y}`).join('|'),
+    [nodes],
+  )
+  const lastLayoutSignature = useRef(incomingLayoutSignature)
+
+  useEffect(() => {
+    if (lastLayoutSignature.current === incomingLayoutSignature) {
+      return
+    }
+
+    lastLayoutSignature.current = incomingLayoutSignature
+    setFlowNodes(nodes)
+  }, [incomingLayoutSignature, nodes, setFlowNodes])
+
+  const decoratedNodes = flowNodes.map((node) => ({
       ...node,
       selected: node.id === selectedNodeId,
       data: {
@@ -68,6 +87,9 @@ export function GraphCanvas({
         maxZoom={1.5}
         nodes={decoratedNodes}
         edges={edges}
+        nodesDraggable={nodesDraggable}
+        panOnDrag
+        onNodesChange={onNodesChange}
         onNodeClick={handleNodeClick}
         proOptions={{ hideAttribution: true }}
       >
@@ -88,6 +110,23 @@ export function GraphCanvas({
           />
         )}
         <Controls showInteractive={false}>
+          <ControlButton
+            aria-label={nodesDraggable ? 'Lock canvas dragging' : 'Unlock canvas dragging'}
+            onClick={() => setNodesDraggable((isEnabled) => !isEnabled)}
+            title={nodesDraggable ? 'Lock canvas dragging' : 'Unlock canvas dragging'}
+          >
+            {nodesDraggable ? (
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+                <path d="M6 11h12v10H6z" />
+              </svg>
+            ) : (
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M7 11V8a5 5 0 0 1 9.2-2.75" />
+                <path d="M6 11h12v10H6z" />
+              </svg>
+            )}
+          </ControlButton>
           <ControlButton
             aria-label={isExpanded ? 'Restore graph size' : 'Expand graph to viewport'}
             onClick={onToggleExpanded}
