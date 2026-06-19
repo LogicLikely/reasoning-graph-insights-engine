@@ -1,3 +1,4 @@
+import type { GraphDataSource } from '../../services/graphService'
 import './GraphOverviewPanel.css'
 
 interface GraphOverviewPanelProps {
@@ -6,7 +7,9 @@ interface GraphOverviewPanelProps {
   nodeCount: number
   edgeCount: number
   fixtureName: string
+  dataSource: GraphDataSource
   isResettingDatabase?: boolean
+  onDataSourceChange?: (dataSource: GraphDataSource) => void
   onResetDatabase?: () => void
 }
 
@@ -16,10 +19,12 @@ export function GraphOverviewPanel({
   nodeCount,
   edgeCount,
   fixtureName,
+  dataSource,
   isResettingDatabase = false,
+  onDataSourceChange,
   onResetDatabase,
 }: GraphOverviewPanelProps) {
-  const isUsingFixture = import.meta.env.VITE_USE_FIXTURE === 'true'
+  const isUsingFixture = dataSource === 'fixture'
   const dataSourceLabel = isUsingFixture ? 'Fixture' : 'Database'
 
   return (
@@ -42,6 +47,24 @@ export function GraphOverviewPanel({
           <strong>{fixtureName}</strong>
           <span>{dataSourceLabel}</span>
         </div>
+      </div>
+      <div className="graph-overview-panel__source-toggle" role="group" aria-label="Graph data source">
+        <button
+          aria-pressed={dataSource === 'fixture'}
+          className="graph-overview-panel__source-option"
+          onClick={() => onDataSourceChange?.('fixture')}
+          type="button"
+        >
+          Fixture
+        </button>
+        <button
+          aria-pressed={dataSource === 'database'}
+          className="graph-overview-panel__source-option"
+          onClick={() => onDataSourceChange?.('database')}
+          type="button"
+        >
+          Database
+        </button>
       </div>
       {!isUsingFixture && onResetDatabase ? (
         <button

@@ -15,6 +15,7 @@ describe('GraphOverviewPanel', () => {
         nodeCount={10}
         edgeCount={9}
         fixtureName="sample-medium"
+        dataSource="fixture"
       />,
     )
 
@@ -37,10 +38,11 @@ describe('GraphOverviewPanel', () => {
         nodeCount={10}
         edgeCount={9}
         fixtureName="sample-medium"
+        dataSource="fixture"
       />,
     )
 
-    expect(screen.getByText('Fixture')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fixture' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('labels the data source as Database when the fixture env is false', () => {
@@ -53,10 +55,11 @@ describe('GraphOverviewPanel', () => {
         nodeCount={10}
         edgeCount={9}
         fixtureName="sample-medium"
+        dataSource="database"
       />,
     )
 
-    expect(screen.getByText('Database')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Database' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('shows the reset database button when the database is active', () => {
@@ -70,6 +73,7 @@ describe('GraphOverviewPanel', () => {
         nodeCount={10}
         edgeCount={9}
         fixtureName="sample-medium"
+        dataSource="database"
         onResetDatabase={onResetDatabase}
       />,
     )
@@ -89,10 +93,34 @@ describe('GraphOverviewPanel', () => {
         nodeCount={10}
         edgeCount={9}
         fixtureName="sample-medium"
+        dataSource="fixture"
         onResetDatabase={vi.fn()}
       />,
     )
 
     expect(screen.queryByRole('button', { name: 'Reset database' })).not.toBeInTheDocument()
+  })
+
+  it('allows switching between fixture and database sources', () => {
+    const onDataSourceChange = vi.fn()
+
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A database graph description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+        dataSource="database"
+        onDataSourceChange={onDataSourceChange}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Database' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Fixture' })).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fixture' }))
+
+    expect(onDataSourceChange).toHaveBeenCalledWith('fixture')
   })
 })

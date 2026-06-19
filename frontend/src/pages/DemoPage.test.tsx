@@ -7,7 +7,8 @@ const getGraphBySlugMock = vi.fn()
 const resetDatabaseMock = vi.fn()
 
 vi.mock('../services/graphService', () => ({
-  getGraphBySlug: (slug: string) => getGraphBySlugMock(slug),
+  getDefaultGraphDataSource: () => 'database',
+  getGraphBySlug: (slug: string, dataSource: string) => getGraphBySlugMock(slug, dataSource),
   resetDatabase: () => resetDatabaseMock(),
 }))
 
@@ -54,6 +55,7 @@ describe('DemoPage', () => {
     render(<DemoPage />)
 
     expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
+    expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'database')
     expect(
       screen.getByRole('heading', { level: 2, name: sampleGraph.title }),
     ).toBeInTheDocument()
@@ -153,5 +155,23 @@ describe('DemoPage', () => {
 
     expect(resetDatabaseMock).not.toHaveBeenCalled()
     expect(getGraphBySlugMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('switches graph data source and clears node details', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
+
+    expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--open')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fixture' }))
+
+    expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--open')
+
+    await waitFor(() => {
+      expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'fixture')
+    })
   })
 })

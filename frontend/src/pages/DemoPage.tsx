@@ -5,7 +5,15 @@ import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
-import { addNode, deleteNode, getGraphBySlug, resetDatabase, updateNode } from '../services/graphService'
+import {
+  addNode,
+  deleteNode,
+  getDefaultGraphDataSource,
+  getGraphBySlug,
+  resetDatabase,
+  updateNode,
+  type GraphDataSource,
+} from '../services/graphService'
 import './DemoPage.css'
 
 const DEMO_GRAPH_SLUG = 'sample-medium'
@@ -18,6 +26,7 @@ export function DemoPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
   const [isGraphExpanded, setIsGraphExpanded] = useState(false)
   const [isResettingDatabase, setIsResettingDatabase] = useState(false)
+  const [graphDataSource, setGraphDataSource] = useState<GraphDataSource>(() => getDefaultGraphDataSource())
 
   const dismissNodeDetails = useCallback(() => {
     setSelectedNodeId(undefined)
@@ -49,7 +58,7 @@ export function DemoPage() {
 
       try {
         //Grabs nodes from backend
-        const result = await getGraphBySlug(DEMO_GRAPH_SLUG)
+        const result = await getGraphBySlug(DEMO_GRAPH_SLUG, graphDataSource)
 
         if (!isActive) {
           return
@@ -80,7 +89,7 @@ export function DemoPage() {
     return () => {
       isActive = false
     }
-  }, [reloadKey])
+  }, [graphDataSource, reloadKey])
 
   const handleDeleteNode = useCallback(async (nodeId: string) => {
     const hasInNeighbors = graph?.edges.some((e) => e.to === nodeId)
@@ -148,6 +157,16 @@ export function DemoPage() {
       setIsResettingDatabase(false)
     }
   }, [])
+
+  const handleGraphDataSourceChange = useCallback((nextDataSource: GraphDataSource) => {
+    if (graphDataSource === nextDataSource) {
+      return
+    }
+
+    setSelectedNodeId(undefined)
+    setError(null)
+    setGraphDataSource(nextDataSource)
+  }, [graphDataSource])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -279,7 +298,9 @@ export function DemoPage() {
               nodeCount={graph.nodes.length}
               edgeCount={graph.edges.length}
               fixtureName={graph.slug}
+              dataSource={graphDataSource}
               isResettingDatabase={isResettingDatabase}
+              onDataSourceChange={handleGraphDataSourceChange}
               onResetDatabase={handleResetDatabase}
             />
           ) : null}
