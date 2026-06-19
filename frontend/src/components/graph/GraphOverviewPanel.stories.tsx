@@ -34,6 +34,7 @@ export const Default: Story = {
     nodeCount: 11,
     edgeCount: 10,
     fixtureName: 'sample-medium',
+    dataSource: 'fixture',
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByText(/Graph Overview/i)).toBeVisible()
@@ -55,6 +56,7 @@ export const SummaryOnly: Story = {
     nodeCount: 5,
     edgeCount: 4,
     fixtureName: 'sample-small',
+    dataSource: 'database',
   },
 }
 
@@ -73,5 +75,6 @@ export const FixtureLabel: Story = {
     nodeCount: 8,
     edgeCount: 7,
     fixtureName: 'sample-labels',
+    dataSource: 'fixture',
   },
 }

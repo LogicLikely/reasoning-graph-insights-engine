@@ -56,6 +56,39 @@
   grid-column: 1 / -1;
 }
 
+.graph-overview-panel__source-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.2rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: rgba(253, 253, 248, 0.8);
+}
+
+.graph-overview-panel__source-option {
+  min-height: 2.35rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.graph-overview-panel__source-option[aria-pressed='true'] {
+  background: var(--color-text);
+  color: var(--color-surface);
+}
+
+.graph-overview-panel__source-option:hover {
+  color: var(--color-text);
+}
+
+.graph-overview-panel__source-option[aria-pressed='true']:hover {
+  color: var(--color-surface);
+}
+
 .graph-overview-panel__reset-button {
   width: 100%;
   min-height: 2.75rem;

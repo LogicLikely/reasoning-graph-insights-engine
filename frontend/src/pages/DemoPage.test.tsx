@@ -5,10 +5,17 @@ import { DemoPage } from './DemoPage'
 
 const getGraphBySlugMock = vi.fn()
 const resetDatabaseMock = vi.fn()
+const addNodeMock = vi.fn()
+const deleteNodeMock = vi.fn()
+const updateNodeMock = vi.fn()
 
 vi.mock('../services/graphService', () => ({
-  getGraphBySlug: (slug: string) => getGraphBySlugMock(slug),
+  addNode: (...args: unknown[]) => addNodeMock(...args),
+  deleteNode: (...args: unknown[]) => deleteNodeMock(...args),
+  getDefaultGraphDataSource: () => 'database',
+  getGraphBySlug: (slug: string, dataSource: string) => getGraphBySlugMock(slug, dataSource),
   resetDatabase: () => resetDatabaseMock(),
+  updateNode: (...args: unknown[]) => updateNodeMock(...args),
 }))
 
 vi.mock('../components/graph/GraphCanvas', () => ({
@@ -34,6 +41,9 @@ describe('DemoPage', () => {
   beforeEach(() => {
     getGraphBySlugMock.mockReset()
     resetDatabaseMock.mockReset()
+    addNodeMock.mockReset()
+    deleteNodeMock.mockReset()
+    updateNodeMock.mockReset()
   })
 
   afterEach(() => {
@@ -54,6 +64,7 @@ describe('DemoPage', () => {
     render(<DemoPage />)
 
     expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
+    expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'database')
     expect(
       screen.getByRole('heading', { level: 2, name: sampleGraph.title }),
     ).toBeInTheDocument()
@@ -153,5 +164,83 @@ describe('DemoPage', () => {
 
     expect(resetDatabaseMock).not.toHaveBeenCalled()
     expect(getGraphBySlugMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('switches graph data source and clears node details', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
+
+    expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--open')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fixture' }))
+
+    expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--open')
+
+    await waitFor(() => {
+      expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'fixture')
+    })
+  })
+
+  it('shows fixture mode alert instead of updating a node', async () => {
+    vi.spyOn(window, 'alert').mockImplementation(() => undefined)
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Fixture' }))
+    await waitFor(() => {
+      expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'fixture')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select evidence node' }))
+    fireEvent.click(screen.getByRole('button', { name: "Edit this node's title, type, and description" }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    expect(window.alert).toHaveBeenCalledWith('This feature is not available in fixture mode.')
+    expect(updateNodeMock).not.toHaveBeenCalled()
+  })
+
+  it('shows fixture mode alert instead of adding a node', async () => {
+    vi.spyOn(window, 'alert').mockImplementation(() => undefined)
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Fixture' }))
+    await waitFor(() => {
+      expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'fixture')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select evidence node' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add a child node connected to this selected node' }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Fixture add' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Fixture add body' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Node' }))
+
+    expect(window.alert).toHaveBeenCalledWith('This feature is not available in fixture mode.')
+    expect(addNodeMock).not.toHaveBeenCalled()
+  })
+
+  it('shows fixture mode alert after delete confirmation without deleting a node', async () => {
+    vi.spyOn(window, 'alert').mockImplementation(() => undefined)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Fixture' }))
+    await waitFor(() => {
+      expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'fixture')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select evidence node' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this node from the graph' }))
+
+    expect(window.confirm).toHaveBeenCalledWith('Are you sure you want to delete this node? This action cannot be undone.')
+    expect(window.alert).toHaveBeenCalledWith('This feature is not available in fixture mode.')
+    expect(deleteNodeMock).not.toHaveBeenCalled()
   })
 })

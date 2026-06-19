@@ -5,10 +5,19 @@ import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
-import { addNode, deleteNode, getGraphBySlug, resetDatabase, updateNode } from '../services/graphService'
+import {
+  addNode,
+  deleteNode,
+  getDefaultGraphDataSource,
+  getGraphBySlug,
+  resetDatabase,
+  updateNode,
+  type GraphDataSource,
+} from '../services/graphService'
 import './DemoPage.css'
 
 const DEMO_GRAPH_SLUG = 'sample-medium'
+const FIXTURE_MUTATION_MESSAGE = 'This feature is not available in fixture mode.'
 
 export function DemoPage() {
   const [graph, setGraph] = useState<GraphFixture | null>(null)
@@ -18,6 +27,7 @@ export function DemoPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
   const [isGraphExpanded, setIsGraphExpanded] = useState(false)
   const [isResettingDatabase, setIsResettingDatabase] = useState(false)
+  const [graphDataSource, setGraphDataSource] = useState<GraphDataSource>(() => getDefaultGraphDataSource())
 
   const dismissNodeDetails = useCallback(() => {
     setSelectedNodeId(undefined)
@@ -49,7 +59,7 @@ export function DemoPage() {
 
       try {
         //Grabs nodes from backend
-        const result = await getGraphBySlug(DEMO_GRAPH_SLUG)
+        const result = await getGraphBySlug(DEMO_GRAPH_SLUG, graphDataSource)
 
         if (!isActive) {
           return
@@ -80,7 +90,7 @@ export function DemoPage() {
     return () => {
       isActive = false
     }
-  }, [reloadKey])
+  }, [graphDataSource, reloadKey])
 
   const handleDeleteNode = useCallback(async (nodeId: string) => {
     const hasInNeighbors = graph?.edges.some((e) => e.to === nodeId)
@@ -93,6 +103,11 @@ export function DemoPage() {
       return
     }
 
+    if (graphDataSource === 'fixture') {
+      alert(FIXTURE_MUTATION_MESSAGE)
+      return
+    }
+
     try {
       await deleteNode(DEMO_GRAPH_SLUG, nodeId)
       setReloadKey((prev) => prev + 1)
@@ -100,18 +115,28 @@ export function DemoPage() {
     } catch {
       setError('Failed to delete node from the server.')
     }
-  }, [graph?.edges])
+  }, [graph?.edges, graphDataSource])
 
   const handleUpdateNode = useCallback(async (nodeId: string, data: Partial<GraphFixtureNode>) => {
+    if (graphDataSource === 'fixture') {
+      alert(FIXTURE_MUTATION_MESSAGE)
+      return
+    }
+
     try {
       await updateNode(DEMO_GRAPH_SLUG, nodeId, data)
       setReloadKey((prev) => prev + 1)
     } catch {
       setError('Failed to update node on the server.')
     }
-  }, [])
+  }, [graphDataSource])
 
   const handleAddSupportingNode = useCallback(async (parentId: string, data: Partial<GraphFixtureNode> = {}) => {
+    if (graphDataSource === 'fixture') {
+      alert(FIXTURE_MUTATION_MESSAGE)
+      return
+    }
+
     const newNodeId = `node-${Date.now()}`
     const newNode: GraphFixtureNode = {
       ...data,
@@ -128,7 +153,7 @@ export function DemoPage() {
     } catch {
       setError('Failed to add node to the server.')
     }
-  }, [])
+  }, [graphDataSource])
 
   const handleResetDatabase = useCallback(async () => {
     if (!window.confirm('Are you sure you want to reset the database? This will restore the default seed data.')) {
@@ -148,6 +173,16 @@ export function DemoPage() {
       setIsResettingDatabase(false)
     }
   }, [])
+
+  const handleGraphDataSourceChange = useCallback((nextDataSource: GraphDataSource) => {
+    if (graphDataSource === nextDataSource) {
+      return
+    }
+
+    setSelectedNodeId(undefined)
+    setError(null)
+    setGraphDataSource(nextDataSource)
+  }, [graphDataSource])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -279,7 +314,9 @@ export function DemoPage() {
               nodeCount={graph.nodes.length}
               edgeCount={graph.edges.length}
               fixtureName={graph.slug}
+              dataSource={graphDataSource}
               isResettingDatabase={isResettingDatabase}
+              onDataSourceChange={handleGraphDataSourceChange}
               onResetDatabase={handleResetDatabase}
             />
           ) : null}

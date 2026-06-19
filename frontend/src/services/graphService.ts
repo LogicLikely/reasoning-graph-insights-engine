@@ -3,12 +3,17 @@ import { getGraphBySlugFromApi } from './graphApi'
 import { getGraphBySlugFromFixture } from './graphFixture'
 import { httpClient } from './httpClient'
 
-function shouldUseFixture() {
-  return import.meta.env.VITE_USE_FIXTURE === 'true'
+export type GraphDataSource = 'fixture' | 'database'
+
+export function getDefaultGraphDataSource(): GraphDataSource {
+  return import.meta.env.VITE_USE_FIXTURE === 'true' ? 'fixture' : 'database'
 }
 
-export async function getGraphBySlug(slug: string): Promise<GraphFixture> {
-  if (shouldUseFixture()) {
+export async function getGraphBySlug(
+  slug: string,
+  dataSource: GraphDataSource = getDefaultGraphDataSource(),
+): Promise<GraphFixture> {
+  if (dataSource === 'fixture') {
     return getGraphBySlugFromFixture(slug)
   }
 

@@ -51,6 +51,36 @@ describe('graphService', () => {
     expect(fixtureSpy).not.toHaveBeenCalled()
   })
 
+  it('uses the requested data source over the env default', async () => {
+    vi.stubEnv('VITE_USE_FIXTURE', 'true')
+
+    const fixtureSpy = vi.fn()
+    const apiSpy = vi.fn().mockResolvedValue({ slug: 'sample-medium' })
+
+    vi.doMock('./graphFixture', () => ({
+      getGraphBySlugFromFixture: fixtureSpy,
+    }))
+    vi.doMock('./graphApi', () => ({
+      getGraphBySlugFromApi: apiSpy,
+    }))
+
+    const { getGraphBySlug } = await import('./graphService')
+
+    await expect(getGraphBySlug('sample-medium', 'database')).resolves.toEqual({
+      slug: 'sample-medium',
+    })
+    expect(apiSpy).toHaveBeenCalledWith('sample-medium')
+    expect(fixtureSpy).not.toHaveBeenCalled()
+  })
+
+  it('uses the env var to determine the default data source', async () => {
+    vi.stubEnv('VITE_USE_FIXTURE', 'true')
+
+    const { getDefaultGraphDataSource } = await import('./graphService')
+
+    expect(getDefaultGraphDataSource()).toBe('fixture')
+  })
+
   it('posts to the reset endpoint when resetting the database', async () => {
     const postSpy = vi.fn().mockResolvedValue({})
 
