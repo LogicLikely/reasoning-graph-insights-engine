@@ -77,7 +77,7 @@ The missing fields are the initial backlog.
 
 Check the `nodes` table definition in:
 
-- [insights_seed.sql](/Users/nuttzy/src/logiclikely/reasoning-graph-insights-engine/backend/Data/Sql/insights_seed.sql)
+- [insights_seed.sql](/Users/nuttzy/src/logiclikely/reasoning-graph-insights-engine/backend/Data/sql/insights_seed.sql)
 
 The schema already includes:
 
@@ -293,7 +293,7 @@ That means the frontend details panel may technically support the field, but the
 
 To reach parity with the fixture experience, update the seed data in:
 
-- [insights_seed.sql](/Users/nuttzy/src/logiclikely/reasoning-graph-insights-engine/backend/Data/Sql/insights_seed.sql)
+- [insights_seed.sql](/Users/nuttzy/src/logiclikely/reasoning-graph-insights-engine/backend/Data/sql/insights_seed.sql)
 
 Populate the seeded nodes more consistently so the API response feels as complete as the fixture response.
 
