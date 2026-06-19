@@ -86,4 +86,9 @@ public class GraphService : IGraphService
     {
         return await _graphRepository.AddNodeAsync(slug, node, parentID, cancellationToken);
     }
+
+    public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
+    {
+        await _graphRepository.ResetDatabaseAsync(cancellationToken);
+    }
 }

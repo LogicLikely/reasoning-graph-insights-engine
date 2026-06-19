@@ -1,5 +1,6 @@
 using Backend.Data;
 using Backend.Repositories;
+using Microsoft.Extensions.Hosting;
 using Moq;
 
 namespace backend.Tests.Repositories;
@@ -18,7 +19,7 @@ public class GraphRepositoryTests
             .Setup(factory => factory.CreateConnection())
             .Returns(connection);
 
-        var repository = new GraphRepository(connectionFactoryMock.Object);
+        var repository = CreateRepository(connectionFactoryMock.Object);
 
         var result = await repository.GetBySlugAsync("missing", CancellationToken.None);
 
@@ -80,7 +81,7 @@ public class GraphRepositoryTests
             .Setup(factory => factory.CreateConnection())
             .Returns(connection);
 
-        var repository = new GraphRepository(connectionFactoryMock.Object);
+        var repository = CreateRepository(connectionFactoryMock.Object);
 
         var result = await repository.GetBySlugAsync("sample-medium", CancellationToken.None);
 
@@ -103,5 +104,15 @@ public class GraphRepositoryTests
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual(1, connection.ExecutedCommands[1].Parameters["GraphId"]);
         Assert.AreEqual(1, connection.ExecutedCommands[2].Parameters["GraphId"]);
+    }
+
+    private static GraphRepository CreateRepository(DbConnectionFactory connectionFactory)
+    {
+        var hostEnvironmentMock = new Mock<IHostEnvironment>();
+        hostEnvironmentMock
+            .Setup(environment => environment.ContentRootPath)
+            .Returns(Directory.GetCurrentDirectory());
+
+        return new GraphRepository(connectionFactory, hostEnvironmentMock.Object);
     }
 }

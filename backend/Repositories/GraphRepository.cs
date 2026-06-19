@@ -2,7 +2,6 @@ using Backend.Data;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Dapper;
-using System.Linq;
 using System.Text.Json;
 
 namespace Backend.Repositories;
@@ -45,11 +44,19 @@ public class GraphRepository : IGraphRepository
         ORDER BY id;
         """;
 
-    private readonly DbConnectionFactory _dbConnectionFactory;
+    private const string ResetDatabaseSql = """
+        DROP TABLE IF EXISTS public.edges, public.nodes, public.graphs CASCADE;
+        """;
 
-    public GraphRepository(DbConnectionFactory dbConnectionFactory)
+    private readonly DbConnectionFactory _dbConnectionFactory;
+    private readonly IHostEnvironment _hostEnvironment;
+
+    public GraphRepository(
+        DbConnectionFactory dbConnectionFactory,
+        IHostEnvironment hostEnvironment)
     {
         _dbConnectionFactory = dbConnectionFactory;
+        _hostEnvironment = hostEnvironment;
     }
 
     public async Task<Graph?> GetBySlugAsync(
@@ -263,6 +270,46 @@ public class GraphRepository : IGraphRepository
         {
             transaction.Rollback();
             return false;
+        }
+    }
+
+    public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
+    {
+        var seedSqlPath = Path.Combine(
+            _hostEnvironment.ContentRootPath,
+            "Data",
+            "Sql",
+            "insights_seed.sql");
+
+        if (!File.Exists(seedSqlPath))
+        {
+            throw new FileNotFoundException("Database seed SQL file was not found.", seedSqlPath);
+        }
+
+        var seedSql = await File.ReadAllTextAsync(seedSqlPath, cancellationToken);
+
+        using var connection = _dbConnectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                ResetDatabaseSql,
+                transaction: transaction,
+                cancellationToken: cancellationToken));
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                seedSql,
+                transaction: transaction,
+                cancellationToken: cancellationToken));
+
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
         }
     }
 }

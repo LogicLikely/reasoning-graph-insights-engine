@@ -30,6 +30,14 @@ public class GraphsController : ControllerBase
         return Ok(graph);
     }
 
+    [HttpPost("reset")]
+    public async Task<IActionResult> ResetDatabase(CancellationToken cancellationToken)
+    {
+        await _graphService.ResetDatabaseAsync(cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpDelete("{slug}/nodes/{nodeId}")]
     public async Task<IActionResult> DeleteNode(
         string slug,

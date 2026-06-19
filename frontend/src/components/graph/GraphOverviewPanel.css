@@ -56,6 +56,28 @@
   grid-column: 1 / -1;
 }
 
+.graph-overview-panel__reset-button {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid rgba(178, 44, 44, 0.42);
+  border-radius: 0.5rem;
+  background: #fff5f5;
+  color: #8f1d1d;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.graph-overview-panel__reset-button:hover:not(:disabled) {
+  background: #ffe8e8;
+  border-color: rgba(178, 44, 44, 0.7);
+}
+
+.graph-overview-panel__reset-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 @media (max-width: 640px) {
   .graph-overview-panel {
     border-radius: 1.25rem;
