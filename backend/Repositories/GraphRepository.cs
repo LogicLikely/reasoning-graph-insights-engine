@@ -273,6 +273,42 @@ public class GraphRepository : IGraphRepository
         }
     }
 
+    public async Task<bool> UpdateNodeAsync(
+        string slug,
+        string nodeId,
+        GraphNodeUpdateDto node,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        const string UpdateNodeSql = """
+            UPDATE nodes
+            SET
+                kind = COALESCE(@Kind, kind),
+                title = COALESCE(@Title, title),
+                body_text = COALESCE(@BodyText, body_text),
+                confidence = COALESCE(@Confidence, confidence),
+                updated_at = now()
+            WHERE id = @NodeId
+            AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
+            """;
+
+        var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(
+            UpdateNodeSql,
+            new
+            {
+                Slug = slug,
+                NodeId = nodeId,
+                node.Kind,
+                node.Title,
+                node.BodyText,
+                node.Confidence
+            },
+            cancellationToken: cancellationToken));
+
+        return rowsAffected > 0;
+    }
+
     public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
     {
         var seedSqlPath = Path.Combine(

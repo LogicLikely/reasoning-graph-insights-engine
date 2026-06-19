@@ -1,4 +1,5 @@
 using Backend.Models.Domain;
+using Backend.Models.Dto;
 using Backend.Repositories;
 using Backend.Services;
 using Moq;
@@ -95,6 +96,36 @@ public class GraphServiceTests
 
         repositoryMock.Verify(
             repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_PassesUpdateThroughToRepository()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var update = new GraphNodeUpdateDto
+        {
+            Kind = "premise",
+            Title = "Updated title",
+            BodyText = "Updated body",
+            Confidence = 0.75m
+        };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync(
+                "sample-medium",
+                "P1",
+                update,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var service = new GraphService(repositoryMock.Object);
+
+        var result = await service.UpdateNodeAsync("sample-medium", "P1", update, CancellationToken.None);
+
+        Assert.IsTrue(result);
+        repositoryMock.Verify(
+            repository => repository.UpdateNodeAsync("sample-medium", "P1", update, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }
