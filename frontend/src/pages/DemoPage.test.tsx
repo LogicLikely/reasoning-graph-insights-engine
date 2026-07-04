@@ -88,6 +88,28 @@ describe('DemoPage', () => {
     expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
   })
 
+  it('keeps the overview panel and data source controls available when database loading fails', async () => {
+    getGraphBySlugMock
+      .mockRejectedValueOnce(new Error('Request failed'))
+      .mockResolvedValueOnce(sampleGraph)
+
+    render(<DemoPage />)
+
+    expect(await screen.findByTestId('demo-error-state')).toBeInTheDocument()
+    expect(screen.getByTestId('graph-overview-panel')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 3, name: 'Unable to load graph' })).toHaveLength(2)
+    expect(screen.getAllByText('Unable to load graph data right now.')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Database' })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fixture' }))
+
+    await waitFor(() => {
+      expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'fixture')
+    })
+
+    expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
+  })
+
   it('opens node details on selection and allows them to be dismissed', async () => {
     getGraphBySlugMock.mockResolvedValue(sampleGraph)
 
