@@ -250,9 +250,6 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
             <dt>Evidence</dt>
             <dd className="graph-evidence-block">
               <strong>{node.evidence.type}</strong>
-              {node.evidence.score !== undefined ? (
-                <span>Score: {node.evidence?.score?.toFixed(2)}</span>
-              ) : null}
               {node.evidence.rationale ? <p>{node.evidence.rationale}</p> : null}
             </dd>
           </>
