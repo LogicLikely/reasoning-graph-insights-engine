@@ -48,7 +48,7 @@ public sealed class FakeDbConnection : DbConnection
 
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
     {
-        throw new NotSupportedException();
+        return new FakeDbTransaction(this, isolationLevel);
     }
 
     protected override DbCommand CreateDbCommand()
@@ -70,6 +70,29 @@ public sealed class FakeDbConnection : DbConnection
     public sealed record ExecutedCommand(
         string CommandText,
         Dictionary<string, object?> Parameters);
+
+    private sealed class FakeDbTransaction : DbTransaction
+    {
+        private readonly FakeDbConnection _connection;
+
+        public FakeDbTransaction(FakeDbConnection connection, IsolationLevel isolationLevel)
+        {
+            _connection = connection;
+            IsolationLevel = isolationLevel;
+        }
+
+        public override IsolationLevel IsolationLevel { get; }
+
+        protected override DbConnection DbConnection => _connection;
+
+        public override void Commit()
+        {
+        }
+
+        public override void Rollback()
+        {
+        }
+    }
 
     private sealed class FakeDbCommand : DbCommand
     {

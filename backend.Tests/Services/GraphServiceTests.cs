@@ -105,10 +105,10 @@ public class GraphServiceTests
         var repositoryMock = new Mock<IGraphRepository>();
         var update = new GraphNodeUpdateDto
         {
-            Kind = "premise",
+            Kind = "claim",
             Title = "Updated title",
             BodyText = "Updated body",
-            Confidence = 0.75m
+            LogOdds = 0.75m
         };
 
         repositoryMock

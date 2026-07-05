@@ -8,6 +8,11 @@ namespace Backend.Repositories;
 
 public class GraphRepository : IGraphRepository
 {
+    private static readonly JsonSerializerOptions EvidenceJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     private const string GraphSql = """
         SELECT 
             id, slug, title, description
@@ -156,6 +161,38 @@ public class GraphRepository : IGraphRepository
         public string? Evidence { get; set; }
     }
 
+    private static decimal? GetEvidenceScoreFromLogOdds(decimal? logOdds)
+    {
+        if (logOdds is null)
+        {
+            return null;
+        }
+
+        var probability = 1 / (1 + Math.Exp(-(double)logOdds.Value));
+        var score = (decimal)probability * 100;
+        var boundedScore = Math.Min(99.99m, Math.Max(0.01m, score));
+
+        return decimal.Round(boundedScore, 2);
+    }
+
+    private static string? SerializeEvidenceForNode(GraphNodeDto node)
+    {
+        var evidence = node.Evidence;
+        var evidenceScore = string.Equals(node.Kind, "evidence", StringComparison.OrdinalIgnoreCase)
+            ? GetEvidenceScoreFromLogOdds(node.LogOdds)
+            : null;
+
+        if (evidenceScore is not null)
+        {
+            evidence ??= new GraphEvidenceDto();
+            evidence.Score = evidenceScore;
+        }
+
+        return evidence != null
+            ? JsonSerializer.Serialize(evidence, EvidenceJsonOptions)
+            : null;
+    }
+
 
     public async Task<bool> DeleteNodeAsync(string slug, string nodeId, CancellationToken cancellationToken = default)
     {
@@ -227,7 +264,7 @@ public class GraphRepository : IGraphRepository
                 node.Category,
                 Tags = node.Tags.ToArray(),
                 LogOdds = node.LogOdds,
-                Evidence = node.Evidence != null ? JsonSerializer.Serialize(node.Evidence) : null
+                Evidence = SerializeEvidenceForNode(node)
             };
 
             await connection.ExecuteAsync(new CommandDefinition(InsertNodeSql, nodeParams, transaction, cancellationToken: cancellationToken));
@@ -275,6 +312,11 @@ public class GraphRepository : IGraphRepository
                 title = COALESCE(@Title, title),
                 body_text = COALESCE(@BodyText, body_text),
                 log_odds = COALESCE(@LogOdds, log_odds),
+                evidence = CASE
+                    WHEN LOWER(COALESCE(@Kind, kind)) = 'evidence' AND @EvidenceScore IS NOT NULL
+                        THEN jsonb_set(COALESCE(evidence, '{}'::jsonb), '{score}', to_jsonb(@EvidenceScore), true)
+                    ELSE evidence
+                END,
                 updated_at = now()
             WHERE id = @NodeId
             AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
@@ -289,7 +331,8 @@ public class GraphRepository : IGraphRepository
                 node.Kind,
                 node.Title,
                 node.BodyText,
-                node.LogOdds
+                node.LogOdds,
+                EvidenceScore = GetEvidenceScoreFromLogOdds(node.LogOdds)
             },
             cancellationToken: cancellationToken));
 

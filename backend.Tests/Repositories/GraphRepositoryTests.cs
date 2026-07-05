@@ -3,6 +3,7 @@ using Backend.Models.Dto;
 using Backend.Repositories;
 using Microsoft.Extensions.Hosting;
 using Moq;
+using System.Text.Json;
 
 namespace backend.Tests.Repositories;
 
@@ -120,10 +121,10 @@ public class GraphRepositoryTests
         var repository = CreateRepository(connectionFactoryMock.Object);
         var update = new GraphNodeUpdateDto
         {
-            Kind = "premise",
+            Kind = "claim",
             Title = "Updated title",
             BodyText = "Updated body",
-            Confidence = 0.75m
+            LogOdds = 0.75m
         };
 
         var result = await repository.UpdateNodeAsync("sample-medium", "P1", update, CancellationToken.None);
@@ -133,10 +134,74 @@ public class GraphRepositoryTests
         Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE nodes"));
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual("P1", connection.ExecutedCommands[0].Parameters["NodeId"]);
-        Assert.AreEqual("premise", connection.ExecutedCommands[0].Parameters["Kind"]);
+        Assert.AreEqual("claim", connection.ExecutedCommands[0].Parameters["Kind"]);
         Assert.AreEqual("Updated title", connection.ExecutedCommands[0].Parameters["Title"]);
         Assert.AreEqual("Updated body", connection.ExecutedCommands[0].Parameters["BodyText"]);
-        Assert.AreEqual(0.75m, connection.ExecutedCommands[0].Parameters["Confidence"]);
+        Assert.AreEqual(0.75m, connection.ExecutedCommands[0].Parameters["LogOdds"]);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_UpdatesEvidenceScoreFromLogOddsForEvidenceNode()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var update = new GraphNodeUpdateDto
+        {
+            Kind = "evidence",
+            LogOdds = 0m
+        };
+
+        var result = await repository.UpdateNodeAsync("sample-medium", "E1", update, CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("jsonb_set"));
+        Assert.AreEqual(50.00m, connection.ExecutedCommands[0].Parameters["EvidenceScore"]);
+    }
+
+    [TestMethod]
+    public async Task AddNodeAsync_SerializesEvidenceScoreFromLogOddsForEvidenceNode()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var node = new GraphNodeDto
+        {
+            Id = "E-new",
+            Kind = "evidence",
+            Title = "New evidence",
+            BodyText = "New evidence body",
+            LogOdds = 0m,
+            Evidence = new GraphEvidenceDto
+            {
+                Type = "observational",
+                Rationale = "A rationale"
+            }
+        };
+
+        var result = await repository.AddNodeAsync("sample-medium", node, cancellationToken: CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+
+        var evidenceJson = connection.ExecutedCommands[0].Parameters["Evidence"] as string;
+        Assert.IsNotNull(evidenceJson);
+
+        using var evidence = JsonDocument.Parse(evidenceJson);
+        Assert.AreEqual("observational", evidence.RootElement.GetProperty("type").GetString());
+        Assert.AreEqual(50.00m, evidence.RootElement.GetProperty("score").GetDecimal());
+        Assert.AreEqual("A rationale", evidence.RootElement.GetProperty("rationale").GetString());
     }
 
     private static GraphRepository CreateRepository(DbConnectionFactory connectionFactory)

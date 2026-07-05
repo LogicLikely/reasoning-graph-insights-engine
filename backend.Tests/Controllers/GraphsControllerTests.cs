@@ -59,10 +59,10 @@ public class GraphsControllerTests
         var serviceMock = new Mock<IGraphService>();
         var update = new GraphNodeUpdateDto
         {
-            Kind = "premise",
+            Kind = "claim",
             Title = "Updated title",
             BodyText = "Updated body",
-            Confidence = 0.75m
+            LogOdds = 0.75m
         };
 
         serviceMock
