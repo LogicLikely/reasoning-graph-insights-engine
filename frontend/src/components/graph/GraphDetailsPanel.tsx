@@ -245,7 +245,7 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
             <dd>{formatLogOddsAsPercent(node.logOdds)}%</dd>
           </>
         ) : null}
-        {node.evidence ? (
+        {node.kind == 'evidence' && node.evidence ? (
           <>
             <dt>Evidence</dt>
             <dd className="graph-evidence-block">
