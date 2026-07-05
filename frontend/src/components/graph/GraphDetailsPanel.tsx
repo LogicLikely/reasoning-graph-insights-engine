@@ -40,7 +40,7 @@ function formatLogOddsAsPercent(value?: number) {
 const emptyFormData = {
   title: '',
   bodyText: '',
-  kind: 'premise' as GraphFixtureNode['kind'],
+  kind: 'claim' as GraphFixtureNode['kind'],
   likelihoodPercent: formatLogOddsAsPercent(0) ?? ''
 }
 

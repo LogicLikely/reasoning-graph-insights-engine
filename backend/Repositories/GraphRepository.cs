@@ -272,17 +272,19 @@ public class GraphRepository : IGraphRepository
             if (!string.IsNullOrEmpty(parentID))
             {
                 const string InsertEdgeSql = """
-                    INSERT INTO edges (id, graph_id, from_node_id, to_node_id, kind)
-                    VALUES (@EdgeId, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, 'support');
+                    INSERT INTO edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent)
+                    VALUES (@EdgeId, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, @Kind, @ImportanceToParent);
                     """;
 
-                // Invert the From/To so the new Premise points TO the Parent Claim
+                // Invert the From/To so the new supporting node points TO the parent claim.
                 var edgeParams = new
                 {
                     EdgeId = $"e-{node.Id}",
                     Slug = slug,
                     From = node.Id,
-                    To = parentID
+                    To = parentID,
+                    Kind = node.Kind == "objection" ? "rebut" : "support",
+                    ImportanceToParent = 1
                 };
                 await connection.ExecuteAsync(new CommandDefinition(InsertEdgeSql, edgeParams, transaction, cancellationToken: cancellationToken));
             }

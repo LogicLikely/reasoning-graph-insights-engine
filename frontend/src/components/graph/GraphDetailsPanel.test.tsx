@@ -16,7 +16,7 @@ describe('GraphDetailsPanel', () => {
 
     expect(screen.getByText('Photographs from beaches')).toBeInTheDocument()
     expect(screen.getAllByText(/observational/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/score:/i)).toBeInTheDocument()
+    expect(screen.getByText(/52\.00/)).toBeInTheDocument()
   })
 
   it('edits likelihood as a percent and submits log odds', () => {
@@ -25,7 +25,7 @@ describe('GraphDetailsPanel', () => {
 
     render(<GraphDetailsPanel node={node} onUpdate={onUpdate} />)
 
-    fireEvent.click(screen.getByRole('button', { name: "Edit this node's title, type, description, and likelihood" }))
+    fireEvent.click(screen.getByRole('button', { name: /edit this node's title, type, likelihood, and description/i }))
 
     const likelihoodInput = screen.getByLabelText('Likelihood')
     expect(likelihoodInput).toHaveValue(52)
@@ -51,6 +51,7 @@ describe('GraphDetailsPanel', () => {
 
     const submittedData = onAddSupporting.mock.calls[0][1]
     expect(onAddSupporting.mock.calls[0][0]).toBe('E1')
+    expect(submittedData.kind).toBe('claim')
     expect(submittedData.logOdds).toBeCloseTo(Math.log(0.65 / 0.35), 5)
   })
 })
