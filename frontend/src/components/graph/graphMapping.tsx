@@ -57,21 +57,9 @@ function getDisplayTitle(title: string) {
 }
 
 function getMetricForNode(node: GraphFixture['nodes'][number]) {
-  switch (node.kind) {
-    case 'root':
-    case 'claim':
-    case 'objection':
-      return {
-        metricLabel: 'likely',
-        metricValue: formatMetricLogOdds(node.logOdds) + '%',
-      }
-    case 'evidence':
-      return {
-        metricLabel: 'likely',
-        metricValue: formatMetricValue(node.evidence?.score) + '%',
-      }
-    default:
-      return {}
+  return {
+    metricLabel: 'likely',
+    metricValue: formatMetricLogOdds(node.logOdds) + '%',
   }
 }
 
