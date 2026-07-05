@@ -73,6 +73,54 @@
   gap: 0.4rem;
 }
 
+.node-relations {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.node-relations__list,
+.node-edge-form__list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.node-relation,
+.node-edge-form__row {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.node-relation p,
+.node-edge-form__row p,
+.node-relations__empty,
+.node-edge-form__empty {
+  margin: 0;
+}
+
+.node-relation span {
+  color: var(--color-text-muted);
+  font-size: 0.86rem;
+}
+
+.node-edge-form {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.3rem;
+}
+
+.node-edge-form__add {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--color-border);
+}
+
 @media (max-width: 640px) {
   .graph-details-list {
     grid-template-columns: 1fr;
@@ -228,7 +276,8 @@
 }
 
 .form-group label,
-.form-group__label {
+.form-group__label,
+.node-edge-form__row label {
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.12em;

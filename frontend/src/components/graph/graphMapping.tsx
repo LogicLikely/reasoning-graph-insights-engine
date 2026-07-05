@@ -41,13 +41,6 @@ function formatMetricLogOdds(value?: number) {
   return (1 / (1 + Math.exp(-value))*100).toFixed(2);
 }
 
-function formatMetricValue(value?: number) {
-  if (value === null || value === undefined) {
-    return undefined; // Or an empty string, or a default value like '0.00'
-  }
-  return value.toFixed(2);
-}
-
 function getDisplayTitle(title: string) {
   if (title.length <= 33) {
     return title

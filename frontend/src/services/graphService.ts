@@ -1,4 +1,4 @@
-import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
+import type { GraphFixture, GraphFixtureEdge, GraphFixtureNode } from '../fixtures/sampleGraph'
 import { getGraphBySlugFromApi } from './graphApi'
 import { getGraphBySlugFromFixture } from './graphFixture'
 import { httpClient } from './httpClient'
@@ -27,9 +27,14 @@ export async function addNode(
   slug: string,
   node: GraphFixtureNode,
   parentId?: string,
+  edge?: Pick<GraphFixtureEdge, 'kind' | 'importanceToParent'>,
 ): Promise<void> {
   await httpClient.post(`/api/graphs/${slug}/nodes`, node, {
-    params: { parentID: parentId },
+    params: {
+      parentID: parentId,
+      edgeKind: edge?.kind,
+      importanceToParent: edge?.importanceToParent,
+    },
   })
 }
 
@@ -39,6 +44,21 @@ export async function updateNode(
   data: Partial<GraphFixtureNode>,
 ): Promise<void> {
   await httpClient.patch(`/api/graphs/${slug}/nodes/${nodeId}`, data)
+}
+
+export async function addEdge(
+  slug: string,
+  edge: Omit<GraphFixtureEdge, 'id'> & { id?: string },
+): Promise<void> {
+  await httpClient.post(`/api/graphs/${slug}/edges`, edge)
+}
+
+export async function updateEdge(
+  slug: string,
+  edgeId: string,
+  data: Partial<Pick<GraphFixtureEdge, 'importanceToParent'>>,
+): Promise<void> {
+  await httpClient.patch(`/api/graphs/${slug}/edges/${edgeId}`, data)
 }
 
 export async function resetDatabase(): Promise<void> {

@@ -74,7 +74,8 @@ public class GraphRepositoryTests
                     ["id"] = "E-R-C1",
                     ["From"] = "C1",
                     ["To"] = "R1",
-                    ["kind"] = "support"
+                    ["kind"] = "support",
+                    ["ImportanceToParent"] = 8
                 }
             ]);
 
@@ -102,6 +103,7 @@ public class GraphRepositoryTests
         Assert.AreEqual("C1", result.Edges[0].From);
         Assert.AreEqual("R1", result.Edges[0].To);
         Assert.AreEqual("support", result.Edges[0].Kind);
+        Assert.AreEqual(8, result.Edges[0].ImportanceToParent);
         Assert.AreEqual(3, connection.ExecutedCommands.Count);
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual(1, connection.ExecutedCommands[1].Parameters["GraphId"]);
@@ -203,6 +205,63 @@ public class GraphRepositoryTests
         Assert.AreEqual("observational", evidence.RootElement.GetProperty("type").GetString());
         Assert.AreEqual(50.00m, evidence.RootElement.GetProperty("score").GetDecimal());
         Assert.AreEqual("A rationale", evidence.RootElement.GetProperty("rationale").GetString());
+    }
+
+    [TestMethod]
+    public async Task AddEdgeAsync_InsertsParentRelation()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var edge = new GraphEdgeDto
+        {
+            From = "E1",
+            To = "C2",
+            Kind = "rebut",
+            ImportanceToParent = 3
+        };
+
+        var result = await repository.AddEdgeAsync("sample-medium", edge, CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("INSERT INTO edges"));
+        Assert.AreEqual("e-E1-C2", connection.ExecutedCommands[0].Parameters["Id"]);
+        Assert.AreEqual("E1", connection.ExecutedCommands[0].Parameters["From"]);
+        Assert.AreEqual("C2", connection.ExecutedCommands[0].Parameters["To"]);
+        Assert.AreEqual("rebut", connection.ExecutedCommands[0].Parameters["Kind"]);
+        Assert.AreEqual(3, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
+    }
+
+    [TestMethod]
+    public async Task UpdateEdgeAsync_UpdatesImportanceToParent()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var edge = new GraphEdgeUpdateDto
+        {
+            ImportanceToParent = 7
+        };
+
+        var result = await repository.UpdateEdgeAsync("sample-medium", "E-C1-E1", edge, CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE edges"));
+        Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
+        Assert.AreEqual("E-C1-E1", connection.ExecutedCommands[0].Parameters["EdgeId"]);
+        Assert.AreEqual(7, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
     }
 
     private static GraphRepository CreateRepository(DbConnectionFactory connectionFactory)

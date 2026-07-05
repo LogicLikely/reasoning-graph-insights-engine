@@ -6,11 +6,13 @@ import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
 import {
+  addEdge,
   addNode,
   deleteNode,
   getDefaultGraphDataSource,
   getGraphBySlug,
   resetDatabase,
+  updateEdge,
   updateNode,
   type GraphDataSource,
 } from '../services/graphService'
@@ -133,7 +135,11 @@ export function DemoPage() {
     }
   }, [graphDataSource])
 
-  const handleAddSupportingNode = useCallback(async (parentId: string, data: Partial<GraphFixtureNode> = {}) => {
+  const handleAddSupportingNode = useCallback(async (
+    parentId: string,
+    data: Partial<GraphFixtureNode> = {},
+    edge: { kind: 'support' | 'rebut', importanceToParent: number } = { kind: 'support', importanceToParent: 1 },
+  ) => {
     if (graphDataSource === 'fixture') {
       alert(FIXTURE_MUTATION_MESSAGE)
       return
@@ -143,17 +149,50 @@ export function DemoPage() {
     const newNode: GraphFixtureNode = {
       ...data,
       id: newNodeId,
-      kind: data.kind ?? 'premise',
+      kind: data.kind ?? 'claim',
       title: data.title ?? 'New Node',
       bodyText: data.bodyText ?? '',
     } as GraphFixtureNode
 
     try {
-      await addNode(DEMO_GRAPH_SLUG, newNode, parentId)
+      await addNode(DEMO_GRAPH_SLUG, newNode, parentId, edge)
       setReloadKey((prev) => prev + 1)
       setSelectedNodeId(newNodeId)
     } catch {
       setError('Failed to add node to the server.')
+    }
+  }, [graphDataSource])
+
+  const handleUpdateEdge = useCallback(async (
+    edgeId: string,
+    data: { importanceToParent?: number },
+  ) => {
+    if (graphDataSource === 'fixture') {
+      alert(FIXTURE_MUTATION_MESSAGE)
+      return
+    }
+
+    try {
+      await updateEdge(DEMO_GRAPH_SLUG, edgeId, data)
+      setReloadKey((prev) => prev + 1)
+    } catch {
+      setError('Failed to update edge on the server.')
+    }
+  }, [graphDataSource])
+
+  const handleAddParentEdge = useCallback(async (
+    edge: { from: string, to: string, kind: 'support' | 'rebut', importanceToParent: number },
+  ) => {
+    if (graphDataSource === 'fixture') {
+      alert(FIXTURE_MUTATION_MESSAGE)
+      return
+    }
+
+    try {
+      await addEdge(DEMO_GRAPH_SLUG, edge)
+      setReloadKey((prev) => prev + 1)
+    } catch {
+      setError('Failed to add edge on the server.')
     }
   }, [graphDataSource])
 
@@ -254,9 +293,13 @@ export function DemoPage() {
         </div>
         <GraphDetailsPanel
           node={selectedNode}
+          nodes={graph?.nodes}
+          edges={graph?.edges}
           onDelete={handleDeleteNode}
           onAddSupporting={handleAddSupportingNode}
           onUpdate={handleUpdateNode}
+          onUpdateEdge={handleUpdateEdge}
+          onAddParentEdge={handleAddParentEdge}
         />
       </div>
     </div>

@@ -40,7 +40,8 @@ public class GraphRepository : IGraphRepository
             id, 
             from_node_id AS "From", 
             to_node_id AS "To", 
-            kind
+            kind,
+            importance_to_parent AS "ImportanceToParent"
         FROM edges
         WHERE graph_id = @GraphId
         ORDER BY id;
@@ -120,7 +121,8 @@ public class GraphRepository : IGraphRepository
             Id = row.Id,
             From = row.From,
             To = row.To,
-            Kind = row.Kind
+            Kind = row.Kind,
+            ImportanceToParent = row.ImportanceToParent
         }).ToList();
 
         return graph;
@@ -236,7 +238,9 @@ public class GraphRepository : IGraphRepository
         string slug,
         GraphNodeDto node,
         string? parentID = null,
-    CancellationToken cancellationToken = default)
+        string edgeKind = "support",
+        int importanceToParent = 1,
+        CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
         connection.Open();
@@ -283,8 +287,8 @@ public class GraphRepository : IGraphRepository
                     Slug = slug,
                     From = node.Id,
                     To = parentID,
-                    Kind = node.Kind == "objection" ? "rebut" : "support",
-                    ImportanceToParent = 1
+                    Kind = edgeKind,
+                    ImportanceToParent = importanceToParent
                 };
                 await connection.ExecuteAsync(new CommandDefinition(InsertEdgeSql, edgeParams, transaction, cancellationToken: cancellationToken));
             }
@@ -333,6 +337,68 @@ public class GraphRepository : IGraphRepository
                 node.BodyText,
                 node.LogOdds,
                 EvidenceScore = GetEvidenceScoreFromLogOdds(node.LogOdds)
+            },
+            cancellationToken: cancellationToken));
+
+        return rowsAffected > 0;
+    }
+
+    public async Task<bool> AddEdgeAsync(
+        string slug,
+        GraphEdgeDto edge,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        const string InsertEdgeSql = """
+            INSERT INTO edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent)
+            VALUES (@Id, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, @Kind, @ImportanceToParent);
+            """;
+
+        var edgeId = string.IsNullOrWhiteSpace(edge.Id)
+            ? $"e-{edge.From}-{edge.To}"
+            : edge.Id;
+
+        var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(
+            InsertEdgeSql,
+            new
+            {
+                Id = edgeId,
+                Slug = slug,
+                edge.From,
+                edge.To,
+                edge.Kind,
+                edge.ImportanceToParent
+            },
+            cancellationToken: cancellationToken));
+
+        return rowsAffected > 0;
+    }
+
+    public async Task<bool> UpdateEdgeAsync(
+        string slug,
+        string edgeId,
+        GraphEdgeUpdateDto edge,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        const string UpdateEdgeSql = """
+            UPDATE edges
+            SET
+                importance_to_parent = COALESCE(@ImportanceToParent, importance_to_parent),
+                updated_at = now()
+            WHERE id = @EdgeId
+            AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
+            """;
+
+        var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(
+            UpdateEdgeSql,
+            new
+            {
+                Slug = slug,
+                EdgeId = edgeId,
+                edge.ImportanceToParent
             },
             cancellationToken: cancellationToken));
 

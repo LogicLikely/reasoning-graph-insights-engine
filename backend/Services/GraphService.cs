@@ -80,9 +80,11 @@ public class GraphService : IGraphService
         string slug,
         GraphNodeDto node,
         string? parentID = null,
+        string edgeKind = "support",
+        int importanceToParent = 1,
         CancellationToken cancellationToken = default)
     {
-        return await _graphRepository.AddNodeAsync(slug, node, parentID, cancellationToken);
+        return await _graphRepository.AddNodeAsync(slug, node, parentID, edgeKind, importanceToParent, cancellationToken);
     }
 
     public async Task<bool> UpdateNodeAsync(
@@ -92,6 +94,23 @@ public class GraphService : IGraphService
         CancellationToken cancellationToken = default)
     {
         return await _graphRepository.UpdateNodeAsync(slug, nodeId, node, cancellationToken);
+    }
+
+    public async Task<bool> AddEdgeAsync(
+        string slug,
+        GraphEdgeDto edge,
+        CancellationToken cancellationToken = default)
+    {
+        return await _graphRepository.AddEdgeAsync(slug, edge, cancellationToken);
+    }
+
+    public async Task<bool> UpdateEdgeAsync(
+        string slug,
+        string edgeId,
+        GraphEdgeUpdateDto edge,
+        CancellationToken cancellationToken = default)
+    {
+        return await _graphRepository.UpdateEdgeAsync(slug, edgeId, edge, cancellationToken);
     }
 
     public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
