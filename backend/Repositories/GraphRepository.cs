@@ -310,12 +310,11 @@ public class GraphRepository : IGraphRepository
         const string UpdateNodeSql = """
             UPDATE nodes
             SET
-                kind = COALESCE(@Kind, kind),
                 title = COALESCE(@Title, title),
                 body_text = COALESCE(@BodyText, body_text),
                 log_odds = COALESCE(@LogOdds, log_odds),
                 evidence = CASE
-                    WHEN LOWER(COALESCE(@Kind, kind)) = 'evidence' AND @EvidenceScore IS NOT NULL
+                    WHEN LOWER(kind) = 'evidence' AND @EvidenceScore IS NOT NULL
                         THEN jsonb_set(COALESCE(evidence, '{}'::jsonb), '{score}', to_jsonb(@EvidenceScore), true)
                     ELSE evidence
                 END,
@@ -330,7 +329,6 @@ public class GraphRepository : IGraphRepository
             {
                 Slug = slug,
                 NodeId = nodeId,
-                node.Kind,
                 node.Title,
                 node.BodyText,
                 node.LogOdds,

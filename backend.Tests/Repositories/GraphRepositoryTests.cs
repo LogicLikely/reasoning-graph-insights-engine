@@ -121,7 +121,7 @@ public class GraphRepositoryTests
         var repository = CreateRepository(connectionFactoryMock.Object);
         var update = new GraphNodeUpdateDto
         {
-            Kind = "claim",
+            Kind = "objection",
             Title = "Updated title",
             BodyText = "Updated body",
             LogOdds = 0.75m
@@ -132,9 +132,10 @@ public class GraphRepositoryTests
         Assert.IsTrue(result);
         Assert.AreEqual(1, connection.ExecutedCommands.Count);
         Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE nodes"));
+        Assert.IsFalse(connection.ExecutedCommands[0].CommandText.Contains("kind ="));
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual("P1", connection.ExecutedCommands[0].Parameters["NodeId"]);
-        Assert.AreEqual("claim", connection.ExecutedCommands[0].Parameters["Kind"]);
+        Assert.IsFalse(connection.ExecutedCommands[0].Parameters.ContainsKey("Kind"));
         Assert.AreEqual("Updated title", connection.ExecutedCommands[0].Parameters["Title"]);
         Assert.AreEqual("Updated body", connection.ExecutedCommands[0].Parameters["BodyText"]);
         Assert.AreEqual(0.75m, connection.ExecutedCommands[0].Parameters["LogOdds"]);

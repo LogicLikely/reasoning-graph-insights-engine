@@ -80,10 +80,8 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
   const handleSave = () => {
     if (!isFormValid) return
 
-    const { likelihoodPercent, ...nodeData } = formData
-    const probability = Number(likelihoodPercent) / 100
-    const submissionData = {
-      ...nodeData,
+    const probability = Number(formData.likelihoodPercent) / 100
+    const submissionData: Partial<GraphFixtureNode> = {
       title: (formData.title ?? '').trim(),
       bodyText: (formData.bodyText ?? '').trim(),
       logOdds: probabilityToLogOdds(probability)
@@ -92,6 +90,7 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
     if (mode === 'add') {
       onAddSupporting?.(node.id, {
         ...submissionData,
+        kind: formData.kind,
         tags: ['dynamic']
       })
     } else if (mode === 'edit') {
@@ -148,19 +147,34 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
           </div>
 
           <div className="form-group">
-            <label htmlFor="node-kind">Type</label>
-            <select
-              id="node-kind"
-              className="form-input"
-              value={formData.kind}
-                onChange={(e) => setFormData({ ...formData, kind: e.target.value as GraphFixtureNode['kind'] })}
-              >
-                {editableNodeKinds.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {kind}
-                  </option>
-                ))}
-              </select>
+            {isEdit ? (
+              <>
+                <span id="node-kind-label" className="form-group__label">Type</span>
+                <div
+                  aria-labelledby="node-kind-label"
+                  className="form-input form-input--readonly"
+                  role="textbox"
+                >
+                  {formData.kind}
+                </div>
+              </>
+            ) : (
+              <>
+                <label htmlFor="node-kind">Type</label>
+                <select
+                  id="node-kind"
+                  className="form-input"
+                  value={formData.kind}
+                  onChange={(e) => setFormData({ ...formData, kind: e.target.value as GraphFixtureNode['kind'] })}
+                >
+                  {editableNodeKinds.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {kind}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
 
           <div className="form-group">

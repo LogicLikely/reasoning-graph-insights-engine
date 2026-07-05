@@ -218,6 +218,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  margin-bottom: 0.2rem;
 }
 
 .node-form {
@@ -226,7 +227,8 @@
   padding-top: 0.2rem;
 }
 
-.form-group label {
+.form-group label,
+.form-group__label {
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -259,6 +261,13 @@
 
 .form-input::placeholder {
   color: rgba(80, 101, 96, 0.65);
+}
+
+.form-input--readonly {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  text-transform: capitalize;
 }
 
 .form-input--textarea {
