@@ -164,16 +164,6 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
           </div>
 
           <div className="form-group">
-            <label htmlFor="node-body">Description</label>
-            <textarea
-              id="node-body"
-              className="form-input form-input--textarea"
-              value={formData.bodyText}
-              onChange={(e) => setFormData({ ...formData, bodyText: e.target.value })}
-            />
-          </div>
-
-          <div className="form-group">
             <label htmlFor="node-likelihood">Likelihood</label>
             <input
               id="node-likelihood"
@@ -186,6 +176,16 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
               step="0.01"
               type="number"
               value={formData.likelihoodPercent}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="node-body">Description</label>
+            <textarea
+              id="node-body"
+              className="form-input form-input--textarea"
+              value={formData.bodyText}
+              onChange={(e) => setFormData({ ...formData, bodyText: e.target.value })}
             />
           </div>
         </div>
