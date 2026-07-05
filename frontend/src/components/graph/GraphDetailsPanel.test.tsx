@@ -55,8 +55,8 @@ describe('GraphDetailsPanel', () => {
 
     fireEvent.change(likelihoodInput, { target: { value: '24.5' } })
     fireEvent.change(screen.getByLabelText('Importance to that claim', { selector: '#edge-importance-E-C1-E1' }), { target: { value: '7' } })
-    fireEvent.change(screen.getByLabelText('Additional parent'), { target: { value: 'C2' } })
-    fireEvent.change(screen.getByLabelText('Relation'), { target: { value: 'rebut' } })
+    expect(screen.queryByLabelText('Relation')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Additional Parent Support'), { target: { value: 'C2' } })
     fireEvent.change(screen.getByLabelText('Importance to that claim', { selector: '#new-parent-importance' }), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
@@ -67,7 +67,7 @@ describe('GraphDetailsPanel', () => {
     expect(onAddParentEdge).toHaveBeenCalledWith({
       from: 'E1',
       to: 'C2',
-      kind: 'rebut',
+      kind: 'support',
       importanceToParent: 3,
     })
   })
@@ -81,7 +81,8 @@ describe('GraphDetailsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add a child node connected to this selected node' }))
     expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('claim')
     fireEvent.change(screen.getByRole('combobox', { name: 'Type' }), { target: { value: 'objection' } })
-    fireEvent.change(screen.getByLabelText('Relation'), { target: { value: 'rebut' } })
+    expect(screen.queryByLabelText('Relation')).not.toBeInTheDocument()
+    expect(screen.getByText('Relation to selected node: Counter')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Importance to that claim'), { target: { value: '4' } })
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New support' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A new supporting node.' } })
