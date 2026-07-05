@@ -23,10 +23,7 @@ public class GraphRepository : IGraphRepository
             body_text AS "BodyText",
             category,
             tags,
-            prior,
-            weight,
-            confidence,
-            importance,
+            log_odds AS "LogOdds",
             evidence::text AS evidence
         FROM nodes
         WHERE graph_id = @GraphId
@@ -105,10 +102,7 @@ public class GraphRepository : IGraphRepository
             BodyText = row.BodyText,
             Category = row.Category,
             Tags = row.Tags?.ToList() ?? new List<string>(),
-            Prior = row.Prior,
-            Weight = row.Weight,
-            Confidence = row.Confidence,
-            Importance = row.Importance,
+            LogOdds = row.LogOdds,
             Evidence = string.IsNullOrEmpty(row.Evidence)
                 ? null
                 : JsonSerializer.Deserialize<GraphEvidenceDetails>(row.Evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
@@ -147,6 +141,7 @@ public class GraphRepository : IGraphRepository
         public string From { get; set; } = default!;
         public string To { get; set; } = default!;
         public string Kind { get; set; } = default!;
+        public int ImportanceToParent { get; set; } = 1;
     }
 
     private sealed class NodeRow
@@ -157,10 +152,7 @@ public class GraphRepository : IGraphRepository
         public string BodyText { get; set; } = default!;
         public string? Category { get; set; }
         public string[]? Tags { get; set; }
-        public decimal? Prior { get; set; }
-        public decimal? Weight { get; set; }
-        public decimal? Confidence { get; set; }
-        public decimal? Importance { get; set; }
+        public decimal? LogOdds { get; set; }
         public string? Evidence { get; set; }
     }
 
@@ -218,12 +210,10 @@ public class GraphRepository : IGraphRepository
             const string InsertNodeSql = """
                 INSERT INTO nodes (
                     id, graph_id, kind, title, body_text, 
-                    category, tags, prior, weight, 
-                    confidence, importance, evidence
+                    category, tags, log_odds, evidence
                 ) VALUES (
                     @Id, (SELECT id FROM graphs WHERE slug = @Slug), @Kind, @Title, @BodyText, 
-                    @Category, @Tags, @Prior, @Weight, 
-                    @Confidence, @Importance, @Evidence::jsonb
+                    @Category, @Tags, @LogOdds, @Evidence::jsonb
                 );
                 """;
 
@@ -236,10 +226,7 @@ public class GraphRepository : IGraphRepository
                 node.BodyText,
                 node.Category,
                 Tags = node.Tags.ToArray(),
-                node.Prior,
-                node.Weight,
-                node.Confidence,
-                node.Importance,
+                LogOdds = node.LogOdds,
                 Evidence = node.Evidence != null ? JsonSerializer.Serialize(node.Evidence) : null
             };
 
@@ -287,7 +274,7 @@ public class GraphRepository : IGraphRepository
                 kind = COALESCE(@Kind, kind),
                 title = COALESCE(@Title, title),
                 body_text = COALESCE(@BodyText, body_text),
-                confidence = COALESCE(@Confidence, confidence),
+                log_odds = COALESCE(@LogOdds, log_odds),
                 updated_at = now()
             WHERE id = @NodeId
             AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
@@ -302,7 +289,7 @@ public class GraphRepository : IGraphRepository
                 node.Kind,
                 node.Title,
                 node.BodyText,
-                node.Confidence
+                node.LogOdds
             },
             cancellationToken: cancellationToken));
 

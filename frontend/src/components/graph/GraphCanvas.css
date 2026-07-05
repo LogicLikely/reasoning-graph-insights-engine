@@ -115,7 +115,7 @@
   transform: translateX(-50%) translateY(0);
 }
 
-.graph-node--counter .graph-node-card {
+.graph-node--objection .graph-node-card {
   border-color: rgba(202, 90, 61, 0.22);
   background: rgba(255, 248, 247, 0.96);
 }

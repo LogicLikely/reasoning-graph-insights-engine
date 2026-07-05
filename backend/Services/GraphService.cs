@@ -37,10 +37,7 @@ public class GraphService : IGraphService
                     BodyText = node.BodyText,
                     Category = node.Category,
                     Tags = node.Tags.ToList(),
-                    Prior = node.Prior,
-                    Confidence = node.Confidence,
-                    Weight = node.Weight,
-                    Importance = node.Importance,
+                    LogOdds = node.LogOdds,
                     Evidence = node.Evidence == null ? null : new GraphEvidenceDto
                     {
                         Type = node.Evidence.Type,
@@ -55,7 +52,8 @@ public class GraphService : IGraphService
                     Id = edge.Id,
                     From = edge.From,
                     To = edge.To,
-                    Kind = edge.Kind
+                    Kind = edge.Kind,
+                    ImportanceToParent = edge.ImportanceToParent
                 })
                 .ToList()
         };

@@ -9,4 +9,6 @@ public class GraphEdge
     public string To { get; set; } = string.Empty;
 
     public string Kind { get; set; } = string.Empty;
+
+    public int ImportanceToParent { get; set; } = 1;
 }

@@ -23,13 +23,22 @@ function getNodeSymbol(kind: string) {
       return '🌍'
     case 'claim':
       return '🌿'
-    case 'premise':
-      return '🌱'
+    // case 'premise':
+    //   return '🌱'
     case 'evidence':
       return '🔬'
-    default:
+    case 'objection':
       return '⚠️'
+    default:
+      return ''
   }
+}
+
+function formatMetricLogOdds(value?: number) {
+  if (value === null || value === undefined) {
+    return undefined; // Or an empty string, or a default value like '0.00'
+  }
+  return (1 / (1 + Math.exp(-value))*100).toFixed(2);
 }
 
 function formatMetricValue(value?: number) {
@@ -51,20 +60,15 @@ function getMetricForNode(node: GraphFixture['nodes'][number]) {
   switch (node.kind) {
     case 'root':
     case 'claim':
+    case 'objection':
       return {
-        metricLabel: 'Importance',
-        metricValue: formatMetricValue(node.importance),
-      }
-    case 'premise':
-    case 'counter':
-      return {
-        metricLabel: 'Confidence',
-        metricValue: formatMetricValue(node.confidence),
+        metricLabel: 'likely',
+        metricValue: formatMetricLogOdds(node.logOdds) + '%',
       }
     case 'evidence':
       return {
-        metricLabel: 'Score',
-        metricValue: formatMetricValue(node.evidence?.score),
+        metricLabel: 'likely',
+        metricValue: formatMetricValue(node.evidence?.score) + '%',
       }
     default:
       return {}

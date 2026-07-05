@@ -11,9 +11,6 @@ public class GraphNodeDto
     public string BodyText { get; set; } = string.Empty;
     public string? Category { get; set; }
     public List<string> Tags { get; set; } = new();
-    public decimal? Prior { get; set; }
-    public decimal? Confidence { get; set; }
-    public decimal? Weight { get; set; }
-    public decimal? Importance { get; set; }
+    public decimal? LogOdds { get; set; }
     public GraphEvidenceDto? Evidence { get; set; }
 }

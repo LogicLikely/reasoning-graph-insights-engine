@@ -218,7 +218,7 @@ describe('DemoPage', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Select evidence node' }))
-    fireEvent.click(screen.getByRole('button', { name: "Edit this node's title, type, and description" }))
+    fireEvent.click(screen.getByRole('button', { name: "Edit this node's title, type, likelihood, and description" }))
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     expect(window.alert).toHaveBeenCalledWith('This feature is not available in fixture mode.')

@@ -15,14 +15,13 @@ type PanelModeState = {
   mode: PanelMode
 }
 
-const emptyFormData = {
-  title: '',
-  bodyText: '',
-  kind: 'premise' as GraphFixtureNode['kind'],
-  confidence: 0.5
+function logOddsToProbability(logOdds: number): number {
+  return 1 / (1 + Math.exp(-logOdds))
 }
 
-const editableNodeKinds = ['premise', 'evidence', 'counter'] satisfies GraphFixtureNode['kind'][]
+function probabilityToLogOdds(probability: number): number {
+  return Math.log(probability / (1 - probability))
+}
 
 function formatMetric(value?: number) {
   if (value === null || value === undefined) {
@@ -30,6 +29,23 @@ function formatMetric(value?: number) {
   }
   return value.toFixed(2);
 }
+
+function formatLogOddsAsPercent(value?: number) {
+  if (value === null || value === undefined) {
+    return undefined; // Or an empty string, or a default value like '0.00'
+  }
+  return (logOddsToProbability(value) * 100).toFixed(2);
+}
+
+const emptyFormData = {
+  title: '',
+  bodyText: '',
+  kind: 'premise' as GraphFixtureNode['kind'],
+  likelihoodPercent: formatLogOddsAsPercent(0) ?? ''
+}
+
+const editableNodeKinds = ['claim', 'evidence', 'objection'] satisfies GraphFixtureNode['kind'][]
+
 export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }: GraphDetailsPanelProps) {
   const [modeState, setModeState] = useState<PanelModeState>({ mode: 'view' })
   const [formData, setFormData] = useState(emptyFormData)
@@ -50,17 +66,27 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
     )
   }
 
+  const likelihoodPercentValue = Number(formData.likelihoodPercent)
+  const isLikelihoodValid =
+    formData.likelihoodPercent.trim().length > 0 &&
+    Number.isFinite(likelihoodPercentValue) &&
+    likelihoodPercentValue > 0 &&
+    likelihoodPercentValue < 100
   const isFormValid =
     (formData.title?.trim() ?? '').length > 0 &&
-    (formData.bodyText?.trim() ?? '').length > 0
+    (formData.bodyText?.trim() ?? '').length > 0 &&
+    isLikelihoodValid
 
   const handleSave = () => {
     if (!isFormValid) return
 
+    const { likelihoodPercent, ...nodeData } = formData
+    const probability = Number(likelihoodPercent) / 100
     const submissionData = {
-      ...formData,
+      ...nodeData,
       title: (formData.title ?? '').trim(),
-      bodyText: (formData.bodyText ?? '').trim()
+      bodyText: (formData.bodyText ?? '').trim(),
+      logOdds: probabilityToLogOdds(probability)
     }
 
     if (mode === 'add') {
@@ -85,7 +111,7 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
       title: node.title ?? '',
       bodyText: node.bodyText ?? '',
       kind: node.kind,
-      confidence: node.confidence ?? 0.5
+      likelihoodPercent: formatLogOddsAsPercent(node.logOdds) ?? ''
     })
     setModeState({ nodeId: node.id, mode: 'edit' })
   }
@@ -146,6 +172,22 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
               onChange={(e) => setFormData({ ...formData, bodyText: e.target.value })}
             />
           </div>
+
+          <div className="form-group">
+            <label htmlFor="node-likelihood">Likelihood</label>
+            <input
+              id="node-likelihood"
+              className="form-input"
+              inputMode="decimal"
+              max="99.99"
+              min="0.01"
+              onChange={(e) => setFormData({ ...formData, likelihoodPercent: e.target.value })}
+              placeholder="50.00"
+              step="0.01"
+              type="number"
+              value={formData.likelihoodPercent}
+            />
+          </div>
         </div>
 
         <div className="actions-button-group form-actions">
@@ -197,28 +239,10 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
             </dd>
           </>
         ) : null}
-        {formatMetric(node.prior) ? (
+        {formatMetric(node.logOdds) ? (
           <>
-            <dt>Prior</dt>
-            <dd>{formatMetric(node.prior)}</dd>
-          </>
-        ) : null}
-        {formatMetric(node.confidence) ? (
-          <>
-            <dt>Confidence</dt>
-            <dd>{formatMetric(node.confidence)}</dd>
-          </>
-        ) : null}
-        {formatMetric(node.weight) ? (
-          <>
-            <dt>Weight</dt>
-            <dd>{formatMetric(node.weight)}</dd>
-          </>
-        ) : null}
-        {formatMetric(node.importance) ? (
-          <>
-            <dt>Importance</dt>
-            <dd>{formatMetric(node.importance)}</dd>
+            <dt>Likelihood</dt>
+            <dd>{formatLogOddsAsPercent(node.logOdds)}%</dd>
           </>
         ) : null}
         {node.evidence ? (
@@ -227,7 +251,7 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
             <dd className="graph-evidence-block">
               <strong>{node.evidence.type}</strong>
               {node.evidence.score !== undefined ? (
-                <span>Score: {node.evidence.score.toFixed(2)}</span>
+                <span>Score: {node.evidence?.score?.toFixed(2)}</span>
               ) : null}
               {node.evidence.rationale ? <p>{node.evidence.rationale}</p> : null}
             </dd>
@@ -248,8 +272,8 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
           </button>
           <button
             className="btn btn--secondary"
-            aria-label="Edit this node's title, type, and description"
-            data-tooltip="Edit this node's title, type, and description."
+            aria-label="Edit this node's title, type, likelihood, and description."
+            data-tooltip="Edit this node's title, type, likelihood, and description."
             onClick={enterEditMode}
           >
             Edit
