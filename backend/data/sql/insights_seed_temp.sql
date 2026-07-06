@@ -2,6 +2,8 @@
 -- PostgreSQL database dump
 --
 
+\restrict pd8CnGBvffEtVvQo4zesnInCZmpWZm46HZHp8b1Ob3NKtaRctJX79e6yNP6Ztaa
+
 -- Dumped from database version 17.4
 -- Dumped by pg_dump version 18.2
 
@@ -337,4 +339,6 @@ ALTER TABLE ONLY public.nodes
 --
 -- PostgreSQL database dump complete
 --
+
+\unrestrict pd8CnGBvffEtVvQo4zesnInCZmpWZm46HZHp8b1Ob3NKtaRctJX79e6yNP6Ztaa
 

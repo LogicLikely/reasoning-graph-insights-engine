@@ -159,18 +159,13 @@ public class GraphRepository : IGraphRepository
         public string BodyText { get; set; } = default!;
         public string? Category { get; set; }
         public string[]? Tags { get; set; }
-        public decimal? LogOdds { get; set; }
+        public decimal LogOdds { get; set; }
         public string? Evidence { get; set; }
     }
 
-    private static decimal? GetEvidenceScoreFromLogOdds(decimal? logOdds)
+    private static decimal GetEvidenceScoreFromLogOdds(decimal logOdds)
     {
-        if (logOdds is null)
-        {
-            return null;
-        }
-
-        var probability = 1 / (1 + Math.Exp(-(double)logOdds.Value));
+        var probability = 1 / (1 + Math.Exp(-(double)logOdds));
         var score = (decimal)probability * 100;
         var boundedScore = Math.Min(99.99m, Math.Max(0.01m, score));
 
@@ -180,14 +175,10 @@ public class GraphRepository : IGraphRepository
     private static string? SerializeEvidenceForNode(GraphNodeDto node)
     {
         var evidence = node.Evidence;
-        var evidenceScore = string.Equals(node.Kind, "evidence", StringComparison.OrdinalIgnoreCase)
-            ? GetEvidenceScoreFromLogOdds(node.LogOdds)
-            : null;
-
-        if (evidenceScore is not null)
+        if (string.Equals(node.Kind, "evidence", StringComparison.OrdinalIgnoreCase))
         {
             evidence ??= new GraphEvidenceDto();
-            evidence.Score = evidenceScore;
+            evidence.Score = GetEvidenceScoreFromLogOdds(node.LogOdds);
         }
 
         return evidence != null
@@ -336,7 +327,9 @@ public class GraphRepository : IGraphRepository
                 node.Title,
                 node.BodyText,
                 node.LogOdds,
-                EvidenceScore = GetEvidenceScoreFromLogOdds(node.LogOdds)
+                EvidenceScore = node.LogOdds.HasValue
+                    ? GetEvidenceScoreFromLogOdds(node.LogOdds.Value)
+                    : (decimal?)null
             },
             cancellationToken: cancellationToken));
 
@@ -403,6 +396,40 @@ public class GraphRepository : IGraphRepository
             cancellationToken: cancellationToken));
 
         return rowsAffected > 0;
+    }
+
+    public async Task UpdateNodeLogOddsBatchAsync(
+        int graphId,
+        IReadOnlyDictionary<string, decimal> logOddsByNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (logOddsByNodeId.Count == 0)
+        {
+            return;
+        }
+
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        const string UpdateNodeLogOddsSql = """
+            UPDATE nodes
+            SET
+                log_odds = @LogOdds,
+                updated_at = now()
+            WHERE id = @NodeId
+            AND graph_id = @GraphId;
+            """;
+
+        var updateRows = logOddsByNodeId.Select(entry => new
+        {
+            GraphId = graphId,
+            NodeId = entry.Key,
+            LogOdds = entry.Value
+        });
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            UpdateNodeLogOddsSql,
+            updateRows,
+            cancellationToken: cancellationToken));
     }
 
     public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)

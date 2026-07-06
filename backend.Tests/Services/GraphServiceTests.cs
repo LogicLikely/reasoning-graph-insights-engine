@@ -1,3 +1,4 @@
+using Backend.Calculation;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Backend.Repositories;
@@ -18,7 +19,7 @@ public class GraphServiceTests
             .Setup(repository => repository.GetBySlugAsync("missing", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Graph?)null);
 
-        var service = new GraphService(repositoryMock.Object);
+        var service = CreateService(repositoryMock.Object);
 
         var result = await service.GetBySlugAsync("missing", CancellationToken.None);
 
@@ -61,7 +62,7 @@ public class GraphServiceTests
             .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
             .ReturnsAsync(graph);
 
-        var service = new GraphService(repositoryMock.Object);
+        var service = CreateService(repositoryMock.Object);
 
         var result = await service.GetBySlugAsync("sample-medium", CancellationToken.None);
 
@@ -90,7 +91,7 @@ public class GraphServiceTests
             .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Graph?)null);
 
-        var service = new GraphService(repositoryMock.Object);
+        var service = CreateService(repositoryMock.Object);
 
         await service.GetBySlugAsync("sample-medium", CancellationToken.None);
 
@@ -119,13 +120,336 @@ public class GraphServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        var service = new GraphService(repositoryMock.Object);
+        var service = CreateService(repositoryMock.Object);
 
         var result = await service.UpdateNodeAsync("sample-medium", "P1", update, CancellationToken.None);
 
         Assert.IsTrue(result);
         repositoryMock.Verify(
             repository => repository.UpdateNodeAsync("sample-medium", "P1", update, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_RecalculatesParentLogOdds()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("A"),
+                Node("B", 1m)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 10)]);
+        var update = new GraphNodeUpdateDto { LogOdds = 1m };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync("sample-medium", "B", update, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "B", update);
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 1 && expected["A"] == 1m);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_RecalculatesParentUsingSiblings()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("B"),
+                Node("E", 1m),
+                Node("F", -0.5m)
+            ],
+            [
+                Edge("E-E-B", "E", "B", "support", 10),
+                Edge("E-F-B", "F", "B", "support", 10)
+            ]);
+        var update = new GraphNodeUpdateDto { LogOdds = -0.5m };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync("sample-medium", "F", update, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "F", update);
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 1 && expected["B"] == 0.5m);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_RecalculatesAncestors()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("A"),
+                Node("B"),
+                Node("F", 1m)
+            ],
+            [
+                Edge("E-F-B", "F", "B", "support", 10),
+                Edge("E-B-A", "B", "A", "support", 10)
+            ]);
+        var update = new GraphNodeUpdateDto { LogOdds = 1m };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync("sample-medium", "F", update, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "F", update);
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 2 && expected["B"] == 1m && expected["A"] == 1m);
+    }
+
+    [TestMethod]
+    public async Task UpdateEdgeAsync_RecalculatesParentAfterImportanceUpdate()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("A"),
+                Node("B", 1m)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 10)]);
+        var update = new GraphEdgeUpdateDto { ImportanceToParent = 10 };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateEdgeAsync("sample-medium", "E-B-A", update, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).UpdateEdgeAsync("sample-medium", "E-B-A", update);
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 1 && expected["A"] == 1m);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_RootUpdateSucceedsWithoutAncestorBatch()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith([Node("A", 1m)], []);
+        var update = new GraphNodeUpdateDto { LogOdds = 1m };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync("sample-medium", "A", update, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "A", update);
+
+        Assert.IsTrue(result);
+        repositoryMock.Verify(
+            repository => repository.UpdateNodeLogOddsBatchAsync(
+                It.IsAny<int>(),
+                It.IsAny<IReadOnlyDictionary<string, decimal>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_RecalculatesRebutParent()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("A"),
+                Node("B", 1m)
+            ],
+            [Edge("E-B-A", "B", "A", "rebut", 10)]);
+        var update = new GraphNodeUpdateDto { LogOdds = 1m };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync("sample-medium", "B", update, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "B", update);
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 1 && expected["A"] == -1m);
+    }
+
+    [TestMethod]
+    public async Task DeleteNodeAsync_RecalculatesParentFromRemainingChildren()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graphBeforeDelete = GraphWith(
+            [
+                Node("A"),
+                Node("B", 1m),
+                Node("C", 0.5m)
+            ],
+            [
+                Edge("E-B-A", "B", "A", "support", 10),
+                Edge("E-C-A", "C", "A", "support", 10)
+            ]);
+        var graphAfterDelete = GraphWith(
+            [
+                Node("A"),
+                Node("C", 0.5m)
+            ],
+            [Edge("E-C-A", "C", "A", "support", 10)]);
+
+        repositoryMock
+            .SetupSequence(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graphBeforeDelete)
+            .ReturnsAsync(graphAfterDelete);
+        repositoryMock
+            .Setup(repository => repository.DeleteNodeAsync("sample-medium", "B", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await CreateService(repositoryMock.Object).DeleteNodeAsync("sample-medium", "B");
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
+            expected.Count == 1 && expected["A"] == 0.5m);
+    }
+
+    [TestMethod]
+    public async Task DeleteNodeAsync_RecalculatesParentToZeroWhenNoChildrenRemain()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graphBeforeDelete = GraphWith(
+            [
+                Node("A", 1m),
+                Node("B", 1m)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 10)]);
+        var graphAfterDelete = GraphWith([Node("A", 1m)], []);
+
+        repositoryMock
+            .SetupSequence(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graphBeforeDelete)
+            .ReturnsAsync(graphAfterDelete);
+        repositoryMock
+            .Setup(repository => repository.DeleteNodeAsync("sample-medium", "B", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await CreateService(repositoryMock.Object).DeleteNodeAsync("sample-medium", "B");
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
+            expected.Count == 1 && expected["A"] == 0m);
+    }
+
+    [TestMethod]
+    public async Task DeleteNodeAsync_RecalculatesAncestorsAfterParentChanges()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graphBeforeDelete = GraphWith(
+            [
+                Node("A", 1m),
+                Node("B", 1m),
+                Node("F", 1m)
+            ],
+            [
+                Edge("E-F-B", "F", "B", "support", 10),
+                Edge("E-B-A", "B", "A", "support", 10)
+            ]);
+        var graphAfterDelete = GraphWith(
+            [
+                Node("A", 1m),
+                Node("B", 1m)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 10)]);
+
+        repositoryMock
+            .SetupSequence(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graphBeforeDelete)
+            .ReturnsAsync(graphAfterDelete);
+        repositoryMock
+            .Setup(repository => repository.DeleteNodeAsync("sample-medium", "F", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await CreateService(repositoryMock.Object).DeleteNodeAsync("sample-medium", "F");
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
+            expected.Count == 2 && expected["B"] == 0m && expected["A"] == 0m);
+    }
+
+    private static GraphService CreateService(IGraphRepository repository)
+    {
+        return new GraphService(repository, new GraphLikelihoodCalculator());
+    }
+
+    private static Graph GraphWith(
+        List<GraphNode> nodes,
+        List<GraphEdge> edges)
+    {
+        return new Graph
+        {
+            Id = 10,
+            Slug = "sample-medium",
+            Title = "Sample",
+            Nodes = nodes,
+            Edges = edges
+        };
+    }
+
+    private static GraphNode Node(string id, decimal logOdds = 0m)
+    {
+        return new GraphNode
+        {
+            Id = id,
+            Kind = "claim",
+            Title = id,
+            BodyText = id,
+            LogOdds = logOdds
+        };
+    }
+
+    private static GraphEdge Edge(
+        string id,
+        string from,
+        string to,
+        string kind,
+        int importanceToParent)
+    {
+        return new GraphEdge
+        {
+            Id = id,
+            From = from,
+            To = to,
+            Kind = kind,
+            ImportanceToParent = importanceToParent
+        };
+    }
+
+    private static void VerifyBatch(
+        Mock<IGraphRepository> repositoryMock,
+        int graphId,
+        Func<IReadOnlyDictionary<string, decimal>, bool> matches)
+    {
+        repositoryMock.Verify(
+            repository => repository.UpdateNodeLogOddsBatchAsync(
+                graphId,
+                It.Is<IReadOnlyDictionary<string, decimal>>(values => matches(values)),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }
