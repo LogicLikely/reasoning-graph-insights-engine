@@ -59,10 +59,12 @@ public class GraphsController : ControllerBase
         string slug,
         [FromBody] GraphNodeDto nodeDto,
         CancellationToken cancellationToken,
-        [FromQuery] string? parentID = null)
+        [FromQuery] string? parentID = null,
+        [FromQuery] string edgeKind = "support",
+        [FromQuery] int importanceToParent = 1)
     {
         Console.WriteLine($"Adding node to graph {slug}");
-        var success = await _graphService.AddNodeAsync(slug, nodeDto, parentID, cancellationToken);
+        var success = await _graphService.AddNodeAsync(slug, nodeDto, parentID, edgeKind, importanceToParent, cancellationToken);
 
         if (!success)
         {
@@ -71,6 +73,43 @@ public class GraphsController : ControllerBase
         }
 
         return CreatedAtAction(nameof(GetBySlug), new { slug }, nodeDto);
+    }
+
+    [HttpPost("{slug}/edges")]
+    public async Task<IActionResult> AddEdge(
+        string slug,
+        [FromBody] GraphEdgeDto edgeDto,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Adding edge to graph {slug}");
+        var success = await _graphService.AddEdgeAsync(slug, edgeDto, cancellationToken);
+
+        if (!success)
+        {
+            Console.WriteLine($"Failed to add edge to graph {slug}");
+            return NotFound();
+        }
+
+        return CreatedAtAction(nameof(GetBySlug), new { slug }, edgeDto);
+    }
+
+    [HttpPatch("{slug}/edges/{edgeId}")]
+    public async Task<IActionResult> UpdateEdge(
+        string slug,
+        string edgeId,
+        [FromBody] GraphEdgeUpdateDto edgeDto,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Updating edge {edgeId} in graph {slug}");
+        var success = await _graphService.UpdateEdgeAsync(slug, edgeId, edgeDto, cancellationToken);
+
+        if (!success)
+        {
+            Console.WriteLine($"Failed to update edge {edgeId} in graph {slug}");
+            return NotFound();
+        }
+
+        return NoContent();
     }
 
     [HttpPatch("{slug}/nodes/{nodeId}")]

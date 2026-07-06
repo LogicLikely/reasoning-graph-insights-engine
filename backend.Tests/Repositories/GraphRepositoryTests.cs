@@ -3,6 +3,7 @@ using Backend.Models.Dto;
 using Backend.Repositories;
 using Microsoft.Extensions.Hosting;
 using Moq;
+using System.Text.Json;
 
 namespace backend.Tests.Repositories;
 
@@ -73,7 +74,8 @@ public class GraphRepositoryTests
                     ["id"] = "E-R-C1",
                     ["From"] = "C1",
                     ["To"] = "R1",
-                    ["kind"] = "support"
+                    ["kind"] = "support",
+                    ["ImportanceToParent"] = 8
                 }
             ]);
 
@@ -101,6 +103,7 @@ public class GraphRepositoryTests
         Assert.AreEqual("C1", result.Edges[0].From);
         Assert.AreEqual("R1", result.Edges[0].To);
         Assert.AreEqual("support", result.Edges[0].Kind);
+        Assert.AreEqual(8, result.Edges[0].ImportanceToParent);
         Assert.AreEqual(3, connection.ExecutedCommands.Count);
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual(1, connection.ExecutedCommands[1].Parameters["GraphId"]);
@@ -120,10 +123,10 @@ public class GraphRepositoryTests
         var repository = CreateRepository(connectionFactoryMock.Object);
         var update = new GraphNodeUpdateDto
         {
-            Kind = "premise",
+            Kind = "objection",
             Title = "Updated title",
             BodyText = "Updated body",
-            Confidence = 0.75m
+            LogOdds = 0.75m
         };
 
         var result = await repository.UpdateNodeAsync("sample-medium", "P1", update, CancellationToken.None);
@@ -131,12 +134,187 @@ public class GraphRepositoryTests
         Assert.IsTrue(result);
         Assert.AreEqual(1, connection.ExecutedCommands.Count);
         Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE nodes"));
+        Assert.IsFalse(connection.ExecutedCommands[0].CommandText.Contains("kind ="));
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual("P1", connection.ExecutedCommands[0].Parameters["NodeId"]);
-        Assert.AreEqual("premise", connection.ExecutedCommands[0].Parameters["Kind"]);
+        Assert.IsFalse(connection.ExecutedCommands[0].Parameters.ContainsKey("Kind"));
         Assert.AreEqual("Updated title", connection.ExecutedCommands[0].Parameters["Title"]);
         Assert.AreEqual("Updated body", connection.ExecutedCommands[0].Parameters["BodyText"]);
-        Assert.AreEqual(0.75m, connection.ExecutedCommands[0].Parameters["Confidence"]);
+        Assert.AreEqual(0.75m, connection.ExecutedCommands[0].Parameters["LogOdds"]);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_UpdatesEvidenceScoreFromLogOddsForEvidenceNode()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var update = new GraphNodeUpdateDto
+        {
+            Kind = "evidence",
+            LogOdds = 0m
+        };
+
+        var result = await repository.UpdateNodeAsync("sample-medium", "E1", update, CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("jsonb_set"));
+        Assert.AreEqual(50.00m, connection.ExecutedCommands[0].Parameters["EvidenceScore"]);
+    }
+
+    [TestMethod]
+    public async Task AddNodeAsync_SerializesEvidenceScoreFromLogOddsForEvidenceNode()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var node = new GraphNodeDto
+        {
+            Id = "E-new",
+            Kind = "evidence",
+            Title = "New evidence",
+            BodyText = "New evidence body",
+            LogOdds = 0m,
+            Evidence = new GraphEvidenceDto
+            {
+                Type = "observational",
+                Rationale = "A rationale"
+            }
+        };
+
+        var result = await repository.AddNodeAsync("sample-medium", node, cancellationToken: CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+
+        var evidenceJson = connection.ExecutedCommands[0].Parameters["Evidence"] as string;
+        Assert.IsNotNull(evidenceJson);
+
+        using var evidence = JsonDocument.Parse(evidenceJson);
+        Assert.AreEqual("observational", evidence.RootElement.GetProperty("type").GetString());
+        Assert.AreEqual(50.00m, evidence.RootElement.GetProperty("score").GetDecimal());
+        Assert.AreEqual("A rationale", evidence.RootElement.GetProperty("rationale").GetString());
+    }
+
+    [TestMethod]
+    public async Task AddEdgeAsync_InsertsParentRelation()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var edge = new GraphEdgeDto
+        {
+            From = "E1",
+            To = "C2",
+            Kind = "rebut",
+            ImportanceToParent = 3
+        };
+
+        var result = await repository.AddEdgeAsync("sample-medium", edge, CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("INSERT INTO edges"));
+        Assert.AreEqual("e-E1-C2", connection.ExecutedCommands[0].Parameters["Id"]);
+        Assert.AreEqual("E1", connection.ExecutedCommands[0].Parameters["From"]);
+        Assert.AreEqual("C2", connection.ExecutedCommands[0].Parameters["To"]);
+        Assert.AreEqual("rebut", connection.ExecutedCommands[0].Parameters["Kind"]);
+        Assert.AreEqual(3, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
+    }
+
+    [TestMethod]
+    public async Task UpdateEdgeAsync_UpdatesImportanceToParent()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var edge = new GraphEdgeUpdateDto
+        {
+            ImportanceToParent = 7
+        };
+
+        var result = await repository.UpdateEdgeAsync("sample-medium", "E-C1-E1", edge, CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE edges"));
+        Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
+        Assert.AreEqual("E-C1-E1", connection.ExecutedCommands[0].Parameters["EdgeId"]);
+        Assert.AreEqual(7, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeLogOddsBatchAsync_DoesNothingWhenDictionaryIsEmpty()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+
+        await repository.UpdateNodeLogOddsBatchAsync(1, new Dictionary<string, decimal>(), CancellationToken.None);
+
+        Assert.AreEqual(0, connection.ExecutedCommands.Count);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeLogOddsBatchAsync_UpdatesOnlyLogOddsForGraphNodes()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+
+        await repository.UpdateNodeLogOddsBatchAsync(
+            5,
+            new Dictionary<string, decimal>
+            {
+                ["A"] = 1.25m,
+                ["B"] = -0.5m
+            },
+            CancellationToken.None);
+
+        Assert.AreEqual(2, connection.ExecutedCommands.Count);
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE nodes"));
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("log_odds = @LogOdds"));
+        Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("updated_at = now()"));
+        Assert.IsFalse(connection.ExecutedCommands[0].CommandText.Contains("title ="));
+        Assert.IsFalse(connection.ExecutedCommands[0].CommandText.Contains("body_text ="));
+        Assert.IsFalse(connection.ExecutedCommands[0].CommandText.Contains("kind ="));
+        Assert.AreEqual(5, connection.ExecutedCommands[0].Parameters["GraphId"]);
+        Assert.AreEqual("A", connection.ExecutedCommands[0].Parameters["NodeId"]);
+        Assert.AreEqual(1.25m, connection.ExecutedCommands[0].Parameters["LogOdds"]);
+        Assert.AreEqual(5, connection.ExecutedCommands[1].Parameters["GraphId"]);
+        Assert.AreEqual("B", connection.ExecutedCommands[1].Parameters["NodeId"]);
+        Assert.AreEqual(-0.5m, connection.ExecutedCommands[1].Parameters["LogOdds"]);
     }
 
     private static GraphRepository CreateRepository(DbConnectionFactory connectionFactory)

@@ -1,4 +1,5 @@
 using Backend.Configuration;
+using Backend.Calculation;
 using Backend.Data;
 using Backend.Repositories;
 using Backend.Services;
@@ -17,6 +18,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DbConnectionFactory>();
         services.AddScoped<IGraphRepository, GraphRepository>();
         services.AddScoped<IGraphService, GraphService>();
+        services.AddSingleton<GraphLikelihoodCalculator>();
 
         return services;
     }

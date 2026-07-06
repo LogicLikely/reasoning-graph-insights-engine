@@ -1,12 +1,20 @@
 import { useState } from 'react'
-import type { GraphFixtureNode } from '../../fixtures/sampleGraph'
+import type { GraphFixtureEdge, GraphFixtureNode } from '../../fixtures/sampleGraph'
 import './GraphDetailsPanel.css'
 
 interface GraphDetailsPanelProps {
   node?: GraphFixtureNode
+  nodes?: GraphFixtureNode[]
+  edges?: GraphFixtureEdge[]
   onDelete?: (id: string) => void
-  onAddSupporting?: (parentId: string, data: Partial<GraphFixtureNode>) => void
+  onAddSupporting?: (
+    parentId: string,
+    data: Partial<GraphFixtureNode>,
+    edge: Pick<GraphFixtureEdge, 'kind' | 'importanceToParent'>,
+  ) => void
   onUpdate?: (id: string, data: Partial<GraphFixtureNode>) => void
+  onUpdateEdge?: (edgeId: string, data: Partial<Pick<GraphFixtureEdge, 'importanceToParent'>>) => void
+  onAddParentEdge?: (edge: Omit<GraphFixtureEdge, 'id'>) => void
 }
 
 type PanelMode = 'view' | 'add' | 'edit'
@@ -15,14 +23,13 @@ type PanelModeState = {
   mode: PanelMode
 }
 
-const emptyFormData = {
-  title: '',
-  bodyText: '',
-  kind: 'premise' as GraphFixtureNode['kind'],
-  confidence: 0.5
+function logOddsToProbability(logOdds: number): number {
+  return 1 / (1 + Math.exp(-logOdds))
 }
 
-const editableNodeKinds = ['premise', 'evidence', 'counter'] satisfies GraphFixtureNode['kind'][]
+function probabilityToLogOdds(probability: number): number {
+  return Math.log(probability / (1 - probability))
+}
 
 function formatMetric(value?: number) {
   if (value === null || value === undefined) {
@@ -30,9 +37,53 @@ function formatMetric(value?: number) {
   }
   return value.toFixed(2);
 }
-export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }: GraphDetailsPanelProps) {
+
+function formatLogOddsAsPercent(value?: number) {
+  if (value === null || value === undefined) {
+    return undefined; // Or an empty string, or a default value like '0.00'
+  }
+  return (logOddsToProbability(value) * 100).toFixed(2);
+}
+
+const emptyFormData = {
+  title: '',
+  bodyText: '',
+  kind: 'claim' as GraphFixtureNode['kind'],
+  likelihoodPercent: formatLogOddsAsPercent(0) ?? '',
+  parentImportance: '1'
+}
+
+const editableNodeKinds = ['claim', 'evidence', 'objection'] satisfies GraphFixtureNode['kind'][]
+
+function formatEdgeVerb(kind: GraphFixtureEdge['kind']) {
+  return kind === 'rebut' ? 'counters' : 'supports'
+}
+
+function getEdgeKindForNodeKind(kind: GraphFixtureNode['kind']): GraphFixtureEdge['kind'] {
+  return kind === 'objection' ? 'rebut' : 'support'
+}
+
+function formatEdgeKindLabel(kind: GraphFixtureEdge['kind']) {
+  return kind === 'rebut' ? 'Counter' : 'Support'
+}
+
+export function GraphDetailsPanel({
+  node,
+  nodes = [],
+  edges = [],
+  onDelete,
+  onAddSupporting,
+  onUpdate,
+  onUpdateEdge,
+  onAddParentEdge,
+}: GraphDetailsPanelProps) {
   const [modeState, setModeState] = useState<PanelModeState>({ mode: 'view' })
   const [formData, setFormData] = useState(emptyFormData)
+  const [edgeImportanceData, setEdgeImportanceData] = useState<Record<string, string>>({})
+  const [newParentEdge, setNewParentEdge] = useState({
+    parentId: '',
+    importanceToParent: '1'
+  })
   const mode = node && modeState.nodeId === node.id ? modeState.mode : 'view'
 
   if (!node) {
@@ -50,42 +101,102 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
     )
   }
 
+  const parentRelations = edges
+    .filter((edge) => edge.from === node.id)
+    .map((edge) => ({
+      edge,
+      parent: nodes.find((candidate) => candidate.id === edge.to),
+    }))
+    .filter((relation): relation is { edge: GraphFixtureEdge, parent: GraphFixtureNode } => Boolean(relation.parent))
+  const existingParentIds = new Set(parentRelations.map((relation) => relation.parent.id))
+  const availableParentNodes = nodes.filter((candidate) => candidate.id !== node.id && !existingParentIds.has(candidate.id))
+  const likelihoodPercentValue = Number(formData.likelihoodPercent)
+  const parentImportanceValue = Number(formData.parentImportance)
+  const derivedEdgeKind = getEdgeKindForNodeKind(formData.kind)
+  const derivedEdgeKindLabel = formatEdgeKindLabel(derivedEdgeKind)
+  const edgeImportanceValues = parentRelations.map((relation) => Number(edgeImportanceData[relation.edge.id] ?? relation.edge.importanceToParent))
+  const newParentImportanceValue = Number(newParentEdge.importanceToParent)
+  const isLikelihoodValid =
+    formData.likelihoodPercent.trim().length > 0 &&
+    Number.isFinite(likelihoodPercentValue) &&
+    likelihoodPercentValue > 0 &&
+    likelihoodPercentValue < 100
+  const isImportanceValid = (value: number) => Number.isInteger(value) && value >= 1 && value <= 10
+  const isParentImportanceValid = isImportanceValid(parentImportanceValue)
+  const areEdgeImportancesValid = edgeImportanceValues.every(isImportanceValid)
+  const isNewParentEdgeValid =
+    newParentEdge.parentId.length === 0 ||
+    (isImportanceValid(newParentImportanceValue) && availableParentNodes.some((parent) => parent.id === newParentEdge.parentId))
   const isFormValid =
     (formData.title?.trim() ?? '').length > 0 &&
-    (formData.bodyText?.trim() ?? '').length > 0
+    (formData.bodyText?.trim() ?? '').length > 0 &&
+    isLikelihoodValid &&
+    (mode === 'add' ? isParentImportanceValid : areEdgeImportancesValid && isNewParentEdgeValid)
 
   const handleSave = () => {
     if (!isFormValid) return
 
-    const submissionData = {
-      ...formData,
+    const probability = Number(formData.likelihoodPercent) / 100
+    const submissionData: Partial<GraphFixtureNode> = {
       title: (formData.title ?? '').trim(),
-      bodyText: (formData.bodyText ?? '').trim()
+      bodyText: (formData.bodyText ?? '').trim(),
+      logOdds: probabilityToLogOdds(probability)
     }
 
     if (mode === 'add') {
       onAddSupporting?.(node.id, {
         ...submissionData,
+        kind: formData.kind,
         tags: ['dynamic']
+      }, {
+        kind: derivedEdgeKind,
+        importanceToParent: parentImportanceValue
       })
     } else if (mode === 'edit') {
       onUpdate?.(node.id, submissionData)
+      parentRelations.forEach((relation) => {
+        const nextImportance = Number(edgeImportanceData[relation.edge.id] ?? relation.edge.importanceToParent)
+        if (nextImportance !== relation.edge.importanceToParent) {
+          onUpdateEdge?.(relation.edge.id, { importanceToParent: nextImportance })
+        }
+      })
+      if (newParentEdge.parentId.length > 0) {
+        onAddParentEdge?.({
+          from: node.id,
+          to: newParentEdge.parentId,
+          kind: derivedEdgeKind,
+          importanceToParent: newParentImportanceValue,
+        })
+      }
     }
     setModeState({ nodeId: node.id, mode: 'view' })
     setFormData(emptyFormData)
+    setEdgeImportanceData({})
+    setNewParentEdge({ parentId: '', importanceToParent: '1' })
   }
 
   const enterAddMode = () => {
     setFormData(emptyFormData)
+    setEdgeImportanceData({})
+    setNewParentEdge({ parentId: '', importanceToParent: '1' })
     setModeState({ nodeId: node.id, mode: 'add' })
   }
 
   const enterEditMode = () => {
+    const parentImportanceEntries = Object.fromEntries(
+      parentRelations.map((relation) => [relation.edge.id, String(relation.edge.importanceToParent)]),
+    )
     setFormData({
       title: node.title ?? '',
       bodyText: node.bodyText ?? '',
       kind: node.kind,
-      confidence: node.confidence ?? 0.5
+      likelihoodPercent: formatLogOddsAsPercent(node.logOdds) ?? '',
+      parentImportance: '1'
+    })
+    setEdgeImportanceData(parentImportanceEntries)
+    setNewParentEdge({
+      parentId: '',
+      importanceToParent: '1'
     })
     setModeState({ nodeId: node.id, mode: 'edit' })
   }
@@ -122,19 +233,50 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
           </div>
 
           <div className="form-group">
-            <label htmlFor="node-kind">Type</label>
-            <select
-              id="node-kind"
+            {isEdit ? (
+              <>
+                <span id="node-kind-label" className="form-group__label">Type</span>
+                <div
+                  aria-labelledby="node-kind-label"
+                  className="form-input form-input--readonly"
+                  role="textbox"
+                >
+                  {formData.kind}
+                </div>
+              </>
+            ) : (
+              <>
+                <label htmlFor="node-kind">Type</label>
+                <select
+                  id="node-kind"
+                  className="form-input"
+                  value={formData.kind}
+                  onChange={(e) => setFormData({ ...formData, kind: e.target.value as GraphFixtureNode['kind'] })}
+                >
+                  {editableNodeKinds.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {kind}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="node-likelihood">Likelihood</label>
+            <input
+              id="node-likelihood"
               className="form-input"
-              value={formData.kind}
-                onChange={(e) => setFormData({ ...formData, kind: e.target.value as GraphFixtureNode['kind'] })}
-              >
-                {editableNodeKinds.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {kind}
-                  </option>
-                ))}
-              </select>
+              inputMode="decimal"
+              max="99.99"
+              min="0.01"
+              onChange={(e) => setFormData({ ...formData, likelihoodPercent: e.target.value })}
+              placeholder="50.00"
+              step="0.01"
+              type="number"
+              value={formData.likelihoodPercent}
+            />
           </div>
 
           <div className="form-group">
@@ -146,6 +288,93 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
               onChange={(e) => setFormData({ ...formData, bodyText: e.target.value })}
             />
           </div>
+
+          {isEdit ? (
+            <section className="node-section node-edge-form">
+              <h4>Parent Relations</h4>
+              {parentRelations.length ? (
+                <div className="node-edge-form__list">
+                  {parentRelations.map((relation) => (
+                    <div className="node-edge-form__row" key={relation.edge.id}>
+                      <p>
+                        This node {formatEdgeVerb(relation.edge.kind)} <strong>{relation.parent.title}</strong>
+                      </p>
+                      <label htmlFor={`edge-importance-${relation.edge.id}`}>Importance to that claim</label>
+                      <input
+                        id={`edge-importance-${relation.edge.id}`}
+                        className="form-input"
+                        max="10"
+                        min="1"
+                        onChange={(event) => setEdgeImportanceData({
+                          ...edgeImportanceData,
+                          [relation.edge.id]: event.target.value,
+                        })}
+                        step="1"
+                        type="number"
+                        value={edgeImportanceData[relation.edge.id] ?? String(relation.edge.importanceToParent)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="node-edge-form__empty">No parent relations.</p>
+              )}
+
+              {availableParentNodes.length ? (
+                <div className="node-edge-form__add">
+                  <div className="form-group">
+                    <label htmlFor="new-parent-node">Additional Parent {derivedEdgeKindLabel}</label>
+                    <select
+                      id="new-parent-node"
+                      className="form-input"
+                      onChange={(event) => setNewParentEdge({ ...newParentEdge, parentId: event.target.value })}
+                      value={newParentEdge.parentId}
+                    >
+                      <option value="">None</option>
+                      {availableParentNodes.map((parent) => (
+                        <option key={parent.id} value={parent.id}>
+                          {parent.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="new-parent-importance">Importance to that claim</label>
+                    <input
+                      id="new-parent-importance"
+                      className="form-input"
+                      max="10"
+                      min="1"
+                      onChange={(event) => setNewParentEdge({
+                        ...newParentEdge,
+                        importanceToParent: event.target.value,
+                      })}
+                      step="1"
+                      type="number"
+                      value={newParentEdge.importanceToParent}
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : (
+            <section className="node-section node-edge-form">
+              <h4>Relation to selected node: {derivedEdgeKindLabel}</h4>
+              <div className="form-group">
+                <label htmlFor="parent-edge-importance">Importance to that claim</label>
+                <input
+                  id="parent-edge-importance"
+                  className="form-input"
+                  max="10"
+                  min="1"
+                  onChange={(event) => setFormData({ ...formData, parentImportance: event.target.value })}
+                  step="1"
+                  type="number"
+                  value={formData.parentImportance}
+                />
+              </div>
+            </section>
+          )}
         </div>
 
         <div className="actions-button-group form-actions">
@@ -197,43 +426,40 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
             </dd>
           </>
         ) : null}
-        {formatMetric(node.prior) ? (
+        {formatMetric(node.logOdds) ? (
           <>
-            <dt>Prior</dt>
-            <dd>{formatMetric(node.prior)}</dd>
+            <dt>Likelihood</dt>
+            <dd>{formatLogOddsAsPercent(node.logOdds)}%</dd>
           </>
         ) : null}
-        {formatMetric(node.confidence) ? (
-          <>
-            <dt>Confidence</dt>
-            <dd>{formatMetric(node.confidence)}</dd>
-          </>
-        ) : null}
-        {formatMetric(node.weight) ? (
-          <>
-            <dt>Weight</dt>
-            <dd>{formatMetric(node.weight)}</dd>
-          </>
-        ) : null}
-        {formatMetric(node.importance) ? (
-          <>
-            <dt>Importance</dt>
-            <dd>{formatMetric(node.importance)}</dd>
-          </>
-        ) : null}
-        {node.evidence ? (
+        {node.kind == 'evidence' && node.evidence ? (
           <>
             <dt>Evidence</dt>
             <dd className="graph-evidence-block">
               <strong>{node.evidence.type}</strong>
-              {node.evidence.score !== undefined ? (
-                <span>Score: {node.evidence.score.toFixed(2)}</span>
-              ) : null}
               {node.evidence.rationale ? <p>{node.evidence.rationale}</p> : null}
             </dd>
           </>
         ) : null}
       </dl>
+
+      <section className="node-section node-relations">
+        <h4>Parent Relations</h4>
+        {parentRelations.length ? (
+          <div className="node-relations__list">
+            {parentRelations.map((relation) => (
+              <article className="node-relation" key={relation.edge.id}>
+                <p>
+                  This node {formatEdgeVerb(relation.edge.kind)} <strong>{relation.parent.title}</strong>
+                </p>
+                <span>Importance to that claim: {relation.edge.importanceToParent}/10</span>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="node-relations__empty">No parent relations.</p>
+        )}
+      </section>
 
       <section className="node-section node-actions">
         <h4>Node Actions</h4>
@@ -248,8 +474,8 @@ export function GraphDetailsPanel({ node, onDelete, onAddSupporting, onUpdate }:
           </button>
           <button
             className="btn btn--secondary"
-            aria-label="Edit this node's title, type, and description"
-            data-tooltip="Edit this node's title, type, and description."
+            aria-label="Edit this node's title, type, likelihood, and description."
+            data-tooltip="Edit this node's title, type, likelihood, and description."
             onClick={enterEditMode}
           >
             Edit

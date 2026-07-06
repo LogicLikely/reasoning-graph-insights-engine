@@ -1,17 +1,8 @@
-export type GraphNodeKind = 'root' | 'claim' | 'evidence' | 'objection'
-
-export type EvidenceType =
-  | 'observational'
-  | 'statistical'
-  | 'instrumental'
-  | 'documentary'
-  | 'experimental'
-  | 'physical'
-  | 'testimony'
+export type GraphNodeKind = 'root' | 'claim' | 'premise' | 'counter' | 'evidence'
 
 export interface GraphEvidenceDetails {
-  type: EvidenceType
-  score: number
+  type: string
+  score?: number
   rationale?: string
 }
 
@@ -22,7 +13,10 @@ export interface GraphFixtureNode {
   bodyText: string
   category?: string
   tags?: string[]
-  logOdds: number
+  prior?: number
+  confidence?: number
+  weight?: number
+  importance?: number
   evidence?: GraphEvidenceDetails
 }
 
@@ -31,7 +25,9 @@ export interface GraphFixtureEdge {
   from: string
   to: string
   kind: 'support' | 'rebut'
-  importanceToParent: number
+  weight?: number
+  confidence?: number
+  rationale?: string
 }
 
 export interface GraphFixture {
@@ -54,7 +50,8 @@ export const sampleGraph: GraphFixture = {
       title: 'The Earth is flat',
       bodyText: 'The Earth is flat.',
       tags: ['flat-earth', 'root'],
-      logOdds: -1.15,
+      prior: 0.2,
+      importance: 1,
     },
     {
       id: 'C1',
@@ -63,7 +60,8 @@ export const sampleGraph: GraphFixture = {
       bodyText: 'The horizon appears flat to everyday observation.',
       category: 'observation',
       tags: ['visual'],
-      logOdds: -0.53,
+      prior: 0.55,
+      importance: 0.74,
     },
     {
       id: 'C2',
@@ -71,7 +69,8 @@ export const sampleGraph: GraphFixture = {
       title: 'Water finds level',
       bodyText: 'Water seeks its level and should not conform to a sphere.',
       category: 'physical-intuition',
-      logOdds: -0.2,
+      prior: 0.5,
+      importance: 0.71,
     },
     {
       id: 'C3',
@@ -79,23 +78,26 @@ export const sampleGraph: GraphFixture = {
       title: 'No obvious curvature from high-altitude passenger footage',
       bodyText: 'Images from balloons and planes do not show obvious curvature.',
       category: 'visual-observation',
-      logOdds: -0.8,
+      prior: 0.45,
+      importance: 0.68,
     },
     {
       id: 'P1',
-      kind: 'claim',
+      kind: 'premise',
       title: 'Beach and ocean horizons appear straight',
       bodyText: 'At sea level, the horizon usually appears flat and level.',
       category: 'observation',
-      logOdds: -0.49,
+      prior: 0.68,
+      confidence: 0.61,
     },
     {
       id: 'P2',
-      kind: 'claim',
+      kind: 'premise',
       title: 'Canals and lakes look level',
       bodyText: 'Large bodies of water appear level over long distances.',
       category: 'observation',
-      logOdds: 0.2,
+      prior: 0.64,
+      confidence: 0.58,
     },
     {
       id: 'E1',
@@ -103,10 +105,10 @@ export const sampleGraph: GraphFixture = {
       title: 'Photographs from beaches',
       bodyText: 'Collections of beach and ocean photographs are cited as visual support.',
       tags: ['observational'],
-      logOdds: 0.08,
+      prior: 0.52,
       evidence: {
         type: 'observational',
-        score: 52,
+        score: 0.52,
         rationale:
           'Visual examples are easy to gather but hard to interpret precisely.',
       },
@@ -117,29 +119,31 @@ export const sampleGraph: GraphFixture = {
       title: 'Canal observations',
       bodyText: 'Flat-earth arguments often cite calm water surfaces and canal observations.',
       tags: ['observational'],
-      logOdds: 0,
+      prior: 0.5,
       evidence: {
         type: 'observational',
-        score: 50,
+        score: 0.5,
       },
     },
     {
       id: 'O1',
-      kind: 'objection',
+      kind: 'counter',
       title: 'Human perception is a poor curvature detector',
       bodyText:
         "At normal scales, human vision is not a reliable way to detect Earth's curvature.",
       category: 'visual-limit',
-      logOdds: 1.32,
+      prior: 0.82,
+      confidence: 0.79,
     },
     {
       id: 'O2',
-      kind: 'objection',
+      kind: 'counter',
       title: 'Atmospheric refraction affects visibility',
       bodyText:
         'Refraction can make distant objects appear higher or more visible than expected.',
       category: 'optics',
-      logOdds: 1.39,
+      prior: 0.84,
+      confidence: 0.8,
     },
   ],
   edges: [
@@ -148,63 +152,64 @@ export const sampleGraph: GraphFixture = {
       from: 'C1',
       to: 'R1',
       kind: 'support',
-      importanceToParent: 8,
+      weight: 0.23,
     },
     {
       id: 'E-R-C2',
       from: 'C2',
       to: 'R1',
       kind: 'support',
-      importanceToParent: 7,
+      weight: 0.21,
     },
     {
       id: 'E-R-C3',
       from: 'C3',
       to: 'R1',
       kind: 'support',
-      importanceToParent: 6,
+      weight: 0.18,
     },
     {
       id: 'E-C1-P1',
       from: 'P1',
       to: 'C1',
       kind: 'support',
-      importanceToParent: 7,
+      weight: 0.6,
     },
     {
       id: 'E-C1-E1',
       from: 'E1',
       to: 'C1',
       kind: 'support',
-      importanceToParent: 5,
+      weight: 0.4,
     },
     {
       id: 'E-C2-P2',
       from: 'P2',
       to: 'C2',
       kind: 'support',
-      importanceToParent: 8,
+      weight: 0.55,
     },
     {
       id: 'E-C2-E2',
       from: 'E2',
       to: 'C2',
       kind: 'support',
-      importanceToParent: 6,
+      weight: 0.45,
     },
     {
       id: 'E-O1-P1',
       from: 'O1',
       to: 'P1',
       kind: 'rebut',
-      importanceToParent: 8,
+      weight: 0.75,
     },
     {
       id: 'E-O2-C3',
       from: 'O2',
       to: 'C3',
       kind: 'rebut',
-      importanceToParent: 9,
+      weight: 0.7,
+      rationale: 'Refraction complicates long-distance visual claims.',
     },
   ],
 }

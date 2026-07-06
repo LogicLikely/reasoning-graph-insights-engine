@@ -62,7 +62,7 @@ export function GraphCanvas({
             </strong>
             {node.data.metricLabel && node.data.metricValue ? (
               <span className="graph-node-card__metric">
-                {node.data.metricLabel}: {node.data.metricValue}
+                {node.data.metricValue} {node.data.metricLabel}
               </span>
             ) : null}
             <div className="graph-node-card__tooltip" role="tooltip">
@@ -101,7 +101,7 @@ export function GraphCanvas({
             nodeStrokeWidth={3}
             maskColor="rgba(247, 248, 242, 0.8)"
             nodeColor={(node) =>
-              node.className?.includes('counter')
+              node.className?.includes('objection')
                 ? '#ca5a3d'
                 : node.className?.includes('evidence')
                   ? '#c2912f'

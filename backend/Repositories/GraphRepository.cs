@@ -8,6 +8,11 @@ namespace Backend.Repositories;
 
 public class GraphRepository : IGraphRepository
 {
+    private static readonly JsonSerializerOptions EvidenceJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     private const string GraphSql = """
         SELECT 
             id, slug, title, description
@@ -23,10 +28,7 @@ public class GraphRepository : IGraphRepository
             body_text AS "BodyText",
             category,
             tags,
-            prior,
-            weight,
-            confidence,
-            importance,
+            log_odds AS "LogOdds",
             evidence::text AS evidence
         FROM nodes
         WHERE graph_id = @GraphId
@@ -38,7 +40,8 @@ public class GraphRepository : IGraphRepository
             id, 
             from_node_id AS "From", 
             to_node_id AS "To", 
-            kind
+            kind,
+            importance_to_parent AS "ImportanceToParent"
         FROM edges
         WHERE graph_id = @GraphId
         ORDER BY id;
@@ -105,10 +108,7 @@ public class GraphRepository : IGraphRepository
             BodyText = row.BodyText,
             Category = row.Category,
             Tags = row.Tags?.ToList() ?? new List<string>(),
-            Prior = row.Prior,
-            Weight = row.Weight,
-            Confidence = row.Confidence,
-            Importance = row.Importance,
+            LogOdds = row.LogOdds,
             Evidence = string.IsNullOrEmpty(row.Evidence)
                 ? null
                 : JsonSerializer.Deserialize<GraphEvidenceDetails>(row.Evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
@@ -121,7 +121,8 @@ public class GraphRepository : IGraphRepository
             Id = row.Id,
             From = row.From,
             To = row.To,
-            Kind = row.Kind
+            Kind = row.Kind,
+            ImportanceToParent = row.ImportanceToParent
         }).ToList();
 
         return graph;
@@ -147,6 +148,7 @@ public class GraphRepository : IGraphRepository
         public string From { get; set; } = default!;
         public string To { get; set; } = default!;
         public string Kind { get; set; } = default!;
+        public int ImportanceToParent { get; set; } = 1;
     }
 
     private sealed class NodeRow
@@ -157,11 +159,31 @@ public class GraphRepository : IGraphRepository
         public string BodyText { get; set; } = default!;
         public string? Category { get; set; }
         public string[]? Tags { get; set; }
-        public decimal? Prior { get; set; }
-        public decimal? Weight { get; set; }
-        public decimal? Confidence { get; set; }
-        public decimal? Importance { get; set; }
+        public decimal LogOdds { get; set; }
         public string? Evidence { get; set; }
+    }
+
+    private static decimal GetEvidenceScoreFromLogOdds(decimal logOdds)
+    {
+        var probability = 1 / (1 + Math.Exp(-(double)logOdds));
+        var score = (decimal)probability * 100;
+        var boundedScore = Math.Min(99.99m, Math.Max(0.01m, score));
+
+        return decimal.Round(boundedScore, 2);
+    }
+
+    private static string? SerializeEvidenceForNode(GraphNodeDto node)
+    {
+        var evidence = node.Evidence;
+        if (string.Equals(node.Kind, "evidence", StringComparison.OrdinalIgnoreCase))
+        {
+            evidence ??= new GraphEvidenceDto();
+            evidence.Score = GetEvidenceScoreFromLogOdds(node.LogOdds);
+        }
+
+        return evidence != null
+            ? JsonSerializer.Serialize(evidence, EvidenceJsonOptions)
+            : null;
     }
 
 
@@ -207,7 +229,9 @@ public class GraphRepository : IGraphRepository
         string slug,
         GraphNodeDto node,
         string? parentID = null,
-    CancellationToken cancellationToken = default)
+        string edgeKind = "support",
+        int importanceToParent = 1,
+        CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
         connection.Open();
@@ -218,12 +242,10 @@ public class GraphRepository : IGraphRepository
             const string InsertNodeSql = """
                 INSERT INTO nodes (
                     id, graph_id, kind, title, body_text, 
-                    category, tags, prior, weight, 
-                    confidence, importance, evidence
+                    category, tags, log_odds, evidence
                 ) VALUES (
                     @Id, (SELECT id FROM graphs WHERE slug = @Slug), @Kind, @Title, @BodyText, 
-                    @Category, @Tags, @Prior, @Weight, 
-                    @Confidence, @Importance, @Evidence::jsonb
+                    @Category, @Tags, @LogOdds, @Evidence::jsonb
                 );
                 """;
 
@@ -236,11 +258,8 @@ public class GraphRepository : IGraphRepository
                 node.BodyText,
                 node.Category,
                 Tags = node.Tags.ToArray(),
-                node.Prior,
-                node.Weight,
-                node.Confidence,
-                node.Importance,
-                Evidence = node.Evidence != null ? JsonSerializer.Serialize(node.Evidence) : null
+                LogOdds = node.LogOdds,
+                Evidence = SerializeEvidenceForNode(node)
             };
 
             await connection.ExecuteAsync(new CommandDefinition(InsertNodeSql, nodeParams, transaction, cancellationToken: cancellationToken));
@@ -248,17 +267,19 @@ public class GraphRepository : IGraphRepository
             if (!string.IsNullOrEmpty(parentID))
             {
                 const string InsertEdgeSql = """
-                    INSERT INTO edges (id, graph_id, from_node_id, to_node_id, kind)
-                    VALUES (@EdgeId, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, 'support');
+                    INSERT INTO edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent)
+                    VALUES (@EdgeId, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, @Kind, @ImportanceToParent);
                     """;
 
-                // Invert the From/To so the new Premise points TO the Parent Claim
+                // Invert the From/To so the new supporting node points TO the parent claim.
                 var edgeParams = new
                 {
                     EdgeId = $"e-{node.Id}",
                     Slug = slug,
                     From = node.Id,
-                    To = parentID
+                    To = parentID,
+                    Kind = edgeKind,
+                    ImportanceToParent = importanceToParent
                 };
                 await connection.ExecuteAsync(new CommandDefinition(InsertEdgeSql, edgeParams, transaction, cancellationToken: cancellationToken));
             }
@@ -284,10 +305,14 @@ public class GraphRepository : IGraphRepository
         const string UpdateNodeSql = """
             UPDATE nodes
             SET
-                kind = COALESCE(@Kind, kind),
                 title = COALESCE(@Title, title),
                 body_text = COALESCE(@BodyText, body_text),
-                confidence = COALESCE(@Confidence, confidence),
+                log_odds = COALESCE(@LogOdds, log_odds),
+                evidence = CASE
+                    WHEN LOWER(kind) = 'evidence' AND @EvidenceScore IS NOT NULL
+                        THEN jsonb_set(COALESCE(evidence, '{}'::jsonb), '{score}', to_jsonb(@EvidenceScore), true)
+                    ELSE evidence
+                END,
                 updated_at = now()
             WHERE id = @NodeId
             AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
@@ -299,14 +324,112 @@ public class GraphRepository : IGraphRepository
             {
                 Slug = slug,
                 NodeId = nodeId,
-                node.Kind,
                 node.Title,
                 node.BodyText,
-                node.Confidence
+                node.LogOdds,
+                EvidenceScore = node.LogOdds.HasValue
+                    ? GetEvidenceScoreFromLogOdds(node.LogOdds.Value)
+                    : (decimal?)null
             },
             cancellationToken: cancellationToken));
 
         return rowsAffected > 0;
+    }
+
+    public async Task<bool> AddEdgeAsync(
+        string slug,
+        GraphEdgeDto edge,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        const string InsertEdgeSql = """
+            INSERT INTO edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent)
+            VALUES (@Id, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, @Kind, @ImportanceToParent);
+            """;
+
+        var edgeId = string.IsNullOrWhiteSpace(edge.Id)
+            ? $"e-{edge.From}-{edge.To}"
+            : edge.Id;
+
+        var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(
+            InsertEdgeSql,
+            new
+            {
+                Id = edgeId,
+                Slug = slug,
+                edge.From,
+                edge.To,
+                edge.Kind,
+                edge.ImportanceToParent
+            },
+            cancellationToken: cancellationToken));
+
+        return rowsAffected > 0;
+    }
+
+    public async Task<bool> UpdateEdgeAsync(
+        string slug,
+        string edgeId,
+        GraphEdgeUpdateDto edge,
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        const string UpdateEdgeSql = """
+            UPDATE edges
+            SET
+                importance_to_parent = COALESCE(@ImportanceToParent, importance_to_parent),
+                updated_at = now()
+            WHERE id = @EdgeId
+            AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
+            """;
+
+        var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(
+            UpdateEdgeSql,
+            new
+            {
+                Slug = slug,
+                EdgeId = edgeId,
+                edge.ImportanceToParent
+            },
+            cancellationToken: cancellationToken));
+
+        return rowsAffected > 0;
+    }
+
+    public async Task UpdateNodeLogOddsBatchAsync(
+        int graphId,
+        IReadOnlyDictionary<string, decimal> logOddsByNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (logOddsByNodeId.Count == 0)
+        {
+            return;
+        }
+
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        const string UpdateNodeLogOddsSql = """
+            UPDATE nodes
+            SET
+                log_odds = @LogOdds,
+                updated_at = now()
+            WHERE id = @NodeId
+            AND graph_id = @GraphId;
+            """;
+
+        var updateRows = logOddsByNodeId.Select(entry => new
+        {
+            GraphId = graphId,
+            NodeId = entry.Key,
+            LogOdds = entry.Value
+        });
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            UpdateNodeLogOddsSql,
+            updateRows,
+            cancellationToken: cancellationToken));
     }
 
     public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
