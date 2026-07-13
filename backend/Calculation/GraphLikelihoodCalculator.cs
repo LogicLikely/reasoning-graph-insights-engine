@@ -22,6 +22,7 @@ public sealed class GraphLikelihoodCalculator
         GraphCalculationContext context,
         IEnumerable<string> nodeIds)
     {
+        //Sorts nodes by distance so can propogate odds up graph level by level
         var affectedDistances = CollectAffectedNodeAndAncestorDistances(context, nodeIds);
         return RecalculateAffectedNodes(context, affectedDistances);
     }

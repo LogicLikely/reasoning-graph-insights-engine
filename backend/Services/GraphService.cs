@@ -237,4 +237,132 @@ public class GraphService : IGraphService
 
         return recalculatedLogOdds;
     }
+    private async Task<List<GraphEdgeCalcState>> GetMinimalCounterSet(
+        Graph graph,
+        string targetNodeId,
+        IEnumerable<string> nodeIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
+        var registerdNodeIds = ExcludeCounterNodes(context, nodeIds);
+        var counterQueue = GetCounterQueue(context,targetNodeId, nodeIds);
+        //Calculates odds only consider
+        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registerdNodeIds);
+    }
+
+    private static PriorityQueue<string, decimal> GetCounterQueue(
+        GraphCalculationContext context,
+        string targetNodeId,
+        IEnumerable<string> nodeIds)
+    {
+        if (!context.NodesById.ContainsKey(targetNodeId))
+        {
+            throw new InvalidOperationException($"Target node '{targetNodeId}' does not exist in the calculation context.");
+        }
+
+        var counterQueue = new PriorityQueue<string, decimal>(
+            Comparer<decimal>.Create((left, right) => right.CompareTo(left)));
+
+        foreach (var nodeId in nodeIds.Distinct(StringComparer.Ordinal))
+        {
+            if (!context.NodesById.TryGetValue(nodeId, out var node))
+            {
+                throw new InvalidOperationException($"Node '{nodeId}' does not exist in the calculation context.");
+            }
+
+            if (!IsCounterNode(node))
+            {
+                continue;
+            }
+
+            var multiplier = GetAncestorImportanceMultiplier(context, nodeId, targetNodeId);
+            if (multiplier is null)
+            {
+                continue;
+            }
+
+            counterQueue.Enqueue(nodeId, node.LogOdds * multiplier.Value);
+        }
+
+        return counterQueue;
+    }
+
+    private static decimal? GetAncestorImportanceMultiplier(
+        GraphCalculationContext context,
+        string startNodeId,
+        string targetNodeId)
+    {
+        var stack = new Stack<CounterTraversalState>();
+        stack.Push(new CounterTraversalState(startNodeId, 1m, [startNodeId]));
+
+        decimal? bestMultiplier = null;
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            if (current.NodeId == targetNodeId)
+            {
+                bestMultiplier = bestMultiplier is null
+                    ? current.Multiplier
+                    : Math.Max(bestMultiplier.Value, current.Multiplier);
+                continue;
+            }
+
+            if (!context.ParentEdgesByChildId.TryGetValue(current.NodeId, out var parentEdges))
+            {
+                continue;
+            }
+
+            foreach (var parentEdge in parentEdges)
+            {
+                var parentNodeId = parentEdge.ToNodeId;
+                if (!context.NodesById.ContainsKey(parentNodeId))
+                {
+                    throw new InvalidOperationException(
+                        $"Edge '{parentEdge.Id}' references missing to node '{parentNodeId}'.");
+                }
+
+                if (current.Path.Contains(parentNodeId))
+                {
+                    throw new InvalidOperationException(
+                        $"Cycle detected while finding counter priority at node '{parentNodeId}'.");
+                }
+
+                var nextMultiplier = current.Multiplier * (parentEdge.ImportanceToParent / 10m);
+                var nextPath = new HashSet<string>(current.Path) { parentNodeId };
+                stack.Push(new CounterTraversalState(parentNodeId, nextMultiplier, nextPath));
+            }
+        }
+
+        return bestMultiplier;
+    }
+
+    private static bool IsCounterNode(GraphNodeCalcState node)
+    {
+        return string.Equals(node.Kind, "objection", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(node.Kind, "counter", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static List<string> ExcludeCounterNodes(
+        GraphCalculationContext context,
+        IEnumerable<string> nodeIds)
+    {
+        return nodeIds
+            .Where(id =>
+            {
+                if (!context.NodesById.TryGetValue(id, out var node))
+                {
+                    throw new InvalidOperationException($"Node '{id}' does not exist in the calculation context.");
+                }
+
+                return !IsCounterNode(node);
+            })
+            .ToList();
+    }
+
+    private sealed record CounterTraversalState(
+        string NodeId,
+        decimal Multiplier,
+        HashSet<string> Path);
 }
