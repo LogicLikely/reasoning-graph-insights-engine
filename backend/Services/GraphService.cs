@@ -250,6 +250,8 @@ public class GraphService : IGraphService
         var counterQueue = GetCounterQueue(context,targetNodeId, nodeIds);
         //Calculates odds only consider
         var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registerdNodeIds);
+
+        throw new NotImplementedException("GetMinimalCounterSet is still in progress.");
     }
 
     private static PriorityQueue<string, decimal> GetCounterQueue(
