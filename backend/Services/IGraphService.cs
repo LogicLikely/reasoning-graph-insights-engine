@@ -13,5 +13,7 @@ public interface IGraphService
     Task<bool> AddEdgeAsync(string slug, GraphEdgeDto edge, CancellationToken cancellationToken = default);
     Task<bool> UpdateEdgeAsync(string slug, string edgeId, GraphEdgeUpdateDto edge,
         CancellationToken cancellationToken = default);
+    Task<List<string>?> GetMinimalCounterSetAsync(string slug, string targetNodeId,
+        CancellationToken cancellationToken = default);
     Task ResetDatabaseAsync(CancellationToken cancellationToken = default);
 }

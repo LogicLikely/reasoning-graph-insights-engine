@@ -23,11 +23,10 @@ export async function getGraphBySlug(
 export async function deleteNode(slug: string, nodeId: string): Promise<void> {
   await httpClient.delete(`/api/graphs/${slug}/nodes/${nodeId}`)
 }
+
 export async function addNode(
   slug: string,
-  node: GraphFixtureNode,
-  parentId?: string,
-  edge?: Pick<GraphFixtureEdge, 'kind' | 'importanceToParent'>,
+  nodeId: string,
 ): Promise<void> {
   await httpClient.post(`/api/graphs/${slug}/nodes`, node, {
     params: {
@@ -36,6 +35,17 @@ export async function addNode(
       importanceToParent: edge?.importanceToParent,
     },
   })
+}
+
+export async function getNodeCounterSet(
+  slug: string,
+  targetNodeId: string,
+): Promise<string[] | null> {
+  const response = await httpClient.post<{
+    counterNodeIds: string[] | null
+  }>(`/api/graphs/${slug}/nodes/${targetNodeId}/minimal-counter-set`)
+
+  return response.data.counterNodeIds
 }
 
 export async function updateNode(

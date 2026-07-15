@@ -65,6 +65,24 @@ public class GraphService : IGraphService
         };
     }
 
+    public async Task<List<string>?> GetMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        if (graph is null)
+        {
+            return null;
+        }
+
+        return await GetMinimalCounterSet(
+            graph,
+            targetNodeId,
+            graph.Nodes.Select(node => node.Id),
+            cancellationToken);
+    }
+
     public async Task<bool> DeleteNodeAsync(
         string slug,
         string nodeId,

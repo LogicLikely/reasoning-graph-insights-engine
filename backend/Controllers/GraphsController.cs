@@ -38,6 +38,20 @@ public class GraphsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{slug}/nodes/{targetNodeId}/minimal-counter-set")]
+    public async Task<IActionResult> GetMinimalCounterSet(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken)
+    {
+        var counterNodeIds = await _graphService.GetMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            cancellationToken);
+
+        return Ok(new { counterNodeIds });
+    }
+
     [HttpDelete("{slug}/nodes/{nodeId}")]
     public async Task<IActionResult> DeleteNode(
         string slug,
