@@ -237,7 +237,7 @@ public class GraphService : IGraphService
 
         return recalculatedLogOdds;
     }
-    private async Task<List<GraphEdgeCalcState>> GetMinimalCounterSet(
+    private async Task<List<string>> GetMinimalCounterSet(
         Graph graph,
         string targetNodeId,
         IEnumerable<string> nodeIds,
@@ -246,12 +246,32 @@ public class GraphService : IGraphService
     {
         var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
         // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
-        var registerdNodeIds = ExcludeCounterNodes(context, nodeIds);
-        var counterQueue = GetCounterQueue(context,targetNodeId, nodeIds);
-        //Calculates odds only consider
-        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registerdNodeIds);
+        var registeredNodeIds = ExcludeCounterNodes(context, nodeIds);
+        PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetNodeId, nodeIds);
+        //Dictionary mapping log odds to every node (including counters)
+        var baseLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
+        //Calculates odds without considering counters
+        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registeredNodeIds);
+        List<string> countersUsed = new List<string>();
 
-        throw new NotImplementedException("GetMinimalCounterSet is still in progress.");
+        if (!recalculatedLogOdds.TryGetValue(targetNodeId, out var targetNodeLogOdds))
+        {
+            throw new InvalidOperationException($"Target node '{targetNodeId}' does not exist in the recalculatedLogOdds dictionary.");
+        }
+
+        while (counterQueue.Count > 0 && targetNodeLogOdds <= -1)
+        {
+            var counterNode = counterQueue.Dequeue();
+            registeredNodeIds.Add(counterNode);
+            countersUsed.Add(counterNode);
+            targetNodeLogOdds += baseLogOdds[counterNode];
+        }
+
+        if (targetNodeLogOdds > -1)
+        {
+            return null;
+        }
+        return countersUsed;
     }
 
     private static PriorityQueue<string, decimal> GetCounterQueue(
@@ -325,6 +345,7 @@ public class GraphService : IGraphService
                         $"Edge '{parentEdge.Id}' references missing to node '{parentNodeId}'.");
                 }
 
+                //Cycle detection
                 if (current.Path.Contains(parentNodeId))
                 {
                     throw new InvalidOperationException(
