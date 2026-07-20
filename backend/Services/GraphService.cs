@@ -268,13 +268,9 @@ public class GraphService : IGraphService
         PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetNodeId, nodeIds);
         //Dictionary mapping log odds to every node (including counters)
         var baseLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
+        decimal likelihood = _calculator.getAccumulatedLikelihood(context, targetNodeId);
 
-        Console.WriteLine("------Printing baseLogOdds-----");
-        foreach (var key in baseLogOdds.Keys)
-        {
-            Console.WriteLine($"id: {key}, logOdds: {baseLogOdds[key]}");
-        }
-        Console.WriteLine("-------------------------------");
+        Console.WriteLine($"Target Node Likelihood: {likelihood}");
         //Calculates odds without considering counters
         var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registeredNodeIds);
         List<string> countersUsed = new List<string>();

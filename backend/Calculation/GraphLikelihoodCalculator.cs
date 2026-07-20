@@ -123,7 +123,7 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Search through children nodes to calculate total likelihood (importance) value
-    private static decimal getAccumulatedLikelihood(GraphCalculationContext context, string targetId)
+    public decimal getAccumulatedLikelihood(GraphCalculationContext context, string targetId)
     {
         if (!context.NodesById.TryGetValue(targetId, out var targetNode))
         {
@@ -132,20 +132,24 @@ public sealed class GraphLikelihoodCalculator
         Stack<string> stack = new Stack<string>();
         stack.Push(targetId);
         decimal currentLikelihood = 1;
+        HashSet<string> seenNodes = new HashSet<string>();
 
         while (stack.Count > 0)
         {
             var currentTargetId = stack.Pop();
             if (!context.ChildEdgesByParentId.TryGetValue(currentTargetId, out var targetChildrenEdges))
             {
-                throw new InvalidOperationException($"Node '{currentTargetId}' does not exist in the calculation context. (Not in ChildEdgesByParentId)");
+                continue;
             }
 
             foreach (GraphEdgeCalcState edge in targetChildrenEdges)
             {
+                if (seenNodes.Contains(edge.FromNodeId)) continue;
                 stack.Push(edge.FromNodeId);
                 currentLikelihood *= edge.ImportanceToParent;
+                Console.WriteLine($"Edge: {edge.Id}, likelihood: {edge.ImportanceToParent}");
             }
+            seenNodes.Add(currentTargetId);
         }
         return currentLikelihood;
     }
