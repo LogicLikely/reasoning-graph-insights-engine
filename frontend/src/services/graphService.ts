@@ -26,7 +26,9 @@ export async function deleteNode(slug: string, nodeId: string): Promise<void> {
 
 export async function addNode(
   slug: string,
-  nodeId: string,
+  node: GraphFixtureNode,
+  parentId?: string,
+  edge?: Pick<GraphFixtureEdge, 'kind' | 'importanceToParent'>,
 ): Promise<void> {
   await httpClient.post(`/api/graphs/${slug}/nodes`, node, {
     params: {

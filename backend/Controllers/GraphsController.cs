@@ -49,6 +49,10 @@ public class GraphsController : ControllerBase
             targetNodeId,
             cancellationToken);
 
+        Console.WriteLine(
+            $"Minimal counter set for node '{targetNodeId}': " +
+            (counterNodeIds is null ? "null" : $"[{string.Join(", ", counterNodeIds)}]"));
+
         return Ok(new { counterNodeIds });
     }
 

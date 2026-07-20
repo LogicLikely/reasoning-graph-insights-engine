@@ -122,6 +122,34 @@ public sealed class GraphLikelihoodCalculator
         }
     }
 
+    //Search through children nodes to calculate total likelihood (importance) value
+    private static decimal getAccumulatedLikelihood(GraphCalculationContext context, string targetId)
+    {
+        if (!context.NodesById.TryGetValue(targetId, out var targetNode))
+        {
+            throw new InvalidOperationException($"Node '{targetId}' does not exist in the calculation context.");
+        }
+        Stack<string> stack = new Stack<string>();
+        stack.Push(targetId);
+        decimal currentLikelihood = 1;
+
+        while (stack.Count > 0)
+        {
+            var currentTargetId = stack.Pop();
+            if (!context.ChildEdgesByParentId.TryGetValue(currentTargetId, out var targetChildrenEdges))
+            {
+                throw new InvalidOperationException($"Node '{currentTargetId}' does not exist in the calculation context. (Not in ChildEdgesByParentId)");
+            }
+
+            foreach (GraphEdgeCalcState edge in targetChildrenEdges)
+            {
+                stack.Push(edge.FromNodeId);
+                currentLikelihood *= edge.ImportanceToParent;
+            }
+        }
+        return currentLikelihood;
+    }
+
     private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
     {
         if (!context.NodesById.ContainsKey(nodeId))

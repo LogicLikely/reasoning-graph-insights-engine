@@ -268,6 +268,13 @@ public class GraphService : IGraphService
         PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetNodeId, nodeIds);
         //Dictionary mapping log odds to every node (including counters)
         var baseLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
+
+        Console.WriteLine("------Printing baseLogOdds-----");
+        foreach (var key in baseLogOdds.Keys)
+        {
+            Console.WriteLine($"id: {key}, logOdds: {baseLogOdds[key]}");
+        }
+        Console.WriteLine("-------------------------------");
         //Calculates odds without considering counters
         var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registeredNodeIds);
         List<string> countersUsed = new List<string>();
@@ -277,13 +284,17 @@ public class GraphService : IGraphService
             throw new InvalidOperationException($"Target node '{targetNodeId}' does not exist in the recalculatedLogOdds dictionary.");
         }
 
-        while (counterQueue.Count > 0 && targetNodeLogOdds <= -1)
+        Console.WriteLine($"initial log odds for target node (no counters)'{targetNodeId}': {targetNodeLogOdds}");
+        while (counterQueue.Count > 0 && targetNodeLogOdds > -1)
         {
             var counterNode = counterQueue.Dequeue();
+            Console.WriteLine($"current counter: '{counterNode}': {baseLogOdds[counterNode]}");
             registeredNodeIds.Add(counterNode);
             countersUsed.Add(counterNode);
             targetNodeLogOdds += baseLogOdds[counterNode];
         }
+
+        Console.WriteLine($"Final log odds for target node '{targetNodeId}': {targetNodeLogOdds}");
 
         if (targetNodeLogOdds > -1)
         {

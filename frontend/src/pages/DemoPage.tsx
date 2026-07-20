@@ -137,18 +137,13 @@ export function DemoPage() {
   }, [graphDataSource])
 
   const handleNodeCounterSet = useCallback(async (nodeId: string) => {
-    if (graphDataSource === 'fixture') {
-      alert(FIXTURE_MUTATION_MESSAGE)
-      return
-    }
-
     try {
       const counterNodeIds = await getNodeCounterSet(DEMO_GRAPH_SLUG, nodeId)
       console.log(counterNodeIds)
     } catch {
       setError('Failed to get the minimal counter set from the server.')
     }
-  }, [graphDataSource])
+  }, [])
 
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
