@@ -81,6 +81,27 @@ describe('graphService', () => {
     expect(getDefaultGraphDataSource()).toBe('fixture')
   })
 
+  it('calculates the counter set from the fixture without calling the API', async () => {
+    const fixtureSpy = vi.fn().mockResolvedValue({
+      slug: 'sample-medium',
+      nodes: [
+        { id: 'R1', kind: 'root', logOdds: 0 },
+        { id: 'O1', kind: 'objection', logOdds: 2 },
+      ],
+      edges: [{ id: 'O1-R1', from: 'O1', to: 'R1', kind: 'rebut', importanceToParent: 10 }],
+    })
+    const postSpy = vi.fn()
+
+    vi.doMock('./graphFixture', () => ({ getGraphBySlugFromFixture: fixtureSpy }))
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const { getNodeCounterSet } = await import('./graphService')
+
+    await expect(getNodeCounterSet('sample-medium', 'R1', 'fixture')).resolves.toEqual(['O1'])
+    expect(fixtureSpy).toHaveBeenCalledWith('sample-medium')
+    expect(postSpy).not.toHaveBeenCalled()
+  })
+
   it('posts to the reset endpoint when resetting the database', async () => {
     const postSpy = vi.fn().mockResolvedValue({})
 

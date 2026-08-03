@@ -255,6 +255,7 @@ public class GraphService : IGraphService
 
         return recalculatedLogOdds;
     }
+
     private async Task<List<string>> GetMinimalCounterSet(
         Graph graph,
         string targetNodeId,
@@ -280,6 +281,7 @@ public class GraphService : IGraphService
             throw new InvalidOperationException($"Target node '{targetNodeId}' does not exist in the recalculatedLogOdds dictionary.");
         }
 
+        //Walk through every counter from queue, ordered by likilhood, and include it in new odds calculation
         Console.WriteLine($"initial log odds for target node (no counters)'{targetNodeId}': {targetNodeLogOdds}");
         while (counterQueue.Count > 0 && targetNodeLogOdds > -1)
         {
@@ -290,7 +292,7 @@ public class GraphService : IGraphService
             targetNodeLogOdds += baseLogOdds[counterNode];
         }
 
-        Console.WriteLine($"Final log odds for target node '{targetNodeId}': {targetNodeLogOdds}");
+        Console.WriteLine($"posterior log odds for target node '{targetNodeId}': {targetNodeLogOdds}");
 
         if (targetNodeLogOdds > -1)
         {
@@ -299,6 +301,7 @@ public class GraphService : IGraphService
         return countersUsed;
     }
 
+    //Get queue of counters ranked by their likelihood
     private static PriorityQueue<string, decimal> GetCounterQueue(
         GraphCalculationContext context,
         string targetNodeId,

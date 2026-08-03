@@ -138,12 +138,12 @@ export function DemoPage() {
 
   const handleNodeCounterSet = useCallback(async (nodeId: string) => {
     try {
-      const counterNodeIds = await getNodeCounterSet(DEMO_GRAPH_SLUG, nodeId)
+      const counterNodeIds = await getNodeCounterSet(DEMO_GRAPH_SLUG, nodeId, graphDataSource)
       console.log(counterNodeIds)
     } catch {
       setError('Failed to get the minimal counter set from the server.')
     }
-  }, [])
+  }, [graphDataSource])
 
   const handleAddSupportingNode = useCallback(async (
     parentId: string,

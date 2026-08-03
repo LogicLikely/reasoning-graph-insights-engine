@@ -144,8 +144,7 @@ public sealed class GraphLikelihoodCalculator
 
             foreach (GraphEdgeCalcState edge in targetChildrenEdges)
             {
-                if (seenNodes.Contains(edge.FromNodeId)) continue;
-                stack.Push(edge.FromNodeId);
+                if (!seenNodes.Contains(edge.FromNodeId)) stack.Push(edge.FromNodeId);
                 currentLikelihood *= edge.ImportanceToParent;
                 Console.WriteLine($"Edge: {edge.Id}, likelihood: {edge.ImportanceToParent}");
             }
