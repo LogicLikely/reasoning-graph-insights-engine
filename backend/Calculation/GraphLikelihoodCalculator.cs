@@ -122,35 +122,57 @@ public sealed class GraphLikelihoodCalculator
         }
     }
 
-    //Search through children nodes to calculate total likelihood (importance) value
-    public decimal getAccumulatedLikelihood(GraphCalculationContext context, string targetId)
+    //Runs dijkstra to find specific path from point targetNode to targetClaim with the "strongest" likelihood ratio
+    public decimal getSingleShortestPath(GraphCalculationContext context, string startNodeId, string targetClaimId)
     {
-        if (!context.NodesById.TryGetValue(targetId, out var targetNode))
+        if (!context.NodesById.TryGetValue(startNodeId, out var targetNode))
         {
-            throw new InvalidOperationException($"Node '{targetId}' does not exist in the calculation context.");
+            throw new InvalidOperationException($"Node '{startNodeId}' does not exist in the calculation context.");
         }
-        Stack<string> stack = new Stack<string>();
-        stack.Push(targetId);
-        decimal currentLikelihood = 1;
-        HashSet<string> seenNodes = new HashSet<string>();
 
-        while (stack.Count > 0)
+        //Make priority queue
+        var compare = Comparer<decimal>.Create((a, b) =>
+        Math.Abs(Math.Log((double)b))
+            .CompareTo(Math.Abs(Math.Log((double)a))));
+        var queue = new PriorityQueue<Tuple<string, decimal>, decimal>(compare);
+
+        Dictionary<string, decimal> dist = new Dictionary<string, decimal>();
+
+        if (!context.ChildEdgesByParentId.TryGetValue(startNodeId, out var targetChildrenEdges))
         {
-            var currentTargetId = stack.Pop();
-            if (!context.ChildEdgesByParentId.TryGetValue(currentTargetId, out var targetChildrenEdges))
-            {
-                continue;
-            }
-
-            foreach (GraphEdgeCalcState edge in targetChildrenEdges)
-            {
-                if (!seenNodes.Contains(edge.FromNodeId)) stack.Push(edge.FromNodeId);
-                currentLikelihood *= edge.ImportanceToParent;
-                Console.WriteLine($"Edge: {edge.Id}, likelihood: {edge.ImportanceToParent}");
-            }
-            seenNodes.Add(currentTargetId);
+            return 1m;
         }
-        return currentLikelihood;
+        queue.Enqueue(Tuple.Create(startNodeId, 0m), 0m);
+
+        while (queue.Count > 0)
+        {
+            var item = queue.Dequeue();
+            string nodeId = item.Item1;
+            decimal d = item.Item2;
+
+            if (dist.ContainsKey(nodeId)) continue;
+            if (!context.ChildEdgesByParentId.TryGetValue(nodeId, out var childEdges)) continue;
+
+            foreach (GraphEdgeCalcState edge in childEdges)
+            {
+                decimal currentDist = edge.ImportanceToParent + d;
+                string neighborId = edge.ToNodeId;
+                if (!dist.ContainsKey(neighborId)) dist.Add(neighborId, decimal.MinValue);
+                if (currentDist > dist[neighborId])
+                {
+                    dist[neighborId] = currentDist;
+                    queue.Enqueue(Tuple.Create(neighborId, currentDist), edge.ImportanceToParent);
+                    if (neighborId.Equals(targetClaimId)) return currentDist;
+                }
+            }
+        }
+        return -1m;
+    }
+
+    //Search through parent nodes to calculate total likelihood (importance) value
+    public decimal getAccumulatedLikelihood(GraphCalculationContext context, string targetNodeId, string targetClaimId)
+    {
+        return getSingleShortestPath(context, targetNodeId, targetClaimId);
     }
 
     private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
