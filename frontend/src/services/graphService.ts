@@ -1,7 +1,6 @@
 import type { GraphFixture, GraphFixtureEdge, GraphFixtureNode } from '../fixtures/sampleGraph'
 import { getGraphBySlugFromApi } from './graphApi'
 import { getGraphBySlugFromFixture } from './graphFixture'
-import { getMinimalCounterSetFromGraph } from './graphCounterSet'
 import { httpClient } from './httpClient'
 
 export type GraphDataSource = 'fixture' | 'database'
@@ -45,14 +44,13 @@ export async function getNodeCounterSet(
   targetNodeId: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
 ): Promise<string[] | null> {
-  if (dataSource === 'fixture') {
-    const graph = await getGraphBySlugFromFixture(slug)
-    return getMinimalCounterSetFromGraph(graph, targetNodeId)
-  }
+  const graphContext = dataSource === 'fixture'
+    ? await getGraphBySlugFromFixture(slug)
+    : undefined
 
   const response = await httpClient.post<{
     counterNodeIds: string[] | null
-  }>(`/api/graphs/${slug}/nodes/${targetNodeId}/minimal-counter-set`)
+  }>(`/api/graphs/${slug}/nodes/${targetNodeId}/minimal-counter-set`, graphContext)
 
   return response.data.counterNodeIds
 }

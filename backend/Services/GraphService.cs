@@ -76,11 +76,28 @@ public class GraphService : IGraphService
             return null;
         }
 
+        Console.WriteLine("got here");
         return await GetMinimalCounterSet(
             graph,
             targetNodeId,
             graph.Nodes.Select(node => node.Id),
             cancellationToken);
+    }
+
+    public async Task<List<string>?> GetMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var graph = ToDomainGraph(graphContext);
+
+        return await GetMinimalCounterSet(graph, targetNodeId, graph.Nodes.Select(node => node.Id), cancellationToken);
     }
 
     public async Task<bool> DeleteNodeAsync(
@@ -120,6 +137,40 @@ public class GraphService : IGraphService
         }
 
         return true;
+    }
+
+    private static Graph ToDomainGraph(GraphDto graphDto)
+    {
+        return new Graph
+        {
+            Slug = graphDto.Slug,
+            Title = graphDto.Title,
+            Description = graphDto.Description,
+            Nodes = graphDto.Nodes.Select(node => new GraphNode
+            {
+                Id = node.Id,
+                Kind = node.Kind,
+                Title = node.Title,
+                BodyText = node.BodyText,
+                Category = node.Category,
+                Tags = node.Tags.ToList(),
+                LogOdds = node.LogOdds,
+                Evidence = node.Evidence is null ? null : new GraphEvidenceDetails
+                {
+                    Type = node.Evidence.Type,
+                    Score = node.Evidence.Score,
+                    Rationale = node.Evidence.Rationale
+                }
+            }).ToList(),
+            Edges = graphDto.Edges.Select(edge => new GraphEdge
+            {
+                Id = edge.Id,
+                From = edge.From,
+                To = edge.To,
+                Kind = edge.Kind,
+                ImportanceToParent = edge.ImportanceToParent
+            }).ToList()
+        };
     }
 
     public async Task<bool> AddNodeAsync(
@@ -269,9 +320,9 @@ public class GraphService : IGraphService
         PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetNodeId, nodeIds);
         //Dictionary mapping log odds to every node (including counters)
         var baseLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
-        decimal likelihood = _calculator.getAccumulatedLikelihood(context, targetNodeId);
+        decimal targetNodeLikelihoodRatio = _calculator.getAccumulatedLikelihood(context, targetNodeId);
 
-        Console.WriteLine($"Target Node Likelihood: {likelihood}");
+        Console.WriteLine($"Target Node Likelihood: {targetNodeLikelihoodRatio}");
         //Calculates odds without considering counters
         var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registeredNodeIds);
         List<string> countersUsed = new List<string>();
@@ -285,11 +336,14 @@ public class GraphService : IGraphService
         Console.WriteLine($"initial log odds for target node (no counters)'{targetNodeId}': {targetNodeLogOdds}");
         while (counterQueue.Count > 0 && targetNodeLogOdds > -1)
         {
-            var counterNode = counterQueue.Dequeue();
-            Console.WriteLine($"current counter: '{counterNode}': {baseLogOdds[counterNode]}");
-            registeredNodeIds.Add(counterNode);
-            countersUsed.Add(counterNode);
-            targetNodeLogOdds += baseLogOdds[counterNode];
+            string counterNodeId = counterQueue.Dequeue();
+            Console.WriteLine($"current counter: '{counterNodeId}': {baseLogOdds[counterNodeId]}");
+            registeredNodeIds.Add(counterNodeId);
+            countersUsed.Add(counterNodeId);
+            double counterLikelihoodRatio = (double)_calculator.getAccumulatedLikelihood(context, counterNodeId);
+            decimal logCounterLikelihoodRatio = (decimal)Math.Log(counterLikelihoodRatio);
+            Console.WriteLine($"counterLikelihood: {counterLikelihoodRatio}");
+            targetNodeLogOdds += baseLogOdds[counterNodeId] + logCounterLikelihoodRatio;
         }
 
         Console.WriteLine($"posterior log odds for target node '{targetNodeId}': {targetNodeLogOdds}");

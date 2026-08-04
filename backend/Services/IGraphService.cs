@@ -15,5 +15,7 @@ public interface IGraphService
         CancellationToken cancellationToken = default);
     Task<List<string>?> GetMinimalCounterSetAsync(string slug, string targetNodeId,
         CancellationToken cancellationToken = default);
+    Task<List<string>?> GetMinimalCounterSetAsync(string slug, string targetNodeId,
+        GraphDto graphContext, CancellationToken cancellationToken = default);
     Task ResetDatabaseAsync(CancellationToken cancellationToken = default);
 }

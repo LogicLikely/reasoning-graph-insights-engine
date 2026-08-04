@@ -42,12 +42,12 @@ public class GraphsController : ControllerBase
     public async Task<IActionResult> GetMinimalCounterSet(
         string slug,
         string targetNodeId,
+        [FromBody] GraphDto? graphContext,
         CancellationToken cancellationToken)
     {
-        var counterNodeIds = await _graphService.GetMinimalCounterSetAsync(
-            slug,
-            targetNodeId,
-            cancellationToken);
+        var counterNodeIds = graphContext is null
+            ? await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, cancellationToken)
+            : await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, graphContext, cancellationToken);
 
         Console.WriteLine(
             $"Minimal counter set for node '{targetNodeId}': " +
