@@ -1,4 +1,4 @@
-import { sampleGraph, type GraphFixture } from '../fixtures/sampleGraph'
+import { sampleGraph, type GraphFixture } from '../fixtures/testGraph'
 
 export async function getGraphBySlugFromFixture(
   slug: string,

@@ -315,14 +315,13 @@ public class GraphService : IGraphService
     )
     {
         var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        
         // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
         var registeredNodeIds = ExcludeCounterNodes(context, nodeIds);
         PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetClaimId, nodeIds);
+
         //Dictionary mapping log odds to every node (including counters)
         var normalLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
-        // decimal targetNodeLikelihoodRatio = _calculator.getAccumulatedLR(context, targetNodeId);
-
-        // Console.WriteLine($"Target Node Likelihood: {targetNodeLikelihoodRatio}");
 
         //Calculates odds without considering counters
         var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registeredNodeIds);
@@ -332,7 +331,7 @@ public class GraphService : IGraphService
             throw new InvalidOperationException($"Target node '{targetClaimId}' does not exist in the recalculatedLogOdds dictionary.");
         }
 
-        //Walk through every counter from queue, ordered by likilhood, and include it in new odds calculation
+        //Walk through every counter from queue, ordered by likelihood, and include it in new odds calculation
         Console.WriteLine($"initial log odds for target node (no counters)'{targetClaimId}': {targetClaimLogOdds}");
         while (counterQueue.Count > 0 && targetClaimLogOdds > -1)
         {
