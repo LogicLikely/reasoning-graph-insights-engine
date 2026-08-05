@@ -170,7 +170,7 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Search through parent nodes to calculate total likelihood (importance) value
-    public decimal getAccumulatedLikelihood(GraphCalculationContext context, string targetNodeId, string targetClaimId)
+    public decimal getAccumulatedLR(GraphCalculationContext context, string targetNodeId, string targetClaimId)
     {
         return getSingleShortestPath(context, targetNodeId, targetClaimId);
     }

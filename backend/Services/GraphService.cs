@@ -309,7 +309,7 @@ public class GraphService : IGraphService
 
     private async Task<List<string>> GetMinimalCounterSet(
         Graph graph,
-        string targetNodeId,
+        string targetClaimId,
         IEnumerable<string> nodeIds,
         CancellationToken cancellationToken
     )
@@ -317,38 +317,38 @@ public class GraphService : IGraphService
         var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
         // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
         var registeredNodeIds = ExcludeCounterNodes(context, nodeIds);
-        PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetNodeId, nodeIds);
+        PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetClaimId, nodeIds);
         //Dictionary mapping log odds to every node (including counters)
-        var baseLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
-        decimal targetNodeLikelihoodRatio = _calculator.getAccumulatedLikelihood(context, targetNodeId);
+        var normalLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
+        // decimal targetNodeLikelihoodRatio = _calculator.getAccumulatedLR(context, targetNodeId);
 
-        Console.WriteLine($"Target Node Likelihood: {targetNodeLikelihoodRatio}");
+        // Console.WriteLine($"Target Node Likelihood: {targetNodeLikelihoodRatio}");
+
         //Calculates odds without considering counters
         var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registeredNodeIds);
         List<string> countersUsed = new List<string>();
-
-        if (!recalculatedLogOdds.TryGetValue(targetNodeId, out var targetNodeLogOdds))
+        if (!recalculatedLogOdds.TryGetValue(targetClaimId, out var targetClaimLogOdds))
         {
-            throw new InvalidOperationException($"Target node '{targetNodeId}' does not exist in the recalculatedLogOdds dictionary.");
+            throw new InvalidOperationException($"Target node '{targetClaimId}' does not exist in the recalculatedLogOdds dictionary.");
         }
 
         //Walk through every counter from queue, ordered by likilhood, and include it in new odds calculation
-        Console.WriteLine($"initial log odds for target node (no counters)'{targetNodeId}': {targetNodeLogOdds}");
-        while (counterQueue.Count > 0 && targetNodeLogOdds > -1)
+        Console.WriteLine($"initial log odds for target node (no counters)'{targetClaimId}': {targetClaimLogOdds}");
+        while (counterQueue.Count > 0 && targetClaimLogOdds > -1)
         {
             string counterNodeId = counterQueue.Dequeue();
-            Console.WriteLine($"current counter: '{counterNodeId}': {baseLogOdds[counterNodeId]}");
+            Console.WriteLine($"current counter: '{counterNodeId}': {normalLogOdds[counterNodeId]}");
             registeredNodeIds.Add(counterNodeId);
             countersUsed.Add(counterNodeId);
-            double counterLikelihoodRatio = (double)_calculator.getAccumulatedLikelihood(context, counterNodeId);
+            double counterLikelihoodRatio = (double)_calculator.getAccumulatedLR(context, counterNodeId, targetClaimId);
             decimal logCounterLikelihoodRatio = (decimal)Math.Log(counterLikelihoodRatio);
             Console.WriteLine($"counterLikelihood: {counterLikelihoodRatio}");
-            targetNodeLogOdds += baseLogOdds[counterNodeId] + logCounterLikelihoodRatio;
+            targetClaimLogOdds += normalLogOdds[counterNodeId] + logCounterLikelihoodRatio;
         }
 
-        Console.WriteLine($"posterior log odds for target node '{targetNodeId}': {targetNodeLogOdds}");
+        Console.WriteLine($"posterior log odds for target node '{targetClaimId}': {targetClaimLogOdds}");
 
-        if (targetNodeLogOdds > -1)
+        if (targetClaimLogOdds > -1)
         {
             return null;
         }
