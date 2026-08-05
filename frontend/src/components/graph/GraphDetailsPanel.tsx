@@ -121,7 +121,7 @@ export function GraphDetailsPanel({
     Number.isFinite(likelihoodPercentValue) &&
     likelihoodPercentValue > 0 &&
     likelihoodPercentValue < 100
-  const isImportanceValid = (value: number) => Number.isInteger(value) && value >= 1 && value <= 10
+  const isImportanceValid = (value: number) => Number.isFinite(value) && value > 0 && value <= 10
   const isParentImportanceValid = isImportanceValid(parentImportanceValue)
   const areEdgeImportancesValid = edgeImportanceValues.every(isImportanceValid)
   const isNewParentEdgeValid =
@@ -304,12 +304,12 @@ export function GraphDetailsPanel({
                         id={`edge-importance-${relation.edge.id}`}
                         className="form-input"
                         max="10"
-                        min="1"
+                        min="0.001"
                         onChange={(event) => setEdgeImportanceData({
                           ...edgeImportanceData,
                           [relation.edge.id]: event.target.value,
                         })}
-                        step="1"
+                        step="0.001"
                         type="number"
                         value={edgeImportanceData[relation.edge.id] ?? String(relation.edge.importanceToParent)}
                       />
@@ -344,12 +344,12 @@ export function GraphDetailsPanel({
                       id="new-parent-importance"
                       className="form-input"
                       max="10"
-                      min="1"
+                      min="0.001"
                       onChange={(event) => setNewParentEdge({
                         ...newParentEdge,
                         importanceToParent: event.target.value,
                       })}
-                      step="1"
+                      step="0.001"
                       type="number"
                       value={newParentEdge.importanceToParent}
                     />
@@ -366,9 +366,9 @@ export function GraphDetailsPanel({
                   id="parent-edge-importance"
                   className="form-input"
                   max="10"
-                  min="1"
+                  min="0.001"
                   onChange={(event) => setFormData({ ...formData, parentImportance: event.target.value })}
-                  step="1"
+                  step="0.001"
                   type="number"
                   value={formData.parentImportance}
                 />

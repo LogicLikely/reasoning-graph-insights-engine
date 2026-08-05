@@ -79,7 +79,7 @@ public class GraphsController : ControllerBase
         CancellationToken cancellationToken,
         [FromQuery] string? parentID = null,
         [FromQuery] string edgeKind = "support",
-        [FromQuery] int importanceToParent = 1)
+        [FromQuery] decimal importanceToParent = 1m)
     {
         Console.WriteLine($"Adding node to graph {slug}");
         var success = await _graphService.AddNodeAsync(slug, nodeDto, parentID, edgeKind, importanceToParent, cancellationToken);

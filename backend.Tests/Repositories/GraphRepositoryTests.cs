@@ -235,7 +235,7 @@ public class GraphRepositoryTests
         Assert.AreEqual("E1", connection.ExecutedCommands[0].Parameters["From"]);
         Assert.AreEqual("C2", connection.ExecutedCommands[0].Parameters["To"]);
         Assert.AreEqual("rebut", connection.ExecutedCommands[0].Parameters["Kind"]);
-        Assert.AreEqual(3, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
+        Assert.AreEqual(3m, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
     }
 
     [TestMethod]
@@ -261,7 +261,7 @@ public class GraphRepositoryTests
         Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE edges"));
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual("E-C1-E1", connection.ExecutedCommands[0].Parameters["EdgeId"]);
-        Assert.AreEqual(7, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
+        Assert.AreEqual(7m, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
     }
 
     [TestMethod]

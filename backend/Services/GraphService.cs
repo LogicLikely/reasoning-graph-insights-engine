@@ -178,7 +178,7 @@ public class GraphService : IGraphService
         GraphNodeDto node,
         string? parentID = null,
         string edgeKind = "support",
-        int importanceToParent = 1,
+        decimal importanceToParent = 1m,
         CancellationToken cancellationToken = default)
     {
         var added = await _graphRepository.AddNodeAsync(slug, node, parentID, edgeKind, importanceToParent, cancellationToken);
@@ -315,7 +315,7 @@ public class GraphService : IGraphService
     )
     {
         var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
-        
+
         // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
         var registeredNodeIds = ExcludeCounterNodes(context, nodeIds);
         PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetClaimId, nodeIds);
@@ -339,8 +339,12 @@ public class GraphService : IGraphService
             Console.WriteLine($"current counter: '{counterNodeId}': {normalLogOdds[counterNodeId]}");
             registeredNodeIds.Add(counterNodeId);
             countersUsed.Add(counterNodeId);
-            double counterLikelihoodRatio = (double)_calculator.getAccumulatedLR(context, counterNodeId, targetClaimId);
-            decimal logCounterLikelihoodRatio = (decimal)Math.Log(counterLikelihoodRatio);
+            Console.WriteLine("------------------------------");
+            double? counterLikelihoodRatio = (double?)_calculator.getAccumulatedLR(context, counterNodeId, targetClaimId);
+            Console.WriteLine("------------------------------");
+            if (!counterLikelihoodRatio.HasValue) continue;
+
+            decimal logCounterLikelihoodRatio = (decimal)Math.Log(counterLikelihoodRatio.Value);
             Console.WriteLine($"counterLikelihood: {counterLikelihoodRatio}");
             targetClaimLogOdds += normalLogOdds[counterNodeId] + logCounterLikelihoodRatio;
         }

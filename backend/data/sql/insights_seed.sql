@@ -34,10 +34,10 @@ CREATE TABLE public.edges (
     from_node_id text NOT NULL,
     to_node_id text NOT NULL,
     kind text NOT NULL,
-    importance_to_parent smallint NOT NULL,
+    importance_to_parent numeric(10,3) NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT ck_edges_importance_to_parent CHECK (((importance_to_parent >= 1) AND (importance_to_parent <= 10))),
+    CONSTRAINT ck_edges_importance_to_parent CHECK (((importance_to_parent > 0) AND (importance_to_parent <= 10))),
     CONSTRAINT ck_edges_kind CHECK ((kind = ANY (ARRAY['support'::text, 'rebut'::text]))),
     CONSTRAINT ck_edges_not_self CHECK ((from_node_id <> to_node_id))
 );

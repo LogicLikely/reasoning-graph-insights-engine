@@ -148,7 +148,7 @@ public class GraphRepository : IGraphRepository
         public string From { get; set; } = default!;
         public string To { get; set; } = default!;
         public string Kind { get; set; } = default!;
-        public int ImportanceToParent { get; set; } = 1;
+        public decimal ImportanceToParent { get; set; } = 1m;
     }
 
     private sealed class NodeRow
@@ -230,7 +230,7 @@ public class GraphRepository : IGraphRepository
         GraphNodeDto node,
         string? parentID = null,
         string edgeKind = "support",
-        int importanceToParent = 1,
+        decimal importanceToParent = 1m,
         CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
