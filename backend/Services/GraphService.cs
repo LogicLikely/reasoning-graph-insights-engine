@@ -340,7 +340,7 @@ public class GraphService : IGraphService
             registeredNodeIds.Add(counterNodeId);
             countersUsed.Add(counterNodeId);
             Console.WriteLine("------------------------------");
-            double? counterLikelihoodRatio = (double?)_calculator.getAccumulatedLR(context, counterNodeId, targetClaimId);
+            double? counterLikelihoodRatio = (double?)_calculator.GetAccumulatedLR(context, counterNodeId, targetClaimId);
             Console.WriteLine("------------------------------");
             if (!counterLikelihoodRatio.HasValue) continue;
 

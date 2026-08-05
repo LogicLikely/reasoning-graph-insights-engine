@@ -236,6 +236,75 @@ public class GraphLikelihoodCalculatorTests
         StringAssert.Contains(exception.Message, "Cycle detected");
     }
 
+    [TestMethod]
+    public void GetAccumulatedLR_ReturnsTheOnlyPathLikelihoodRatio()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("evidence", kind: "evidence")],
+            [Edge("E-evidence-claim", "evidence", "claim", importanceToParent: 1.5m)]);
+
+        var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
+
+        Assert.AreEqual(1.5m, result);
+    }
+
+    [TestMethod]
+    public void GetAccumulatedLR_MultipliesLikelihoodRatiosAlongThePath()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("premise"), Node("evidence", kind: "evidence")],
+            [
+                Edge("E-evidence-premise", "evidence", "premise", importanceToParent: 0.25m),
+                Edge("E-premise-claim", "premise", "claim", importanceToParent: 1.8m)
+            ]);
+
+        var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
+
+        Assert.AreEqual(0.45m, result);
+    }
+
+    [TestMethod]
+    public void GetAccumulatedLR_ChoosesThePathFarthestFromNeutral()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("pathA"), Node("pathB"), Node("evidence", kind: "evidence")],
+            [
+                Edge("E-evidence-pathA", "evidence", "pathA", importanceToParent: 0.1m),
+                Edge("E-pathA-claim", "pathA", "claim", importanceToParent: 1m),
+                Edge("E-evidence-pathB", "evidence", "pathB", importanceToParent: 1.8m),
+                Edge("E-pathB-claim", "pathB", "claim", importanceToParent: 1m)
+            ]);
+
+        var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
+
+        Assert.AreEqual(0.1m, result);
+    }
+
+    [TestMethod]
+    public void GetAccumulatedLR_ReturnsNullWhenNoPathReachesTheClaim()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("otherClaim"), Node("evidence", kind: "evidence")],
+            [Edge("E-evidence-other", "evidence", "otherClaim", importanceToParent: 1.5m)]);
+
+        var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
+
+        Assert.IsNull(result);
+    }
+
+    [TestMethod]
+    public void GetAccumulatedLR_ThrowsWhenAnEdgeLikelihoodRatioIsZero()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("evidence", kind: "evidence")],
+            [Edge("E-evidence-claim", "evidence", "claim", importanceToParent: 0m)]);
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            _calculator.GetAccumulatedLR(context, "evidence", "claim"));
+
+        StringAssert.Contains(exception.Message, "must be greater than zero");
+    }
+
     private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
     {
         return new GraphNode
@@ -251,7 +320,7 @@ public class GraphLikelihoodCalculatorTests
         string from,
         string to,
         string kind = "support",
-        int importanceToParent = 10)
+        decimal importanceToParent = 10m)
     {
         return new GraphEdge
         {

@@ -122,78 +122,87 @@ public sealed class GraphLikelihoodCalculator
         }
     }
 
-    private void PrintDist(Dictionary<string, decimal> dist)
+    // Multiplies LRs along every acyclic path to the target, then selects the
+    // final path whose LR is farthest from neutral (1.0) on a log scale.
+    public decimal? GetAccumulatedLR(GraphCalculationContext context, string startNodeId, string targetClaimId)
     {
-        Console.Write("dist:");
-        foreach (var pair in dist)
+        if (!context.NodesById.ContainsKey(startNodeId))
         {
-            Console.Write($"  {pair.Key}: {pair.Value}");
-        }
-        Console.WriteLine("");
-    }
-    //Runs dijkstra to find specific path from point targetNode to targetClaim with the "strongest" likelihood ratio
-    public decimal? GetSingleShortestPath(GraphCalculationContext context, string startNodeId, string targetClaimId)
-    {
-        if (!context.NodesById.TryGetValue(startNodeId, out var targetNode))
-        {
-            throw new InvalidOperationException($"Node '{startNodeId}' does not exist in the calculation context.");
+            throw new InvalidOperationException($"Start node '{startNodeId}' does not exist in the calculation context.");
         }
 
-        //Make priority queue
-        var compare = Comparer<decimal>.Create((a, b) =>
-        Math.Abs(Math.Log((double)b))
-            .CompareTo(Math.Abs(Math.Log((double)a))));
-        var queue = new PriorityQueue<Tuple<string, decimal>, decimal>(compare);
-
-        Dictionary<string, decimal> dist = new Dictionary<string, decimal>();
-        HashSet<String> seen = new HashSet<string>();
-
-        if (!context.ParentEdgesByChildId.TryGetValue(startNodeId, out var targetChildrenEdges))
+        if (!context.NodesById.ContainsKey(targetClaimId))
         {
-            Console.WriteLine($"1: start: {startNodeId}, target: {targetClaimId}");
-            Console.WriteLine("Return 1.0 LR; there are no children to this node.");
-            return 1m;
+            throw new InvalidOperationException($"Target claim '{targetClaimId}' does not exist in the calculation context.");
         }
-        queue.Enqueue(Tuple.Create(startNodeId, 0m), 0m);
 
-        while (queue.Count > 0)
+        decimal? strongestLikelihoodRatio = null;
+        foreach (var likelihoodRatio in FindPathLikelihoodRatios(
+                     context,
+                     startNodeId,
+                     targetClaimId,
+                     1m,
+                     [startNodeId]))
         {
-            var item = queue.Dequeue();
-            string nodeId = item.Item1;
-            decimal d = item.Item2;
-
-            Console.WriteLine($"Chosen node: {nodeId}");
-
-            if (nodeId.Equals(targetClaimId)) return d;
-
-            if (seen.Contains(nodeId)) continue;
-            Console.WriteLine("Got here 1");
-            if (!context.ParentEdgesByChildId.TryGetValue(nodeId, out var parentEdges)) continue;
-            Console.WriteLine("Got here 2");
-            seen.Add(nodeId);
-
-            foreach (GraphEdgeCalcState edge in parentEdges)
+            if (strongestLikelihoodRatio is null ||
+                GetLikelihoodStrength(likelihoodRatio) > GetLikelihoodStrength(strongestLikelihoodRatio.Value))
             {
-                decimal currentDist = edge.ImportanceToParent + d;
-                string neighborId = edge.ToNodeId;
-                if (!dist.ContainsKey(neighborId)) dist.Add(neighborId, decimal.MinValue);
-                PrintDist(dist);
-                if (currentDist > dist[neighborId])
-                {
-                    dist[neighborId] = currentDist;
-                    queue.Enqueue(Tuple.Create(neighborId, currentDist), edge.ImportanceToParent);
-                }
+                strongestLikelihoodRatio = likelihoodRatio;
             }
         }
 
-        Console.WriteLine("returned null in SSP");
-        return null;
+        return strongestLikelihoodRatio;
     }
 
-    //Search through parent nodes to calculate total likelihood (importance) value
-    public decimal? getAccumulatedLR(GraphCalculationContext context, string startNodeId, string targetClaimId)
+    private static IEnumerable<decimal> FindPathLikelihoodRatios(
+        GraphCalculationContext context,
+        string currentNodeId,
+        string targetClaimId,
+        decimal accumulatedLikelihoodRatio,
+        HashSet<string> path)
     {
-        return GetSingleShortestPath(context, startNodeId, targetClaimId);
+        if (currentNodeId == targetClaimId)
+        {
+            yield return accumulatedLikelihoodRatio;
+            yield break;
+        }
+
+        if (!context.ParentEdgesByChildId.TryGetValue(currentNodeId, out var parentEdges))
+        {
+            yield break;
+        }
+
+        foreach (var edge in parentEdges)
+        {
+            if (edge.ImportanceToParent <= 0m)
+            {
+                throw new InvalidOperationException(
+                    $"Edge '{edge.Id}' has invalid likelihood ratio '{edge.ImportanceToParent}'. Likelihood ratios must be greater than zero.");
+            }
+
+            if (!path.Add(edge.ToNodeId))
+            {
+                throw new InvalidOperationException(
+                    $"Cycle detected while calculating accumulated likelihood ratio at node '{edge.ToNodeId}'.");
+            }
+
+            foreach (var likelihoodRatio in FindPathLikelihoodRatios(
+                         context,
+                         edge.ToNodeId,
+                         targetClaimId,
+                         accumulatedLikelihoodRatio * edge.ImportanceToParent,
+                         path))
+            {
+                yield return likelihoodRatio;
+            }
+
+            path.Remove(edge.ToNodeId);
+        }
+    }
+
+    private static double GetLikelihoodStrength(decimal likelihoodRatio)
+    {
+        return Math.Abs(Math.Log((double)likelihoodRatio));
     }
 
     private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
