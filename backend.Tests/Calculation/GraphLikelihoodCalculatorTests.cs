@@ -245,7 +245,8 @@ public class GraphLikelihoodCalculatorTests
 
         var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
 
-        Assert.AreEqual(1.5m, result);
+        Assert.IsNotNull(result);
+        AssertDecimalEqual(1.5m, result.Value);
     }
 
     [TestMethod]
@@ -260,7 +261,8 @@ public class GraphLikelihoodCalculatorTests
 
         var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
 
-        Assert.AreEqual(0.45m, result);
+        Assert.IsNotNull(result);
+        AssertDecimalEqual(0.45m, result.Value);
     }
 
     [TestMethod]
@@ -277,7 +279,8 @@ public class GraphLikelihoodCalculatorTests
 
         var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
 
-        Assert.AreEqual(0.1m, result);
+        Assert.IsNotNull(result);
+        AssertDecimalEqual(0.1m, result.Value);
     }
 
     [TestMethod]
@@ -301,6 +304,183 @@ public class GraphLikelihoodCalculatorTests
 
         var exception = Assert.ThrowsException<InvalidOperationException>(() =>
             _calculator.GetAccumulatedLR(context, "evidence", "claim"));
+
+        StringAssert.Contains(exception.Message, "must be greater than zero");
+    }
+
+    [TestMethod]
+    public void GetMinLogPath_ReturnsZeroWhenStartIsTargetWithoutEdges()
+    {
+        var context = GraphCalculationContext.From([Node("claim")], []);
+
+        var result = _calculator.GetMinLogPath(context, "claim", "claim");
+
+        Assert.AreEqual(0m, result);
+    }
+
+    [TestMethod]
+    public void GetMinLogPath_ReturnsNullWhenNoPathReachesTarget()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("dead-end"), Node("claim")],
+            [Edge("E-start-dead", "start", "dead-end", importanceToParent: 2m)]);
+
+        var result = _calculator.GetMinLogPath(context, "start", "claim");
+
+        Assert.IsNull(result);
+    }
+
+    [TestMethod]
+    public void GetMinLogPath_IgnoresDeadEndAndUsesReachableBranch()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("dead-end"), Node("reachable"), Node("claim")],
+            [
+                Edge("E-start-dead", "start", "dead-end", importanceToParent: 0.1m),
+                Edge("E-start-reachable", "start", "reachable", importanceToParent: 2m),
+                Edge("E-reachable-claim", "reachable", "claim", importanceToParent: 3m)
+            ]);
+
+        var result = _calculator.GetMinLogPath(context, "start", "claim");
+
+        Assert.IsNotNull(result);
+        AssertDecimalEqual((decimal)Math.Log(6d), result.Value);
+    }
+
+    [TestMethod]
+    public void GetMinLogPath_SelectsPathWithSmallestProductOfWeights()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("path-a"), Node("path-b"), Node("claim")],
+            [
+                Edge("E-start-a", "start", "path-a", importanceToParent: 0.5m),
+                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
+                Edge("E-start-b", "start", "path-b", importanceToParent: 2m),
+                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+            ]);
+
+        var result = _calculator.GetMinLogPath(context, "start", "claim");
+
+        Assert.IsNotNull(result);
+        AssertDecimalEqual((decimal)Math.Log(0.25d), result.Value);
+    }
+
+    [TestMethod]
+    public void GetMaxLogPath_SelectsPathWithLargestProductOfWeights()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("path-a"), Node("path-b"), Node("claim")],
+            [
+                Edge("E-start-a", "start", "path-a", importanceToParent: 0.5m),
+                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
+                Edge("E-start-b", "start", "path-b", importanceToParent: 2m),
+                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+            ]);
+
+        var result = _calculator.GetMaxLogPath(context, "start", "claim");
+
+        Assert.IsNotNull(result);
+        AssertDecimalEqual((decimal)Math.Log(4d), result.Value);
+    }
+
+    [TestMethod]
+    public void GetLogPath_SupportsExplicitMinimumAndMaximumSelection()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("path-a"), Node("path-b"), Node("claim")],
+            [
+                Edge("E-start-a", "start", "path-a", importanceToParent: 0.5m),
+                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
+                Edge("E-start-b", "start", "path-b", importanceToParent: 2m),
+                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+            ]);
+
+        var minimum = _calculator.GetLogPath(context, "start", "claim", LogPathSelection.Minimum);
+        var maximum = _calculator.GetLogPath(context, "start", "claim", LogPathSelection.Maximum);
+
+        Assert.IsNotNull(minimum);
+        Assert.IsNotNull(maximum);
+        AssertDecimalEqual((decimal)Math.Log(0.25d), minimum.Value);
+        AssertDecimalEqual((decimal)Math.Log(4d), maximum.Value);
+    }
+
+    [TestMethod]
+    public void GetMinAndMaxLogPath_MatchExplicitSelections()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("path-a"), Node("path-b"), Node("claim")],
+            [
+                Edge("E-start-a", "start", "path-a", importanceToParent: 0.5m),
+                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
+                Edge("E-start-b", "start", "path-b", importanceToParent: 2m),
+                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+            ]);
+
+        var minimum = _calculator.GetMinLogPath(context, "start", "claim");
+        var explicitMinimum = _calculator.GetLogPath(
+            context, "start", "claim", LogPathSelection.Minimum);
+        var maximum = _calculator.GetMaxLogPath(context, "start", "claim");
+        var explicitMaximum = _calculator.GetLogPath(
+            context, "start", "claim", LogPathSelection.Maximum);
+
+        Assert.AreEqual(explicitMinimum, minimum);
+        Assert.AreEqual(explicitMaximum, maximum);
+    }
+
+    [TestMethod]
+    public void GetMaxLogPath_ReturnsNullWhenNoPathReachesTarget()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("dead-end"), Node("claim")],
+            [Edge("E-start-dead", "start", "dead-end", importanceToParent: 2m)]);
+
+        var result = _calculator.GetMaxLogPath(context, "start", "claim");
+
+        Assert.IsNull(result);
+    }
+
+    [TestMethod]
+    public void GetLogPath_ThrowsForUnknownSelection()
+    {
+        var context = GraphCalculationContext.From([Node("start"), Node("claim")], []);
+
+        var exception = Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
+            _calculator.GetLogPath(context, "start", "claim", (LogPathSelection)99));
+
+        Assert.AreEqual("selection", exception.ParamName);
+    }
+
+    [TestMethod]
+    public void GetLogPath_ThrowsWhenStartNodeDoesNotExist()
+    {
+        var context = GraphCalculationContext.From([Node("claim")], []);
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            _calculator.GetLogPath(context, "missing", "claim", LogPathSelection.Minimum));
+
+        StringAssert.Contains(exception.Message, "Start node 'missing'");
+    }
+
+    [TestMethod]
+    public void GetLogPath_ThrowsWhenTargetNodeDoesNotExist()
+    {
+        var context = GraphCalculationContext.From([Node("start")], []);
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            _calculator.GetLogPath(context, "start", "missing", LogPathSelection.Maximum));
+
+        StringAssert.Contains(exception.Message, "Target claim 'missing'");
+    }
+
+    [TestMethod]
+    public void GetMinLogPath_ThrowsForNonPositiveWeight()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("claim")],
+            [Edge("E-start-claim", "start", "claim", importanceToParent: 0m)]);
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            _calculator.GetMinLogPath(context, "start", "claim"));
 
         StringAssert.Contains(exception.Message, "must be greater than zero");
     }

@@ -307,7 +307,7 @@ public class GraphService : IGraphService
         return recalculatedLogOdds;
     }
 
-    private async Task<List<string>> GetMinimalCounterSet(
+    private async Task<List<string>?> GetMinimalCounterSet(
         Graph graph,
         string targetClaimId,
         IEnumerable<string> nodeIds,
@@ -318,6 +318,11 @@ public class GraphService : IGraphService
 
         // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
         var registeredNodeIds = ExcludeCounterNodes(context, nodeIds);
+        if (!registeredNodeIds.Contains(targetClaimId, StringComparer.Ordinal))
+        {
+            registeredNodeIds.Add(targetClaimId);
+        }
+
         PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetClaimId, nodeIds);
 
         //Dictionary mapping log odds to every node (including counters)
@@ -379,7 +384,7 @@ public class GraphService : IGraphService
                 throw new InvalidOperationException($"Node '{nodeId}' does not exist in the calculation context.");
             }
 
-            if (!IsCounterNode(node))
+            if (nodeId == targetNodeId || !IsCounterNode(node))
             {
                 continue;
             }

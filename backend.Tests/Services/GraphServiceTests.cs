@@ -101,6 +101,24 @@ public class GraphServiceTests
     }
 
     [TestMethod]
+    public async Task GetMinimalCounterSetAsync_HandlesTargetThatIsACounterNode()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [Node("O3", kind: "objection")],
+            []);
+
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .GetMinimalCounterSetAsync("sample-medium", "O3", CancellationToken.None);
+
+        Assert.IsNull(result);
+    }
+
+    [TestMethod]
     public async Task UpdateNodeAsync_PassesUpdateThroughToRepository()
     {
         var repositoryMock = new Mock<IGraphRepository>();
@@ -411,12 +429,12 @@ public class GraphServiceTests
         };
     }
 
-    private static GraphNode Node(string id, decimal logOdds = 0m)
+    private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
     {
         return new GraphNode
         {
             Id = id,
-            Kind = "claim",
+            Kind = kind,
             Title = id,
             BodyText = id,
             LogOdds = logOdds
