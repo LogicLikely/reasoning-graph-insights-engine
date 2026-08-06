@@ -137,6 +137,8 @@ public sealed class GraphLikelihoodCalculator
         }
 
         decimal? strongestLikelihoodRatio = null;
+
+        //Compares every path upstream from startNode and chooses the "strongest" path
         foreach (var likelihoodRatio in FindPathLikelihoodRatios(
                      context,
                      startNodeId,
