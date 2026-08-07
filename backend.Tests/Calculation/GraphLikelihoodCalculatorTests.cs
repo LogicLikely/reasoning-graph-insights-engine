@@ -243,7 +243,7 @@ public class GraphLikelihoodCalculatorTests
             [Node("claim"), Node("evidence", kind: "evidence")],
             [Edge("E-evidence-claim", "evidence", "claim", importanceToParent: 1.5m)]);
 
-        var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
+        var result = _calculator.GetSingleAccumulatedLR(context, "evidence", "claim");
 
         Assert.IsNotNull(result);
         AssertDecimalEqual(1.5m, result.Value);
@@ -259,7 +259,7 @@ public class GraphLikelihoodCalculatorTests
                 Edge("E-premise-claim", "premise", "claim", importanceToParent: 1.8m)
             ]);
 
-        var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
+        var result = _calculator.GetSingleAccumulatedLR(context, "evidence", "claim");
 
         Assert.IsNotNull(result);
         AssertDecimalEqual(0.45m, result.Value);
@@ -277,7 +277,7 @@ public class GraphLikelihoodCalculatorTests
                 Edge("E-pathB-claim", "pathB", "claim", importanceToParent: 1m)
             ]);
 
-        var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
+        var result = _calculator.GetSingleAccumulatedLR(context, "evidence", "claim");
 
         Assert.IsNotNull(result);
         AssertDecimalEqual(0.1m, result.Value);
@@ -290,7 +290,7 @@ public class GraphLikelihoodCalculatorTests
             [Node("claim"), Node("otherClaim"), Node("evidence", kind: "evidence")],
             [Edge("E-evidence-other", "evidence", "otherClaim", importanceToParent: 1.5m)]);
 
-        var result = _calculator.GetAccumulatedLR(context, "evidence", "claim");
+        var result = _calculator.GetSingleAccumulatedLR(context, "evidence", "claim");
 
         Assert.IsNull(result);
     }
@@ -303,7 +303,7 @@ public class GraphLikelihoodCalculatorTests
             [Edge("E-evidence-claim", "evidence", "claim", importanceToParent: 0m)]);
 
         var exception = Assert.ThrowsException<InvalidOperationException>(() =>
-            _calculator.GetAccumulatedLR(context, "evidence", "claim"));
+            _calculator.GetSingleAccumulatedLR(context, "evidence", "claim"));
 
         StringAssert.Contains(exception.Message, "must be greater than zero");
     }

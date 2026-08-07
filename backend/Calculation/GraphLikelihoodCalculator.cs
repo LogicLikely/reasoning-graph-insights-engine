@@ -5,6 +5,11 @@ public enum LogPathSelection
     Minimum,
     Maximum
 }
+public enum PathDirection
+{
+    Up,
+    Down
+}
 
 public sealed class GraphLikelihoodCalculator
 {
@@ -212,7 +217,7 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Returns the 'strongest' edge weight sum in the log path from startNode to targetClaim
-    private decimal? strongestLogPath(
+    private decimal? StrongestLogPath(
         GraphCalculationContext context,
         string startNodeId,
         string targetClaimId)
@@ -227,12 +232,25 @@ public sealed class GraphLikelihoodCalculator
     }
 
     // Returns the likelihood ratio for the path farthest from neutral (1.0).
-    public decimal? GetAccumulatedLR(GraphCalculationContext context, string startNodeId, string targetClaimId)
+    public decimal? GetSingleAccumulatedLR(GraphCalculationContext context, string startNodeId, string targetClaimId)
     {
-        var strongestLog = strongestLogPath(context, startNodeId, targetClaimId);
+        var strongestLog = StrongestLogPath(context, startNodeId, targetClaimId);
         return strongestLog.HasValue
             ? (decimal)Math.Exp((double)strongestLog.Value)
             : null;
+    }
+
+    //Returns dictionary assigning an LR value to every EVIDENCE node downsteam from a starting node
+    private Dictionary<string,decimal> GetDownstreamEvidenceLRs(GraphCalculationContext context, string nodeId)
+    {
+        Dictionary<string,decimal> unfilteredPaths = GetStrongestPaths(context, nodeId, PathDirection.Down);
+
+    }
+
+    //Uses Bellman ford to find shortest all paths upstream or downstream from a node 
+    private Dictionary<string,decimal> GetStrongestPaths(GraphCalculationContext context, string nodeId, PathDirection pathDirection)
+    {
+        
     }
 
     private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
