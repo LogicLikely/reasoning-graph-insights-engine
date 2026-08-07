@@ -5,7 +5,11 @@ public enum LogPathSelection
     Minimum,
     Maximum
 }
-
+public enum PathDirection
+{
+    Up,
+    Down
+}
 public sealed class GraphLikelihoodCalculator
 {
     private const decimal MinLogOdds = -100m;
@@ -43,7 +47,7 @@ public sealed class GraphLikelihoodCalculator
                      .ThenBy(affected => affected.Key, StringComparer.Ordinal)
                      .Select(affected => affected.Key))
         {
-            var logOdds = CalculateNodeLogOdds(context, nodeId);
+            var logOdds = CalculateNodeLogPosteriorOdds(context, nodeId);
             context.NodesById[nodeId].LogOdds = logOdds;
             recalculatedValues[nodeId] = logOdds;
         }
@@ -129,25 +133,27 @@ public sealed class GraphLikelihoodCalculator
     }
 
     // Returns the minimum sum of log edge weights along a path from startNode to targetClaim.
-    public decimal? GetMinLogPath(GraphCalculationContext context, string startNodeId, string targetClaimId)
-        => GetLogPath(context, startNodeId, targetClaimId, LogPathSelection.Minimum);
+    public decimal? GetMinLogPath(GraphCalculationContext context, string startNodeId, string? targetClaimId, PathDirection pathDirection)
+        => GetLogPath(context, startNodeId, targetClaimId, LogPathSelection.Minimum, pathDirection);
 
     // Returns the maximum sum of log edge weights along a path from startNode to targetClaim.
-    public decimal? GetMaxLogPath(GraphCalculationContext context, string startNodeId, string targetClaimId)
-        => GetLogPath(context, startNodeId, targetClaimId, LogPathSelection.Maximum);
+    public decimal? GetMaxLogPath(GraphCalculationContext context, string startNodeId, string? targetClaimId, PathDirection pathDirection)
+        => GetLogPath(context, startNodeId, targetClaimId, LogPathSelection.Maximum, pathDirection);
 
     public decimal? GetLogPath(
         GraphCalculationContext context,
         string startNodeId,
-        string targetClaimId,
-        LogPathSelection selection)
+        string? targetClaimId,
+        LogPathSelection selection,
+        PathDirection pathDirection)
     {
+        bool isTargetClaimNull = targetClaimId is not null;
         if (!context.NodesById.ContainsKey(startNodeId))
         {
             throw new InvalidOperationException($"Start node '{startNodeId}' does not exist in the calculation context.");
         }
 
-        if (!context.NodesById.ContainsKey(targetClaimId))
+        if (isTargetClaimNull && !context.NodesById.ContainsKey(targetClaimId))
         {
             throw new InvalidOperationException($"Target claim '{targetClaimId}' does not exist in the calculation context.");
         }
@@ -157,28 +163,37 @@ public sealed class GraphLikelihoodCalculator
             throw new ArgumentOutOfRangeException(nameof(selection), selection, "Unknown log path selection.");
         }
 
-        return FindLogPath(context, startNodeId, targetClaimId, selection, [startNodeId]);
+        return FindLogPath(context, startNodeId, targetClaimId, selection, [startNodeId], pathDirection);
     }
 
     private static decimal? FindLogPath(
         GraphCalculationContext context,
         string currentNodeId,
-        string targetClaimId,
+        string? targetClaimId,
         LogPathSelection selection,
-        HashSet<string> path)
+        HashSet<string> path,
+        PathDirection pathDirection)
     {
-        if (currentNodeId == targetClaimId)
+        bool isTargetClaimNull = targetClaimId is not null;
+
+        Dictionary<string, List<GraphEdgeCalcState>> edgeDict;
+
+        if (isTargetClaimNull && currentNodeId == targetClaimId)
         {
             return 0m;
         }
 
-        if (!context.ParentEdgesByChildId.TryGetValue(currentNodeId, out var parentEdges))
+        if (pathDirection == PathDirection.Up) edgeDict = context.ParentEdgesByChildId;
+        else edgeDict = context.ChildEdgesByParentId;
+
+        if (!edgeDict.TryGetValue(currentNodeId, out var neighborEdges))
         {
-            return null;
+            if (!isTargetClaimNull) return null;
+            return 0m;
         }
 
         decimal? bestPath = null;
-        foreach (var edge in parentEdges)
+        foreach (var edge in neighborEdges)
         {
             if (edge.ImportanceToParent <= 0m) throw new InvalidOperationException(
                 $"Edge '{edge.Id}' has invalid likelihood ratio '{edge.ImportanceToParent}'. Likelihood ratios must be greater than zero.");
@@ -186,7 +201,7 @@ public sealed class GraphLikelihoodCalculator
             if (!path.Add(edge.ToNodeId)) throw new InvalidOperationException(
                                             $"Cycle detected while calculating minimum log path at node '{edge.ToNodeId}'.");
 
-            var remainingPath = FindLogPath(context, edge.ToNodeId, targetClaimId, selection, path);
+            var remainingPath = FindLogPath(context, edge.ToNodeId, targetClaimId, selection, path, pathDirection);
             path.Remove(edge.ToNodeId);
 
             if (!remainingPath.HasValue) continue;
@@ -212,13 +227,14 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Returns the 'strongest' edge weight sum in the log path from startNode to targetClaim
-    private decimal? strongestLogPath(
+    private decimal? StrongestLogPath(
         GraphCalculationContext context,
         string startNodeId,
-        string targetClaimId)
+        string? targetClaimId,
+        PathDirection pathDirection)
     {
-        decimal? minLog = GetMinLogPath(context, startNodeId, targetClaimId);
-        decimal? maxLog = GetMaxLogPath(context, startNodeId, targetClaimId);
+        decimal? minLog = GetMinLogPath(context, startNodeId, targetClaimId, pathDirection);
+        decimal? maxLog = GetMaxLogPath(context, startNodeId, targetClaimId, pathDirection);
 
         if (!minLog.HasValue) return maxLog;
         else if (!maxLog.HasValue) return minLog;
@@ -229,13 +245,13 @@ public sealed class GraphLikelihoodCalculator
     // Returns the likelihood ratio for the path farthest from neutral (1.0).
     public decimal? GetAccumulatedLR(GraphCalculationContext context, string startNodeId, string targetClaimId)
     {
-        var strongestLog = strongestLogPath(context, startNodeId, targetClaimId);
+        var strongestLog = StrongestLogPath(context, startNodeId, targetClaimId, PathDirection.Up);
         return strongestLog.HasValue
             ? (decimal)Math.Exp((double)strongestLog.Value)
             : null;
     }
 
-    private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
+    private static decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
     {
         if (!context.NodesById.ContainsKey(nodeId))
         {
