@@ -247,59 +247,132 @@ public sealed class GraphLikelihoodCalculator
 
     }
 
-    //Uses Bellman ford to find all strongest paths upstream or downstream from a node 
-    private Dictionary<string, decimal> GetStrongestPaths(GraphCalculationContext context, string nodeId, PathDirection pathDirection)
+    //Returns list of nodes reachable from a start node when traversing either up or down the graph
+    private List<string> GetReachableNodes(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
     {
-        List<string> usedNodeIds = GetReachableNodes();
-        int n = usedNodeIds.Count;
-        //Dist contains distances from either the kth hop or k-1 hop for each vertex
-        Dictionary<string, decimal> dist = new Dictionary<string, decimal>();
-
-        Dictionary<string, List<GraphEdgeCalcState>> connectedEdgesDict = null;
-        if (pathDirection == PathDirection.Up) connectedEdgesDict = context.ParentEdgesByChildId;
-        else connectedEdgesDict = context.ChildEdgesByParentId;
-
-        //Initialize dist
-        foreach (string id in usedNodeIds)
+        if (!context.NodesById.ContainsKey(startNodeId))
         {
-            if (!context.NodesById.ContainsKey(id))
-            {
-                throw new InvalidOperationException($"Node '{id}' does not exist in the calculation context.");
-            }
-            dist.Add(id, decimal.MinValue);
+            throw new InvalidOperationException($"Node '{startNodeId}' does not exist in the calculation context.");
         }
 
-        //Try k hops
-        for (int k = 0; k < n; k++)
+        Dictionary<string, List<GraphEdgeCalcState>> connectedEdgesDict = GetConnectEdgesDict(context, pathDirection);
+        var reachableNodeIds = new List<string>();
+        var visitedNodeIds = new HashSet<string>();
+        var nodesToVisit = new Stack<string>();
+        nodesToVisit.Push(startNodeId);
+
+        while (nodesToVisit.Count > 0)
         {
-            //Inspect every node in scope
-            foreach (string currentNodeId in dist.Keys)
+            string currentNodeId = nodesToVisit.Pop();
+            if (!visitedNodeIds.Add(currentNodeId)) continue;
+
+            reachableNodeIds.Add(currentNodeId);
+
+            if (!connectedEdgesDict.TryGetValue(currentNodeId, out List<GraphEdgeCalcState>? connectedEdges))
             {
-                if (!connectedEdgesDict.TryGetValue(currentNodeId, out List<GraphEdgeCalcState> connectedEdges))
+                continue;
+            }
+
+            for (int i = connectedEdges.Count - 1; i >= 0; i--)
+            {
+                string neighborId = GetNeighborId(connectedEdges[i], pathDirection);
+                if (!context.NodesById.ContainsKey(neighborId))
                 {
-                    throw new InvalidOperationException($"Node '{currentNodeId}' does not exist in current context.");
+                    throw new InvalidOperationException($"Node '{neighborId}' does not exist in the calculation context.");
                 }
 
-                //Inspect every neighbor to currentNode
+                if (!visitedNodeIds.Contains(neighborId)) nodesToVisit.Push(neighborId);
+            }
+        }
+
+        return reachableNodeIds;
+    }
+
+    //Uses Bellman ford to find all strongest paths upstream or downstream from a node
+    private Dictionary<string, decimal> GetStrongestPaths(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
+    {
+        List<string> usedNodeIds = GetReachableNodes(context, startNodeId, pathDirection);
+        int n = usedNodeIds.Count;
+        Dictionary<string, List<GraphEdgeCalcState>> connectedEdgesDict = GetConnectEdgesDict(context, pathDirection);
+        var minimumLogPaths = usedNodeIds.ToDictionary(id => id, _ => (decimal?)null);
+        var maximumLogPaths = usedNodeIds.ToDictionary(id => id, _ => (decimal?)null);
+        minimumLogPaths[startNodeId] = 0m;
+        maximumLogPaths[startNodeId] = 0m;
+
+        // A simple path contains at most n - 1 edges.
+        for (int k = 0; k < n - 1; k++)
+        {
+            bool changed = false;
+
+            foreach (string currentNodeId in usedNodeIds)
+            {
+                //Checks if currentNode is usable (is not usable if doesn't have existing k-1 hop path or has no neighbors)
+                if (!minimumLogPaths[currentNodeId].HasValue ||
+                    !connectedEdgesDict.TryGetValue(currentNodeId, out List<GraphEdgeCalcState>? connectedEdges))
+                {
+                    continue;
+                }
+
+                //Updates k-hop path for nodes neighboring currentNode 
                 foreach (GraphEdgeCalcState edge in connectedEdges)
                 {
-                    string neighborId = null;
-                    if (pathDirection == PathDirection.Up) neighborId = edge.ToNodeId;
-                    else neighborId = edge.FromNodeId;
-
-                    if (!dist.Keys.Contains(neighborId))
+                    string neighborId = GetNeighborId(edge, pathDirection);
+                    if (!minimumLogPaths.ContainsKey(neighborId))
                     {
-                        throw new InvalidOperationException($"Node '{neighborId}' is percieved as unreachable from {nodeId}.");
+                        throw new InvalidOperationException($"Node '{neighborId}' is percieved as unreachable from {startNodeId}.");
                     }
 
-                    if (IsBetterLogPath(dist[neighborId] + edge.ImportanceToParent, dist[currentNodeId]))
+                    decimal logWeight = GetLogEdgeWeight(edge);
+                    decimal minimumCandidate = minimumLogPaths[currentNodeId]!.Value + logWeight;
+                    decimal maximumCandidate = maximumLogPaths[currentNodeId]!.Value + logWeight;
+
+                    if (!minimumLogPaths[neighborId].HasValue || minimumCandidate < minimumLogPaths[neighborId]!.Value)
                     {
-                        dist[currentNodeId] = dist[neighborId] + edge.ImportanceToParent;
+                        minimumLogPaths[neighborId] = minimumCandidate;
+                        changed = true;
+                    }
+
+                    if (!maximumLogPaths[neighborId].HasValue || maximumCandidate > maximumLogPaths[neighborId]!.Value)
+                    {
+                        maximumLogPaths[neighborId] = maximumCandidate;
+                        changed = true;
                     }
                 }
             }
+
+            if (!changed) break;
         }
-        return dist;
+
+        return usedNodeIds.ToDictionary(
+            id => id,
+            id => Math.Abs(minimumLogPaths[id]!.Value) > Math.Abs(maximumLogPaths[id]!.Value)
+                ? minimumLogPaths[id]!.Value
+                : maximumLogPaths[id]!.Value);
+    }
+
+    private static decimal GetLogEdgeWeight(GraphEdgeCalcState edge)
+    {
+        if (edge.ImportanceToParent <= 0m)
+        {
+            throw new InvalidOperationException(
+                $"Edge '{edge.Id}' has invalid likelihood ratio '{edge.ImportanceToParent}'. Likelihood ratios must be greater than zero.");
+        }
+
+        return (decimal)Math.Log((double)edge.ImportanceToParent);
+    }
+
+    private static Dictionary<string, List<GraphEdgeCalcState>> GetConnectEdgesDict(
+        GraphCalculationContext context,
+        PathDirection pathDirection)
+    {
+        if (pathDirection == PathDirection.Up) return context.ParentEdgesByChildId;
+        else return context.ChildEdgesByParentId;
+    }
+
+    private static string GetNeighborId(GraphEdgeCalcState edge, PathDirection pathDirection)
+    {
+        if (pathDirection == PathDirection.Up) return edge.ToNodeId;
+        else return edge.FromNodeId;
     }
 
     private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
