@@ -25,7 +25,7 @@ public class GraphLikelihoodCalculatorTests
         var result = _calculator.RecalculateAncestors(context, "B");
 
         AssertDecimalEqual(0.43944491548m, result["A"]);
-        AssertDecimalEqual(0.43944491548m, context.NodesById["A"].LogOdds);
+        AssertDecimalEqual(0.43944491548m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -38,7 +38,7 @@ public class GraphLikelihoodCalculatorTests
         var result = _calculator.RecalculateAncestors(context, "B");
 
         Assert.AreEqual(-1.0m, result["A"]);
-        Assert.AreEqual(-1.0m, context.NodesById["A"].LogOdds);
+        Assert.AreEqual(-1.0m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -58,7 +58,7 @@ public class GraphLikelihoodCalculatorTests
         var result = _calculator.RecalculateAncestors(context, "F");
 
         Assert.AreEqual(0.5m, result["B"]);
-        Assert.AreEqual(0.5m, context.NodesById["B"].LogOdds);
+        Assert.AreEqual(0.5m, context.NodesById["B"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -80,8 +80,8 @@ public class GraphLikelihoodCalculatorTests
         Assert.AreEqual(2, result.Count);
         Assert.AreEqual(1.0m, result["B"]);
         Assert.AreEqual(1.0m, result["A"]);
-        Assert.AreEqual(1.0m, context.NodesById["B"].LogOdds);
-        Assert.AreEqual(1.0m, context.NodesById["A"].LogOdds);
+        Assert.AreEqual(1.0m, context.NodesById["B"].PosteriorOdds);
+        Assert.AreEqual(1.0m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -107,7 +107,7 @@ public class GraphLikelihoodCalculatorTests
         Assert.AreEqual(1.0m, result["B"]);
         Assert.AreEqual(1.0m, result["C"]);
         Assert.AreEqual(2.0m, result["A"]);
-        Assert.AreEqual(2.0m, context.NodesById["A"].LogOdds);
+        Assert.AreEqual(2.0m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -136,7 +136,7 @@ public class GraphLikelihoodCalculatorTests
         Assert.AreEqual(1.0m, result["C"]);
         Assert.AreEqual(1.0m, result["D"]);
         Assert.AreEqual(2.0m, result["A"]);
-        Assert.AreEqual(2.0m, context.NodesById["A"].LogOdds);
+        Assert.AreEqual(2.0m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -164,8 +164,8 @@ public class GraphLikelihoodCalculatorTests
         Assert.AreEqual(2, result.Count);
         Assert.AreEqual(0m, result["B"]);
         Assert.AreEqual(0m, result["A"]);
-        Assert.AreEqual(0m, context.NodesById["B"].LogOdds);
-        Assert.AreEqual(0m, context.NodesById["A"].LogOdds);
+        Assert.AreEqual(0m, context.NodesById["B"].PosteriorOdds);
+        Assert.AreEqual(0m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -178,7 +178,7 @@ public class GraphLikelihoodCalculatorTests
         var result = _calculator.RecalculateAncestors(context, "B");
 
         Assert.AreEqual(100m, result["A"]);
-        Assert.AreEqual(100m, context.NodesById["A"].LogOdds);
+        Assert.AreEqual(100m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -191,7 +191,7 @@ public class GraphLikelihoodCalculatorTests
         var result = _calculator.RecalculateAncestors(context, "B");
 
         Assert.AreEqual(-100m, result["A"]);
-        Assert.AreEqual(-100m, context.NodesById["A"].LogOdds);
+        Assert.AreEqual(-100m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -491,7 +491,8 @@ public class GraphLikelihoodCalculatorTests
         {
             Id = id,
             Kind = kind,
-            LogOdds = logOdds
+            PriorOdds = logOdds,
+            PosteriorOdds = logOdds
         };
     }
 

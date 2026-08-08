@@ -14,7 +14,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Primary Test Proposition',
             bodyText: 'The primary proposition is used as the root of this test graph.',
             tags: ['test', 'root'],
-            logOdds: -1.15,
+            priorOdds: -1.15,
+            posteriorOdds: -1.15,
         },
         {
             id: 'C1',
@@ -23,7 +24,8 @@ export const sampleGraph: GraphFixture = {
             bodyText: 'Test Claim Alpha provides one line of support for the primary proposition.',
             category: 'test-claim',
             tags: ['synthetic'],
-            logOdds: -0.53,
+            priorOdds: -0.53,
+            posteriorOdds: -0.53,
         },
         {
             id: 'C2',
@@ -31,7 +33,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Claim Beta',
             bodyText: 'Test Claim Beta provides a second line of support for the primary proposition.',
             category: 'test-claim',
-            logOdds: -0.2,
+            priorOdds: -0.2,
+            posteriorOdds: -0.2,
         },
         {
             id: 'C3',
@@ -39,7 +42,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Claim Gamma',
             bodyText: 'Test Claim Gamma provides a third line of support for the primary proposition.',
             category: 'test-claim',
-            logOdds: -0.8,
+            priorOdds: -0.8,
+            posteriorOdds: -0.8,
         },
         {
             id: 'P1',
@@ -47,7 +51,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Premise Alpha',
             bodyText: 'Test Premise Alpha supports Test Claim Alpha with a generic input.',
             category: 'test-premise',
-            logOdds: -0.49,
+            priorOdds: -0.49,
+            posteriorOdds: -0.49,
         },
         {
             id: 'P2',
@@ -55,7 +60,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Premise Beta',
             bodyText: 'Test Premise Beta supports Test Claim Beta with a generic input.',
             category: 'test-premise',
-            logOdds: 0.2,
+            priorOdds: 0.2,
+            posteriorOdds: 0.2,
         },
         {
             id: 'E1',
@@ -63,7 +69,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Evidence Alpha',
             bodyText: 'Test Evidence Alpha supplies a synthetic supporting record for Test Claim Alpha.',
             tags: ['synthetic'],
-            logOdds: 0.08,
+            priorOdds: 0.08,
+            posteriorOdds: 0.08,
             evidence: {
                 type: 'documentary',
                 score: 52,
@@ -77,7 +84,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Evidence Beta',
             bodyText: 'Test Evidence Beta supplies a synthetic supporting record for Test Claim Beta.',
             tags: ['synthetic'],
-            logOdds: 0,
+            priorOdds: 0,
+            posteriorOdds: 0,
             evidence: {
                 type: 'documentary',
                 score: 50,
@@ -89,7 +97,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Counterpoint Alpha',
             bodyText: 'Test Counterpoint Alpha rebuts Test Premise Alpha in this synthetic graph.',
             category: 'test-counterpoint',
-            logOdds: 0.8,
+            priorOdds: 0.8,
+            posteriorOdds: 0.8,
         },
         {
             id: 'O2',
@@ -97,7 +106,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Counterpoint Beta',
             bodyText: 'Test Counterpoint Beta rebuts Test Claim Gamma in this synthetic graph.',
             category: 'test-counterpoint',
-            logOdds: 0.4,
+            priorOdds: 0.4,
+            posteriorOdds: 0.4,
         },
         {
             id: 'O3',
@@ -105,7 +115,8 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Counterpoint Beta',
             bodyText: 'Test Counterpoint Beta rebuts Test Claim Gamma in this synthetic graph.',
             category: 'test-counterpoint',
-            logOdds: 0.5,
+            priorOdds: 0.5,
+            posteriorOdds: 0.5,
         },
     ],
     edges: [

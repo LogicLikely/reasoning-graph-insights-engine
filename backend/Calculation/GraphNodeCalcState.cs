@@ -6,5 +6,7 @@ public sealed class GraphNodeCalcState
 
     public required string Kind { get; init; }
 
-    public decimal LogOdds { get; set; }
+    public decimal PriorOdds { get; set; }
+
+    public decimal PosteriorOdds { get; set; }
 }

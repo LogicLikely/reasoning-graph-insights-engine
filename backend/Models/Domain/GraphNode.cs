@@ -11,6 +11,7 @@ public class GraphNode
     public string BodyText { get; set; } = string.Empty;
     public string? Category { get; set; }
     public List<string> Tags { get; set; } = new();
-    public decimal LogOdds { get; set; }
+    public decimal PriorOdds { get; set; }
+    public decimal PosteriorOdds { get; set; }
     public GraphEvidenceDetails? Evidence { get; set; }
 }

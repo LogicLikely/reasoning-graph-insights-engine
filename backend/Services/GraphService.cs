@@ -43,7 +43,8 @@ public class GraphService : IGraphService
                     BodyText = node.BodyText,
                     Category = node.Category,
                     Tags = node.Tags.ToList(),
-                    LogOdds = node.LogOdds,
+                    PriorOdds = node.PriorOdds,
+                    PosteriorOdds = node.PosteriorOdds,
                     Evidence = node.Evidence == null ? null : new GraphEvidenceDto
                     {
                         Type = node.Evidence.Type,
@@ -154,7 +155,8 @@ public class GraphService : IGraphService
                 BodyText = node.BodyText,
                 Category = node.Category,
                 Tags = node.Tags.ToList(),
-                LogOdds = node.LogOdds,
+                PriorOdds = node.PriorOdds,
+                PosteriorOdds = node.PosteriorOdds,
                 Evidence = node.Evidence is null ? null : new GraphEvidenceDetails
                 {
                     Type = node.Evidence.Type,
@@ -207,7 +209,7 @@ public class GraphService : IGraphService
             return false;
         }
 
-        if (node.LogOdds.HasValue)
+        if (node.PriorOdds.HasValue)
         {
             await RecalculateAndPersistAncestorsAsync(slug, nodeId, cancellationToken);
         }
@@ -285,7 +287,7 @@ public class GraphService : IGraphService
 
         if (recalculatedLogOdds.Count > 0)
         {
-            await _graphRepository.UpdateNodeLogOddsBatchAsync(graph.Id, recalculatedLogOdds, cancellationToken);
+            await _graphRepository.UpdateNodePosteriorOddsBatchAsync(graph.Id, recalculatedLogOdds, cancellationToken);
         }
 
         return recalculatedLogOdds;
@@ -301,7 +303,7 @@ public class GraphService : IGraphService
 
         if (recalculatedLogOdds.Count > 0)
         {
-            await _graphRepository.UpdateNodeLogOddsBatchAsync(graph.Id, recalculatedLogOdds, cancellationToken);
+            await _graphRepository.UpdateNodePosteriorOddsBatchAsync(graph.Id, recalculatedLogOdds, cancellationToken);
         }
 
         return recalculatedLogOdds;
@@ -395,7 +397,7 @@ public class GraphService : IGraphService
                 continue;
             }
 
-            counterQueue.Enqueue(nodeId, node.LogOdds * multiplier.Value);
+            counterQueue.Enqueue(nodeId, node.PosteriorOdds * multiplier.Value);
         }
 
         return counterQueue;

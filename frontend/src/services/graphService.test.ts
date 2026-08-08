@@ -85,8 +85,8 @@ describe('graphService', () => {
     const fixtureGraph = {
       slug: 'sample-medium',
       nodes: [
-        { id: 'R1', kind: 'root', logOdds: 0 },
-        { id: 'O1', kind: 'objection', logOdds: 2 },
+        { id: 'R1', kind: 'root', priorOdds: 0, posteriorOdds: 0 },
+        { id: 'O1', kind: 'objection', priorOdds: 2, posteriorOdds: 2 },
       ],
       edges: [{ id: 'O1-R1', from: 'O1', to: 'R1', kind: 'rebut', importanceToParent: 10 }],
     }

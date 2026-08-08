@@ -14,9 +14,9 @@ public interface IGraphRepository
     Task<bool> AddEdgeAsync(string slug, GraphEdgeDto edge, CancellationToken cancellationToken = default);
     Task<bool> UpdateEdgeAsync(string slug, string edgeId, GraphEdgeUpdateDto edge,
         CancellationToken cancellationToken = default);
-    Task UpdateNodeLogOddsBatchAsync(
+    Task UpdateNodePosteriorOddsBatchAsync(
         int graphId,
-        IReadOnlyDictionary<string, decimal> logOddsByNodeId,
+        IReadOnlyDictionary<string, decimal> posteriorOddsByNodeId,
         CancellationToken cancellationToken = default);
     Task ResetDatabaseAsync(CancellationToken cancellationToken = default);
 }

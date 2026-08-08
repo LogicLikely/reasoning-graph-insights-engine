@@ -28,7 +28,8 @@ public sealed class GraphCalculationContext
             {
                 Id = node.Id,
                 Kind = node.Kind,
-                LogOdds = node.LogOdds
+                PriorOdds = node.PriorOdds,
+                PosteriorOdds = node.PosteriorOdds
             });
 
         var edgeStates = edges

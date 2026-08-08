@@ -52,7 +52,7 @@ function getDisplayTitle(title: string) {
 function getMetricForNode(node: GraphFixture['nodes'][number]) {
   return {
     metricLabel: 'likely',
-    metricValue: formatMetricLogOdds(node.logOdds) + '%',
+    metricValue: formatMetricLogOdds(node.posteriorOdds) + '%',
   }
 }
 

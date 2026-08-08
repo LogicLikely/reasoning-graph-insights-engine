@@ -20,10 +20,10 @@ public class GraphCalculationContextTests
         var context = GraphCalculationContext.From(nodes, []);
 
         Assert.AreEqual(4, context.NodesById.Count);
-        Assert.AreEqual(0.1m, context.NodesById["A"].LogOdds);
-        Assert.AreEqual(0.2m, context.NodesById["B"].LogOdds);
-        Assert.AreEqual(-0.3m, context.NodesById["C"].LogOdds);
-        Assert.AreEqual(0m, context.NodesById["D"].LogOdds);
+        Assert.AreEqual(0.1m, context.NodesById["A"].PriorOdds);
+        Assert.AreEqual(0.2m, context.NodesById["B"].PriorOdds);
+        Assert.AreEqual(-0.3m, context.NodesById["C"].PriorOdds);
+        Assert.AreEqual(0m, context.NodesById["D"].PriorOdds);
     }
 
     [TestMethod]
@@ -115,7 +115,8 @@ public class GraphCalculationContextTests
         {
             Id = id,
             Kind = kind,
-            LogOdds = logOdds
+            PriorOdds = logOdds,
+            PosteriorOdds = logOdds
         };
     }
 

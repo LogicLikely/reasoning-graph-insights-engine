@@ -48,9 +48,9 @@ public sealed class GraphLikelihoodCalculator
                      .ThenBy(affected => affected.Key, StringComparer.Ordinal)
                      .Select(affected => affected.Key))
         {
-            var logOdds = CalculateNodeLogOdds(context, nodeId);
-            context.NodesById[nodeId].LogOdds = logOdds;
-            recalculatedValues[nodeId] = logOdds;
+            var posteriorOdds = CalculateNodeLogPosteriorOdds(context, nodeId);
+            context.NodesById[nodeId].PosteriorOdds = posteriorOdds;
+            recalculatedValues[nodeId] = posteriorOdds;
         }
 
         return recalculatedValues;
@@ -390,10 +390,10 @@ public sealed class GraphLikelihoodCalculator
 
         if (!context.ChildEdgesByParentId.TryGetValue(nodeId, out var childEdges))
         {
-            return 0m;
+            return context.NodesById[nodeId].PriorOdds;
         }
 
-        decimal priorOdds = context.NodesById[nodeId].LogOdds;
+        decimal priorOdds = context.NodesById[nodeId].PriorOdds;
         Dictionary<string, decimal> evidenceLRs = GetDownstreamEvidenceLRs(context, nodeId);
 
         var logPosteriorOdds = priorOdds + evidenceLRs.Values.Sum();

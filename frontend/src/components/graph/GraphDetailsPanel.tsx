@@ -140,7 +140,7 @@ export function GraphDetailsPanel({
     const submissionData: Partial<GraphFixtureNode> = {
       title: (formData.title ?? '').trim(),
       bodyText: (formData.bodyText ?? '').trim(),
-      logOdds: probabilityToLogOdds(probability)
+      priorOdds: probabilityToLogOdds(probability)
     }
 
     if (mode === 'add') {
@@ -190,7 +190,7 @@ export function GraphDetailsPanel({
       title: node.title ?? '',
       bodyText: node.bodyText ?? '',
       kind: node.kind,
-      likelihoodPercent: formatLogOddsAsPercent(node.logOdds) ?? '',
+      likelihoodPercent: formatLogOddsAsPercent(node.priorOdds) ?? '',
       parentImportance: '1'
     })
     setEdgeImportanceData(parentImportanceEntries)
@@ -426,10 +426,16 @@ export function GraphDetailsPanel({
             </dd>
           </>
         ) : null}
-        {formatMetric(node.logOdds) ? (
+        {formatMetric(node.priorOdds) ? (
           <>
-            <dt>Likelihood</dt>
-            <dd>{formatLogOddsAsPercent(node.logOdds)}%</dd>
+            <dt>Prior likelihood</dt>
+            <dd>{formatLogOddsAsPercent(node.priorOdds)}%</dd>
+          </>
+        ) : null}
+        {formatMetric(node.posteriorOdds) ? (
+          <>
+            <dt>Posterior likelihood</dt>
+            <dd>{formatLogOddsAsPercent(node.posteriorOdds)}%</dd>
           </>
         ) : null}
         {node.kind == 'evidence' && node.evidence ? (
