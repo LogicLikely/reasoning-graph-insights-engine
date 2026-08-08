@@ -241,14 +241,20 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Returns dictionary assigning an LR value to every EVIDENCE node downsteam from a starting node
-    private Dictionary<string, decimal> GetDownstreamEvidenceLRs(GraphCalculationContext context, string nodeId)
+    private static Dictionary<string, decimal> GetDownstreamEvidenceLRs(GraphCalculationContext context, string nodeId)
     {
         Dictionary<string, decimal> unfilteredPaths = GetStrongestPaths(context, nodeId, PathDirection.Down);
 
+        return unfilteredPaths
+            .Where(path => string.Equals(
+                context.NodesById[path.Key].Kind,
+                "evidence",
+                StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(path => path.Key, path => path.Value);
     }
 
     //Returns list of nodes reachable from a start node when traversing either up or down the graph
-    private List<string> GetReachableNodes(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
+    private static List<string> GetReachableNodes(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
     {
         if (!context.NodesById.ContainsKey(startNodeId))
         {
@@ -289,7 +295,7 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Uses Bellman ford to find all strongest paths upstream or downstream from a node
-    private Dictionary<string, decimal> GetStrongestPaths(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
+    private static Dictionary<string, decimal> GetStrongestPaths(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
     {
         List<string> usedNodeIds = GetReachableNodes(context, startNodeId, pathDirection);
         int n = usedNodeIds.Count;
@@ -375,7 +381,7 @@ public sealed class GraphLikelihoodCalculator
         else return edge.FromNodeId;
     }
 
-    private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
+    private static decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
     {
         if (!context.NodesById.ContainsKey(nodeId))
         {
@@ -387,18 +393,12 @@ public sealed class GraphLikelihoodCalculator
             return 0m;
         }
 
-        var logOdds = childEdges.Sum(edge =>
-        {
-            if (!context.NodesById.TryGetValue(edge.FromNodeId, out var childNode))
-            {
-                throw new InvalidOperationException(
-                    $"Edge '{edge.Id}' references missing from node '{edge.FromNodeId}'.");
-            }
+        decimal priorOdds = context.NodesById[nodeId].LogOdds;
+        Dictionary<string, decimal> evidenceLRs = GetDownstreamEvidenceLRs(context, nodeId);
 
-            return childNode.LogOdds * GetDirection(edge.Kind) * (edge.ImportanceToParent / 10m);
-        });
+        var logPosteriorOdds = priorOdds + evidenceLRs.Values.Sum();
 
-        return ClampLogOdds(logOdds);
+        return ClampLogOdds(logPosteriorOdds);
     }
 
     private static decimal GetDirection(string edgeKind)
