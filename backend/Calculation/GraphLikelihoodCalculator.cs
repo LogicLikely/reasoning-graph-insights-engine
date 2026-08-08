@@ -241,16 +241,65 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Returns dictionary assigning an LR value to every EVIDENCE node downsteam from a starting node
-    private Dictionary<string,decimal> GetDownstreamEvidenceLRs(GraphCalculationContext context, string nodeId)
+    private Dictionary<string, decimal> GetDownstreamEvidenceLRs(GraphCalculationContext context, string nodeId)
     {
-        Dictionary<string,decimal> unfilteredPaths = GetStrongestPaths(context, nodeId, PathDirection.Down);
+        Dictionary<string, decimal> unfilteredPaths = GetStrongestPaths(context, nodeId, PathDirection.Down);
 
     }
 
-    //Uses Bellman ford to find shortest all paths upstream or downstream from a node 
-    private Dictionary<string,decimal> GetStrongestPaths(GraphCalculationContext context, string nodeId, PathDirection pathDirection)
+    //Uses Bellman ford to find all strongest paths upstream or downstream from a node 
+    private Dictionary<string, decimal> GetStrongestPaths(GraphCalculationContext context, string nodeId, PathDirection pathDirection)
     {
-        
+        List<string> usedNodeIds = GetReachableNodes();
+        int n = usedNodeIds.Count;
+        //Dist contains distances from either the kth hop or k-1 hop for each vertex
+        Dictionary<string, decimal> dist = new Dictionary<string, decimal>();
+
+        Dictionary<string, List<GraphEdgeCalcState>> connectedEdgesDict = null;
+        if (pathDirection == PathDirection.Up) connectedEdgesDict = context.ParentEdgesByChildId;
+        else connectedEdgesDict = context.ChildEdgesByParentId;
+
+        //Initialize dist
+        foreach (string id in usedNodeIds)
+        {
+            if (!context.NodesById.ContainsKey(id))
+            {
+                throw new InvalidOperationException($"Node '{id}' does not exist in the calculation context.");
+            }
+            dist.Add(id, decimal.MinValue);
+        }
+
+        //Try k hops
+        for (int k = 0; k < n; k++)
+        {
+            //Inspect every node in scope
+            foreach (string currentNodeId in dist.Keys)
+            {
+                if (!connectedEdgesDict.TryGetValue(currentNodeId, out List<GraphEdgeCalcState> connectedEdges))
+                {
+                    throw new InvalidOperationException($"Node '{currentNodeId}' does not exist in current context.");
+                }
+
+                //Inspect every neighbor to currentNode
+                foreach (GraphEdgeCalcState edge in connectedEdges)
+                {
+                    string neighborId = null;
+                    if (pathDirection == PathDirection.Up) neighborId = edge.ToNodeId;
+                    else neighborId = edge.FromNodeId;
+
+                    if (!dist.Keys.Contains(neighborId))
+                    {
+                        throw new InvalidOperationException($"Node '{neighborId}' is percieved as unreachable from {nodeId}.");
+                    }
+
+                    if (IsBetterLogPath(dist[neighborId] + edge.ImportanceToParent, dist[currentNodeId]))
+                    {
+                        dist[currentNodeId] = dist[neighborId] + edge.ImportanceToParent;
+                    }
+                }
+            }
+        }
+        return dist;
     }
 
     private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
