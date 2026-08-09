@@ -234,11 +234,14 @@ public sealed class GraphLikelihoodCalculator
         Dictionary<string, decimal> unfilteredPaths = GetStrongestPaths(context, nodeId, PathDirection.Down);
 
         return unfilteredPaths
-            .Where(path => string.Equals(
-                context.NodesById[path.Key].Kind,
-                "evidence",
-                StringComparison.OrdinalIgnoreCase))
+            .Where(path => IsEvidenceKind(context.NodesById[path.Key].Kind))
             .ToDictionary(path => path.Key, path => path.Value);
+    }
+
+    private static bool IsEvidenceKind(string nodeKind)
+    {
+        return string.Equals(nodeKind, "evidence", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(nodeKind, "objection", StringComparison.OrdinalIgnoreCase);
     }
 
     //Returns list of nodes reachable from a start node when traversing either up or down the graph

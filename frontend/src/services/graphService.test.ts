@@ -81,6 +81,57 @@ describe('graphService', () => {
     expect(getDefaultGraphDataSource()).toBe('fixture')
   })
 
+  it('sends the fixture graph to the counter-set API in fixture mode', async () => {
+    const fixtureGraph = {
+      slug: 'sample-medium',
+      nodes: [
+        { id: 'R1', kind: 'root', priorOdds: 0, posteriorOdds: 0 },
+        { id: 'O1', kind: 'objection', priorOdds: 2, posteriorOdds: 2 },
+      ],
+      edges: [{ id: 'O1-R1', from: 'O1', to: 'R1', kind: 'rebut', importanceToParent: 10 }],
+    }
+    const fixtureSpy = vi.fn().mockResolvedValue(fixtureGraph)
+    const postSpy = vi.fn().mockResolvedValue({ data: { counterNodeIds: ['O1'] } })
+
+    vi.doMock('./graphFixture', () => ({ getGraphBySlugFromFixture: fixtureSpy }))
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const { getNodeCounterSet } = await import('./graphService')
+
+    await expect(getNodeCounterSet('sample-medium', 'R1', 'fixture')).resolves.toEqual(['O1'])
+    expect(fixtureSpy).toHaveBeenCalledWith('sample-medium')
+    expect(postSpy).toHaveBeenCalledWith(
+      '/api/graphs/sample-medium/nodes/R1/minimal-counter-set',
+      fixtureGraph,
+    )
+  })
+
+  it('sends the fixture graph to the evidence-impact API and returns its sorted IDs', async () => {
+    const fixtureGraph = {
+      slug: 'sample-medium',
+      nodes: [{ id: 'R1', kind: 'root', priorOdds: 0, posteriorOdds: 0 }],
+      edges: [],
+    }
+    const fixtureSpy = vi.fn().mockResolvedValue(fixtureGraph)
+    const ranking = {
+      supportingEvidenceNodeIds: ['E2', 'E1'],
+      counterEvidenceNodeIds: ['O3', 'O2', 'O1'],
+    }
+    const postSpy = vi.fn().mockResolvedValue({ data: ranking })
+
+    vi.doMock('./graphFixture', () => ({ getGraphBySlugFromFixture: fixtureSpy }))
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const { getEvidenceImpactRanking } = await import('./graphService')
+
+    await expect(getEvidenceImpactRanking('sample-medium', 'R1', 'fixture'))
+      .resolves.toEqual(ranking)
+    expect(postSpy).toHaveBeenCalledWith(
+      '/api/graphs/sample-medium/nodes/R1/evidence-impact-ranking',
+      fixtureGraph,
+    )
+  })
+
   it('posts to the reset endpoint when resetting the database', async () => {
     const postSpy = vi.fn().mockResolvedValue({})
 

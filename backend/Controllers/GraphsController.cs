@@ -63,16 +63,16 @@ public class GraphsController : ControllerBase
         [FromBody] GraphDto? graphContext,
         CancellationToken cancellationToken)
     {
-        var evidenceNodeIds = graphContext is null
+        var ranking = graphContext is null
             ? await _graphService.GetEvidenceImpactRankingAsync(slug, targetNodeId, cancellationToken)
             : await _graphService.GetEvidenceImpactRankingAsync(slug, targetNodeId, graphContext, cancellationToken);
 
-        if (evidenceNodeIds is null)
+        if (ranking is null)
         {
             return NotFound();
         }
 
-        return Ok(new { evidenceNodeIds });
+        return Ok(ranking);
     }
 
 

@@ -10,7 +10,9 @@ import {
   addNode,
   deleteNode,
   getDefaultGraphDataSource,
+  getEvidenceImpactRanking,
   getGraphBySlug,
+  getNodeCounterSet,
   resetDatabase,
   updateEdge,
   updateNode,
@@ -135,6 +137,31 @@ export function DemoPage() {
     }
   }, [graphDataSource])
 
+  const handleNodeCounterSet = useCallback(async (nodeId: string) => {
+    try {
+      const counterNodeIds = await getNodeCounterSet(DEMO_GRAPH_SLUG, nodeId, graphDataSource)
+      console.log(counterNodeIds)
+    } catch {
+      setError('Failed to get the minimal counter set from the server.')
+    }
+  }, [graphDataSource])
+
+  const handleEvidenceImpactRanking = useCallback(async (nodeId: string) => {
+    try {
+      const ranking = await getEvidenceImpactRanking(DEMO_GRAPH_SLUG, nodeId, graphDataSource)
+      const isEvidenceNode = (rankedNodeId: string) => graph?.nodes.some((node) =>
+        node.id === rankedNodeId && (node.kind === 'evidence' || node.kind === 'objection')
+      )
+
+      console.log({
+        supportingEvidenceNodeIds: ranking.supportingEvidenceNodeIds.filter(isEvidenceNode),
+        counterEvidenceNodeIds: ranking.counterEvidenceNodeIds.filter(isEvidenceNode),
+      })
+    } catch {
+      setError('Failed to get the evidence impact ranking from the server.')
+    }
+  }, [graph?.nodes, graphDataSource])
+
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
     data: Partial<GraphFixtureNode> = {},
@@ -249,11 +276,22 @@ export function DemoPage() {
           void handleAddSupportingNode(selectedNodeId)
         }
       }
+      else if (event.key.toLowerCase() === 'i') {
+        if (selectedNodeId !== undefined) {
+          void handleNodeCounterSet(selectedNodeId)
+        }
+      }
+      else if (event.key.toLowerCase() === 'e') {
+        if (selectedNodeId !== undefined) {
+          void handleEvidenceImpactRanking(selectedNodeId)
+        }
+      }
+
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode])
+  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null

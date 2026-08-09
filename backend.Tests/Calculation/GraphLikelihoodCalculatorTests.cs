@@ -35,7 +35,7 @@ public class GraphLikelihoodCalculatorTests
     public void RecalculateAncestors_UsesLrBelowOneForCounterImpact()
     {
         var context = GraphCalculationContext.From(
-            [Node("A"), Node("B", kind: "evidence")],
+            [Node("A"), Node("B", kind: "objection")],
             [Edge("E-B-A", "B", "A", "rebut", 0.1m)]);
 
         var result = _calculator.RecalculateAncestors(context, "B");
