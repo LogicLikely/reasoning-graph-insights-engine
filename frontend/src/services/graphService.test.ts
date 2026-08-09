@@ -114,8 +114,15 @@ describe('graphService', () => {
     }
     const fixtureSpy = vi.fn().mockResolvedValue(fixtureGraph)
     const ranking = {
-      supportingEvidenceNodeIds: ['E2', 'E1'],
-      counterEvidenceNodeIds: ['O3', 'O2', 'O1'],
+      supportingEvidence: [
+        { nodeId: 'E2', logLr: 0.52, probabilityDifference: 0.1 },
+        { nodeId: 'E1', logLr: 0.47, probabilityDifference: 0.09 },
+      ],
+      counterEvidence: [
+        { nodeId: 'O3', logLr: -1.87, probabilityDifference: -0.3 },
+        { nodeId: 'O2', logLr: -1.53, probabilityDifference: -0.25 },
+        { nodeId: 'O1', logLr: -1.49, probabilityDifference: -0.2 },
+      ],
     }
     const postSpy = vi.fn().mockResolvedValue({ data: ranking })
 

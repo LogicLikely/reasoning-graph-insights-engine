@@ -470,8 +470,16 @@ public class GraphServiceTests
             .GetEvidenceImpactRankingAsync("sample-medium", "R", CancellationToken.None);
 
         Assert.IsNotNull(result);
-        CollectionAssert.AreEqual(new[] { "E2", "E1" }, result.SupportingEvidenceNodeIds);
-        CollectionAssert.AreEqual(new[] { "O2", "O1" }, result.CounterEvidenceNodeIds);
+        CollectionAssert.AreEqual(
+            new[] { "E2", "E1" },
+            result.SupportingEvidence.Select(impact => impact.NodeId).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "O2", "O1" },
+            result.CounterEvidence.Select(impact => impact.NodeId).ToArray());
+        Assert.IsTrue(result.SupportingEvidence.All(impact => impact.ProbabilityDifference > 0d));
+        Assert.IsTrue(result.CounterEvidence.All(impact => impact.ProbabilityDifference < 0d));
+        Assert.IsTrue(Approximately(result.SupportingEvidence[0].LogLr, (decimal)Math.Log(3d)));
+        Assert.IsTrue(Approximately(result.CounterEvidence[0].LogLr, (decimal)Math.Log(0.1d)));
     }
 
     private static bool Approximately(decimal actual, decimal expected, decimal tolerance = 0.000001m)

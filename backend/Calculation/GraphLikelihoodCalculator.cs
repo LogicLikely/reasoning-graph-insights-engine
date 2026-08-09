@@ -1,5 +1,16 @@
 namespace Backend.Calculation;
 
+public enum LogPathSelection
+{
+    Minimum,
+    Maximum
+}
+public enum PathDirection
+{
+    Up,
+    Down
+}
+
 public sealed class GraphLikelihoodCalculator
 {
     private const decimal MinLogOdds = -100m;
@@ -22,6 +33,7 @@ public sealed class GraphLikelihoodCalculator
         GraphCalculationContext context,
         IEnumerable<string> nodeIds)
     {
+        //Sorts nodes by distance so can propogate odds up graph level by level
         var affectedDistances = CollectAffectedNodeAndAncestorDistances(context, nodeIds);
         return RecalculateAffectedNodes(context, affectedDistances);
     }
@@ -36,9 +48,9 @@ public sealed class GraphLikelihoodCalculator
                      .ThenBy(affected => affected.Key, StringComparer.Ordinal)
                      .Select(affected => affected.Key))
         {
-            var logOdds = CalculateNodeLogOdds(context, nodeId);
-            context.NodesById[nodeId].LogOdds = logOdds;
-            recalculatedValues[nodeId] = logOdds;
+            var posteriorOdds = CalculateNodeLogPosteriorOdds(context, nodeId);
+            context.NodesById[nodeId].PosteriorOdds = posteriorOdds;
+            recalculatedValues[nodeId] = posteriorOdds;
         }
 
         return recalculatedValues;
@@ -372,8 +384,7 @@ public sealed class GraphLikelihoodCalculator
         else return edge.FromNodeId;
     }
 
-    private decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
-    private static decimal CalculateNodeLogOdds(GraphCalculationContext context, string nodeId)
+    public decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
     {
         if (!context.NodesById.ContainsKey(nodeId))
         {
@@ -382,7 +393,7 @@ public sealed class GraphLikelihoodCalculator
 
         if (!context.ChildEdgesByParentId.TryGetValue(nodeId, out var childEdges))
         {
-            return 0m;
+            return context.NodesById[nodeId].PriorOdds;
         }
 
         decimal priorOdds = context.NodesById[nodeId].PriorOdds;
@@ -391,19 +402,6 @@ public sealed class GraphLikelihoodCalculator
         var logPosteriorOdds = priorOdds + evidenceLRs.Values.Sum();
 
         return ClampLogOdds(logPosteriorOdds);
-        var logPosteriorOdds = priorOdds + childImpact;
-        var logOdds = childEdges.Sum(edge =>
-        {
-            if (!context.NodesById.TryGetValue(edge.FromNodeId, out var childNode))
-            {
-                throw new InvalidOperationException(
-                    $"Edge '{edge.Id}' references missing from node '{edge.FromNodeId}'.");
-            }
-
-            return childNode.LogOdds * GetDirection(edge.Kind) * (edge.ImportanceToParent / 10m);
-        });
-
-        return ClampLogOdds(logOdds);
     }
 
 

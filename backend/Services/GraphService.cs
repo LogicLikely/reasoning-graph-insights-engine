@@ -317,22 +317,50 @@ public class GraphService : IGraphService
         }
 
         var evidenceLogLrs = _calculator.GetDownstreamEvidenceLogLRs(context, targetClaimId);
+        var posteriorLogOddsWithAllEvidence = _calculator.CalculateNodeLogPosteriorOdds(context, targetClaimId);
+        var probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOddsWithAllEvidence);
+
+        EvidenceImpactDto ToImpact(KeyValuePair<string, decimal> entry)
+        {
+            var posteriorLogOddsWithoutEvidence = posteriorLogOddsWithAllEvidence - entry.Value;
+            var probabilityWithoutEvidence = LogOddsToProbability(posteriorLogOddsWithoutEvidence);
+
+            return new EvidenceImpactDto
+            {
+                NodeId = entry.Key,
+                LogLr = entry.Value,
+                ProbabilityDifference = probabilityWithAllEvidence - probabilityWithoutEvidence
+            };
+        }
 
         return new EvidenceImpactRankingDto
         {
-            SupportingEvidenceNodeIds = evidenceLogLrs
+            SupportingEvidence = evidenceLogLrs
                 .Where(entry => entry.Value > 0m)
-                .OrderByDescending(entry => entry.Value)
-                .ThenBy(entry => entry.Key, StringComparer.Ordinal)
-                .Select(entry => entry.Key)
+                .Select(ToImpact)
+                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
                 .ToList(),
-            CounterEvidenceNodeIds = evidenceLogLrs
+            CounterEvidence = evidenceLogLrs
                 .Where(entry => entry.Value < 0m)
-                .OrderBy(entry => entry.Value)
-                .ThenBy(entry => entry.Key, StringComparer.Ordinal)
-                .Select(entry => entry.Key)
+                .Select(ToImpact)
+                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
                 .ToList()
         };
+    }
+
+    private static double LogOddsToProbability(decimal logOdds)
+    {
+        var value = (double)logOdds;
+        if (value >= 0d)
+        {
+            var inverseOdds = Math.Exp(-value);
+            return 1d / (1d + inverseOdds);
+        }
+
+        var odds = Math.Exp(value);
+        return odds / (1d + odds);
     }
 
     private async Task<List<string>?> GetMinimalCounterSet(

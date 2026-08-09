@@ -56,8 +56,14 @@ export async function getNodeCounterSet(
 }
 
 export type EvidenceImpactRanking = {
-  supportingEvidenceNodeIds: string[]
-  counterEvidenceNodeIds: string[]
+  supportingEvidence: EvidenceImpact[]
+  counterEvidence: EvidenceImpact[]
+}
+
+export type EvidenceImpact = {
+  nodeId: string
+  logLr: number
+  probabilityDifference: number
 }
 
 export async function getEvidenceImpactRanking(

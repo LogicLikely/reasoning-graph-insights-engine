@@ -149,13 +149,13 @@ export function DemoPage() {
   const handleEvidenceImpactRanking = useCallback(async (nodeId: string) => {
     try {
       const ranking = await getEvidenceImpactRanking(DEMO_GRAPH_SLUG, nodeId, graphDataSource)
-      const isEvidenceNode = (rankedNodeId: string) => graph?.nodes.some((node) =>
-        node.id === rankedNodeId && (node.kind === 'evidence' || node.kind === 'objection')
+      const isEvidenceNode = (nodeId: string) => graph?.nodes.some((node) =>
+        node.id === nodeId && (node.kind === 'evidence' || node.kind === 'objection')
       )
 
       console.log({
-        supportingEvidenceNodeIds: ranking.supportingEvidenceNodeIds.filter(isEvidenceNode),
-        counterEvidenceNodeIds: ranking.counterEvidenceNodeIds.filter(isEvidenceNode),
+        supportingEvidence: ranking.supportingEvidence.filter((impact) => isEvidenceNode(impact.nodeId)),
+        counterEvidence: ranking.counterEvidence.filter((impact) => isEvidenceNode(impact.nodeId)),
       })
     } catch {
       setError('Failed to get the evidence impact ranking from the server.')
