@@ -38,7 +38,7 @@ public sealed class GraphLikelihoodCalculator
         return RecalculateAffectedNodes(context, affectedDistances);
     }
 
-    private static Dictionary<string, decimal> RecalculateAffectedNodes(
+    private Dictionary<string, decimal> RecalculateAffectedNodes(
         GraphCalculationContext context,
         Dictionary<string, int> affectedDistances)
     {
@@ -241,7 +241,7 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Returns dictionary assigning an LR value to every EVIDENCE node downsteam from a starting node
-    private static Dictionary<string, decimal> GetDownstreamEvidenceLRs(GraphCalculationContext context, string nodeId)
+    public Dictionary<string, decimal> GetDownstreamEvidenceLogLRs(GraphCalculationContext context, string nodeId)
     {
         Dictionary<string, decimal> unfilteredPaths = GetStrongestPaths(context, nodeId, PathDirection.Down);
 
@@ -381,7 +381,7 @@ public sealed class GraphLikelihoodCalculator
         else return edge.FromNodeId;
     }
 
-    private static decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
+    private decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
     {
         if (!context.NodesById.ContainsKey(nodeId))
         {
@@ -394,21 +394,25 @@ public sealed class GraphLikelihoodCalculator
         }
 
         decimal priorOdds = context.NodesById[nodeId].PriorOdds;
-        Dictionary<string, decimal> evidenceLRs = GetDownstreamEvidenceLRs(context, nodeId);
+        decimal childImpact = childEdges.Sum(edge =>
+        {
+            ValidateEdgeKind(edge.Kind);
+            return context.NodesById[edge.FromNodeId].PosteriorOdds
+                * (edge.ImportanceToParent / 10m);
+        });
 
-        var logPosteriorOdds = priorOdds + evidenceLRs.Values.Sum();
+        var logPosteriorOdds = priorOdds + childImpact;
 
         return ClampLogOdds(logPosteriorOdds);
     }
 
-    private static decimal GetDirection(string edgeKind)
+    private static void ValidateEdgeKind(string edgeKind)
     {
-        return edgeKind.ToLowerInvariant() switch
+        if (!string.Equals(edgeKind, "support", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(edgeKind, "rebut", StringComparison.OrdinalIgnoreCase))
         {
-            "support" => 1m,
-            "rebut" => -1m,
-            _ => throw new InvalidOperationException($"Unknown edge kind '{edgeKind}'.")
-        };
+            throw new InvalidOperationException($"Unknown edge kind '{edgeKind}'.");
+        }
     }
 
     private static decimal ClampLogOdds(decimal value)

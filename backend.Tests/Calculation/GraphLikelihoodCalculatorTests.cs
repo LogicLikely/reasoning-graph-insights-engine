@@ -29,10 +29,10 @@ public class GraphLikelihoodCalculatorTests
     }
 
     [TestMethod]
-    public void RecalculateAncestors_AppliesRebutDirection()
+    public void RecalculateAncestors_UsesSignedLogOddsForRebutImpact()
     {
         var context = GraphCalculationContext.From(
-            [Node("A"), Node("B", 1.0m)],
+            [Node("A"), Node("B", -1.0m)],
             [Edge("E-B-A", "B", "A", "rebut", 10)]);
 
         var result = _calculator.RecalculateAncestors(context, "B");
@@ -162,10 +162,10 @@ public class GraphLikelihoodCalculatorTests
         var result = _calculator.RecalculateNodesAndAncestors(context, ["B"]);
 
         Assert.AreEqual(2, result.Count);
-        Assert.AreEqual(0m, result["B"]);
-        Assert.AreEqual(0m, result["A"]);
-        Assert.AreEqual(0m, context.NodesById["B"].PosteriorOdds);
-        Assert.AreEqual(0m, context.NodesById["A"].PosteriorOdds);
+        Assert.AreEqual(1m, result["B"]);
+        Assert.AreEqual(2m, result["A"]);
+        Assert.AreEqual(1m, context.NodesById["B"].PosteriorOdds);
+        Assert.AreEqual(2m, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -185,7 +185,7 @@ public class GraphLikelihoodCalculatorTests
     public void RecalculateAncestors_ClampsLowLogOdds()
     {
         var context = GraphCalculationContext.From(
-            [Node("A"), Node("B", 125m)],
+            [Node("A"), Node("B", -125m)],
             [Edge("E-B-A", "B", "A", "rebut", 10)]);
 
         var result = _calculator.RecalculateAncestors(context, "B");

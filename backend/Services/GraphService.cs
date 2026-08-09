@@ -101,6 +101,33 @@ public class GraphService : IGraphService
         return await GetMinimalCounterSet(graph, targetNodeId, graph.Nodes.Select(node => node.Id), cancellationToken);
     }
 
+    public async Task<List<string>?> GetEvidenceImpactRankingAsync(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        return graph is null
+            ? null
+            : GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken);
+    }
+
+    public Task<List<string>?> GetEvidenceImpactRankingAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
+        {
+            return Task.FromResult<List<string>?>(null);
+        }
+
+        var graph = ToDomainGraph(graphContext);
+        return Task.FromResult<List<string>?>(
+            GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken));
+    }
+
     public async Task<bool> DeleteNodeAsync(
         string slug,
         string nodeId,
@@ -307,6 +334,30 @@ public class GraphService : IGraphService
         }
 
         return recalculatedLogOdds;
+    }
+
+    //Returns sorted list of evidence ranked on their impact on targetClaim
+    private List<string> GetEvidenceImpactRanking(
+        Graph graph,
+        string targetClaimId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+
+        if (!context.NodesById.ContainsKey(targetClaimId))
+        {
+            throw new InvalidOperationException(
+                $"Target node '{targetClaimId}' does not exist in the calculation context.");
+        }
+
+        return _calculator
+            .GetDownstreamEvidenceLogLRs(context, targetClaimId)
+            .OrderByDescending(entry => Math.Abs(entry.Value))
+            .ThenBy(entry => entry.Key, StringComparer.Ordinal)
+            .Select(entry => entry.Key)
+            .ToList();
     }
 
     private async Task<List<string>?> GetMinimalCounterSet(

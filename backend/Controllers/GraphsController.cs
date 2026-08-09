@@ -55,6 +55,25 @@ public class GraphsController : ControllerBase
 
         return Ok(new { counterNodeIds });
     }
+    
+    [HttpPost("{slug}/nodes/{targetNodeId}/evidence-impact-ranking")]
+    public async Task<IActionResult> GetEvidenceImpactRanking(
+        string slug,
+        string targetNodeId,
+        [FromBody] GraphDto? graphContext,
+        CancellationToken cancellationToken)
+    {
+        var evidenceNodeIds = graphContext is null
+            ? await _graphService.GetEvidenceImpactRankingAsync(slug, targetNodeId, cancellationToken)
+            : await _graphService.GetEvidenceImpactRankingAsync(slug, targetNodeId, graphContext, cancellationToken);
+
+        if (evidenceNodeIds is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(new { evidenceNodeIds });
+    }
 
     [HttpDelete("{slug}/nodes/{nodeId}")]
     public async Task<IActionResult> DeleteNode(

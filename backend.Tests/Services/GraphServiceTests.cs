@@ -286,16 +286,16 @@ public class GraphServiceTests
     }
 
     [TestMethod]
-    public async Task UpdateNodeAsync_RecalculatesRebutParent()
+    public async Task UpdateNodeAsync_UsesSignedLogOddsForRebutParent()
     {
         var repositoryMock = new Mock<IGraphRepository>();
         var graph = GraphWith(
             [
                 Node("A"),
-                Node("B", 1m)
+                Node("B", -1m)
             ],
             [Edge("E-B-A", "B", "A", "rebut", 10)]);
-        var update = new GraphNodeUpdateDto { PriorOdds = 1m };
+        var update = new GraphNodeUpdateDto { PriorOdds = -1m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "B", update, It.IsAny<CancellationToken>()))
@@ -371,7 +371,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
-            expected.Count == 1 && expected["A"] == 0m);
+            expected.Count == 1 && expected["A"] == 1m);
     }
 
     [TestMethod]
@@ -407,7 +407,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
-            expected.Count == 2 && expected["B"] == 0m && expected["A"] == 0m);
+            expected.Count == 2 && expected["B"] == 1m && expected["A"] == 2m);
     }
 
     private static GraphService CreateService(IGraphRepository repository)
