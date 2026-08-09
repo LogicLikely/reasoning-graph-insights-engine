@@ -155,7 +155,7 @@ public class GraphServiceTests
         var graph = GraphWith(
             [
                 Node("A"),
-                Node("B", 1m)
+                Node("B", 1m, "evidence")
             ],
             [Edge("E-B-A", "B", "A", "support", 10)]);
         var update = new GraphNodeUpdateDto { PriorOdds = 1m };
@@ -171,7 +171,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && expected["A"] == 1m);
+            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
     }
 
     [TestMethod]
@@ -181,8 +181,8 @@ public class GraphServiceTests
         var graph = GraphWith(
             [
                 Node("B"),
-                Node("E", 1m),
-                Node("F", -0.5m)
+                Node("E", 1m, "evidence"),
+                Node("F", -0.5m, "evidence")
             ],
             [
                 Edge("E-E-B", "E", "B", "support", 10),
@@ -201,7 +201,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && expected["B"] == 0.5m);
+            expected.Count == 1 && Approximately(expected["B"], (decimal)Math.Log(100d)));
     }
 
     [TestMethod]
@@ -212,7 +212,7 @@ public class GraphServiceTests
             [
                 Node("A"),
                 Node("B"),
-                Node("F", 1m)
+                Node("F", 1m, "evidence")
             ],
             [
                 Edge("E-F-B", "F", "B", "support", 10),
@@ -231,7 +231,9 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 2 && expected["B"] == 1m && expected["A"] == 1m);
+            expected.Count == 2 &&
+            Approximately(expected["B"], (decimal)Math.Log(10d)) &&
+            Approximately(expected["A"], (decimal)Math.Log(100d)));
     }
 
     [TestMethod]
@@ -241,7 +243,7 @@ public class GraphServiceTests
         var graph = GraphWith(
             [
                 Node("A"),
-                Node("B", 1m)
+                Node("B", 1m, "evidence")
             ],
             [Edge("E-B-A", "B", "A", "support", 10)]);
         var update = new GraphEdgeUpdateDto { ImportanceToParent = 10 };
@@ -257,7 +259,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && expected["A"] == 1m);
+            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
     }
 
     [TestMethod]
@@ -286,15 +288,15 @@ public class GraphServiceTests
     }
 
     [TestMethod]
-    public async Task UpdateNodeAsync_UsesSignedLogOddsForRebutParent()
+    public async Task UpdateNodeAsync_UsesLrBelowOneForCounterImpact()
     {
         var repositoryMock = new Mock<IGraphRepository>();
         var graph = GraphWith(
             [
                 Node("A"),
-                Node("B", -1m)
+                Node("B", -1m, "evidence")
             ],
-            [Edge("E-B-A", "B", "A", "rebut", 10)]);
+            [Edge("E-B-A", "B", "A", "rebut", 0.1m)]);
         var update = new GraphNodeUpdateDto { PriorOdds = -1m };
 
         repositoryMock
@@ -308,7 +310,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && expected["A"] == -1m);
+            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(0.1d)));
     }
 
     [TestMethod]
@@ -318,8 +320,8 @@ public class GraphServiceTests
         var graphBeforeDelete = GraphWith(
             [
                 Node("A"),
-                Node("B", 1m),
-                Node("C", 0.5m)
+                Node("B", 1m, "evidence"),
+                Node("C", 0.5m, "evidence")
             ],
             [
                 Edge("E-B-A", "B", "A", "support", 10),
@@ -328,7 +330,7 @@ public class GraphServiceTests
         var graphAfterDelete = GraphWith(
             [
                 Node("A"),
-                Node("C", 0.5m)
+                Node("C", 0.5m, "evidence")
             ],
             [Edge("E-C-A", "C", "A", "support", 10)]);
 
@@ -344,7 +346,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
-            expected.Count == 1 && expected["A"] == 0.5m);
+            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
     }
 
     [TestMethod]
@@ -407,7 +409,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
-            expected.Count == 2 && expected["B"] == 1m && expected["A"] == 2m);
+            expected.Count == 2 && expected["B"] == 1m && expected["A"] == 1m);
     }
 
     private static GraphService CreateService(IGraphRepository repository)
@@ -447,7 +449,7 @@ public class GraphServiceTests
         string from,
         string to,
         string kind,
-        int importanceToParent)
+        decimal importanceToParent)
     {
         return new GraphEdge
         {
@@ -457,6 +459,11 @@ public class GraphServiceTests
             Kind = kind,
             ImportanceToParent = importanceToParent
         };
+    }
+
+    private static bool Approximately(decimal actual, decimal expected, decimal tolerance = 0.000001m)
+    {
+        return Math.Abs(actual - expected) <= tolerance;
     }
 
     private static void VerifyBatch(
