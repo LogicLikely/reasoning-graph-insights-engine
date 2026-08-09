@@ -384,7 +384,7 @@ public sealed class GraphLikelihoodCalculator
         else return edge.FromNodeId;
     }
 
-    private decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
+    public decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
     {
         if (!context.NodesById.ContainsKey(nodeId))
         {
