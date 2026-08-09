@@ -383,13 +383,11 @@ public sealed class GraphLikelihoodCalculator
         }
 
         decimal priorOdds = context.NodesById[nodeId].PriorOdds;
-        decimal childImpact = childEdges.Sum(edge =>
-        {
-            ValidateEdgeKind(edge.Kind);
-            return context.NodesById[edge.FromNodeId].PosteriorOdds
-                * (edge.ImportanceToParent / 10m);
-        });
+        Dictionary<string, decimal> evidenceLRs = GetDownstreamEvidenceLogLRs(context, nodeId);
 
+        var logPosteriorOdds = priorOdds + evidenceLRs.Values.Sum();
+
+        return ClampLogOdds(logPosteriorOdds);
         var logPosteriorOdds = priorOdds + childImpact;
         var logOdds = childEdges.Sum(edge =>
         {
@@ -405,14 +403,6 @@ public sealed class GraphLikelihoodCalculator
         return ClampLogOdds(logOdds);
     }
 
-    private static void ValidateEdgeKind(string edgeKind)
-    {
-        if (!string.Equals(edgeKind, "support", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(edgeKind, "rebut", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException($"Unknown edge kind '{edgeKind}'.");
-        }
-    }
 
     private static decimal ClampLogOdds(decimal value)
     {
