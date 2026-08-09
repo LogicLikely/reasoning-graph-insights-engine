@@ -38,6 +38,44 @@ public class GraphsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{slug}/nodes/{targetNodeId}/minimal-counter-set")]
+    public async Task<IActionResult> GetMinimalCounterSet(
+        string slug,
+        string targetNodeId,
+        [FromBody] GraphDto? graphContext,
+        CancellationToken cancellationToken)
+    {
+        var counterNodeIds = graphContext is null
+            ? await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, cancellationToken)
+            : await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, graphContext, cancellationToken);
+
+        Console.WriteLine(
+            $"Minimal counter set for node '{targetNodeId}': " +
+            (counterNodeIds is null ? "null" : $"[{string.Join(", ", counterNodeIds)}]"));
+
+        return Ok(new { counterNodeIds });
+    }
+    
+    [HttpPost("{slug}/nodes/{targetNodeId}/evidence-impact-ranking")]
+    public async Task<IActionResult> GetEvidenceImpactRanking(
+        string slug,
+        string targetNodeId,
+        [FromBody] GraphDto? graphContext,
+        CancellationToken cancellationToken)
+    {
+        var evidenceNodeIds = graphContext is null
+            ? await _graphService.GetEvidenceImpactRankingAsync(slug, targetNodeId, cancellationToken)
+            : await _graphService.GetEvidenceImpactRankingAsync(slug, targetNodeId, graphContext, cancellationToken);
+
+        if (evidenceNodeIds is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(new { evidenceNodeIds });
+    }
+
+
     [HttpDelete("{slug}/nodes/{nodeId}")]
     public async Task<IActionResult> DeleteNode(
         string slug,
