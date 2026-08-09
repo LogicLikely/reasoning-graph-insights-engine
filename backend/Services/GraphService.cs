@@ -101,7 +101,7 @@ public class GraphService : IGraphService
         return await GetMinimalCounterSet(graph, targetNodeId, graph.Nodes.Select(node => node.Id), cancellationToken);
     }
 
-    public async Task<List<string>?> GetEvidenceImpactRankingAsync(
+    public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
         string slug,
         string targetNodeId,
         CancellationToken cancellationToken = default)
@@ -112,7 +112,7 @@ public class GraphService : IGraphService
             : GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken);
     }
 
-    public Task<List<string>?> GetEvidenceImpactRankingAsync(
+    public Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
         string slug,
         string targetNodeId,
         GraphDto graphContext,
@@ -120,11 +120,11 @@ public class GraphService : IGraphService
     {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
         {
-            return Task.FromResult<List<string>?>(null);
+            return Task.FromResult<EvidenceImpactRankingDto?>(null);
         }
 
         var graph = ToDomainGraph(graphContext);
-        return Task.FromResult<List<string>?>(
+        return Task.FromResult<EvidenceImpactRankingDto?>(
             GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken));
     }
 
@@ -336,8 +336,8 @@ public class GraphService : IGraphService
         return recalculatedLogOdds;
     }
 
-    //Returns sorted list of evidence ranked on their impact on targetClaim
-    private List<string> GetEvidenceImpactRanking(
+    // Returns supporting and counter evidence ranked by their signed log-LR impact.
+    private EvidenceImpactRankingDto GetEvidenceImpactRanking(
         Graph graph,
         string targetClaimId,
         CancellationToken cancellationToken)
@@ -352,12 +352,23 @@ public class GraphService : IGraphService
                 $"Target node '{targetClaimId}' does not exist in the calculation context.");
         }
 
-        return _calculator
-            .GetDownstreamEvidenceLogLRs(context, targetClaimId)
-            .OrderByDescending(entry => Math.Abs(entry.Value))
-            .ThenBy(entry => entry.Key, StringComparer.Ordinal)
-            .Select(entry => entry.Key)
-            .ToList();
+        var evidenceLogLrs = _calculator.GetDownstreamEvidenceLogLRs(context, targetClaimId);
+
+        return new EvidenceImpactRankingDto
+        {
+            SupportingEvidenceNodeIds = evidenceLogLrs
+                .Where(entry => entry.Value > 0m)
+                .OrderByDescending(entry => entry.Value)
+                .ThenBy(entry => entry.Key, StringComparer.Ordinal)
+                .Select(entry => entry.Key)
+                .ToList(),
+            CounterEvidenceNodeIds = evidenceLogLrs
+                .Where(entry => entry.Value < 0m)
+                .OrderBy(entry => entry.Value)
+                .ThenBy(entry => entry.Key, StringComparer.Ordinal)
+                .Select(entry => entry.Key)
+                .ToList()
+        };
     }
 
     private async Task<List<string>?> GetMinimalCounterSet(

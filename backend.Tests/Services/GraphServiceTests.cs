@@ -461,6 +461,37 @@ public class GraphServiceTests
         };
     }
 
+    [TestMethod]
+    public async Task GetEvidenceImpactRankingAsync_SplitsAndSortsSupportingAndCounterEvidence()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("R"),
+                Node("E1", kind: "evidence"),
+                Node("E2", kind: "evidence"),
+                Node("O1", kind: "objection"),
+                Node("O2", kind: "objection")
+            ],
+            [
+                Edge("E-E1-R", "E1", "R", "support", 2m),
+                Edge("E-E2-R", "E2", "R", "support", 3m),
+                Edge("E-O1-R", "O1", "R", "rebut", 0.25m),
+                Edge("E-O2-R", "O2", "R", "rebut", 0.1m)
+            ]);
+
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .GetEvidenceImpactRankingAsync("sample-medium", "R", CancellationToken.None);
+
+        Assert.IsNotNull(result);
+        CollectionAssert.AreEqual(new[] { "E2", "E1" }, result.SupportingEvidenceNodeIds);
+        CollectionAssert.AreEqual(new[] { "O2", "O1" }, result.CounterEvidenceNodeIds);
+    }
+
     private static bool Approximately(decimal actual, decimal expected, decimal tolerance = 0.000001m)
     {
         return Math.Abs(actual - expected) <= tolerance;

@@ -106,6 +106,32 @@ describe('graphService', () => {
     )
   })
 
+  it('sends the fixture graph to the evidence-impact API and returns its sorted IDs', async () => {
+    const fixtureGraph = {
+      slug: 'sample-medium',
+      nodes: [{ id: 'R1', kind: 'root', priorOdds: 0, posteriorOdds: 0 }],
+      edges: [],
+    }
+    const fixtureSpy = vi.fn().mockResolvedValue(fixtureGraph)
+    const ranking = {
+      supportingEvidenceNodeIds: ['E2', 'E1'],
+      counterEvidenceNodeIds: ['O3', 'O2', 'O1'],
+    }
+    const postSpy = vi.fn().mockResolvedValue({ data: ranking })
+
+    vi.doMock('./graphFixture', () => ({ getGraphBySlugFromFixture: fixtureSpy }))
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const { getEvidenceImpactRanking } = await import('./graphService')
+
+    await expect(getEvidenceImpactRanking('sample-medium', 'R1', 'fixture'))
+      .resolves.toEqual(ranking)
+    expect(postSpy).toHaveBeenCalledWith(
+      '/api/graphs/sample-medium/nodes/R1/evidence-impact-ranking',
+      fixtureGraph,
+    )
+  })
+
   it('posts to the reset endpoint when resetting the database', async () => {
     const postSpy = vi.fn().mockResolvedValue({})
 

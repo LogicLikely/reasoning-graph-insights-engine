@@ -55,6 +55,28 @@ export async function getNodeCounterSet(
   return response.data.counterNodeIds
 }
 
+export type EvidenceImpactRanking = {
+  supportingEvidenceNodeIds: string[]
+  counterEvidenceNodeIds: string[]
+}
+
+export async function getEvidenceImpactRanking(
+  slug: string,
+  targetNodeId: string,
+  dataSource: GraphDataSource = getDefaultGraphDataSource(),
+): Promise<EvidenceImpactRanking> {
+  const graphContext = dataSource === 'fixture'
+    ? await getGraphBySlugFromFixture(slug)
+    : undefined
+
+  const response = await httpClient.post<EvidenceImpactRanking>(
+    `/api/graphs/${slug}/nodes/${targetNodeId}/evidence-impact-ranking`,
+    graphContext,
+  )
+
+  return response.data
+}
+
 export async function updateNode(
   slug: string,
   nodeId: string,
