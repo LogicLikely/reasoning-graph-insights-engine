@@ -499,7 +499,74 @@ public class GraphServiceTests
         Assert.IsTrue(Approximately(result.SupportingEvidence[0].LogLr, (decimal)Math.Log(3d)));
         Assert.IsTrue(Approximately(result.CounterEvidence[0].LogLr, (decimal)Math.Log(0.1d)));
     }
-    
+
+    [TestMethod]
+    public void GetEvidenceImpactRanking_RanksEvidenceAcrossBranchingPaths()
+    {
+        var graph = GraphWith(
+            [
+                Node("A"),
+                Node("B1"),
+                Node("B2"),
+                Node("C1", kind: "evidence"),
+                Node("C2", kind: "objection"),
+                Node("C3", kind: "evidence")
+            ],
+            [
+                Edge("E-B1-A", "B1", "A", "support", 1.3m),
+                Edge("E-B2-A", "B2", "A", "support", 1.1m),
+                Edge("E-C1-B1", "C1", "B1", "support", 1.2m),
+                Edge("E-C2-B1", "C2", "B1", "objection", 0.01m),
+                Edge("E-C2-B2", "C2", "B2", "objection", 0.1m),
+                Edge("E-C3-B2", "C3", "B2", "support", 1.5m)
+            ]);
+
+        var service = CreateService(Mock.Of<IGraphRepository>());
+
+        var result = service.GetEvidenceImpactRanking(graph, "A", CancellationToken.None);
+
+        CollectionAssert.AreEqual(
+            new[] { "C3", "C1" },
+            result.SupportingEvidence.Select(impact => impact.NodeId).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "C2" },
+            result.CounterEvidence.Select(impact => impact.NodeId).ToArray());
+
+        var c3 = result.SupportingEvidence.Single(impact => impact.NodeId == "C3");
+        var c1 = result.SupportingEvidence.Single(impact => impact.NodeId == "C1");
+        var counter = result.CounterEvidence.Single();
+
+        Assert.AreEqual(2, result.SupportingEvidence.Count);
+        Assert.IsTrue(Approximately(c3.LogLr, (decimal)Math.Log(1.65d)));
+        Assert.IsTrue(Approximately(c1.LogLr, (decimal)Math.Log(1.56d)));
+        Assert.IsTrue(Approximately(counter.LogLr, (decimal)Math.Log(0.013d)));
+        Assert.IsTrue(result.SupportingEvidence.All(impact => impact.ProbabilityDifference > 0d));
+        Assert.IsTrue(counter.ProbabilityDifference < 0d);
+    }
+
+    [TestMethod]
+    public void GetEvidenceImpactRanking_ThrowsWhenTargetDoesNotExist()
+    {
+        var graph = GraphWith([Node("A")], []);
+        var service = CreateService(Mock.Of<IGraphRepository>());
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            service.GetEvidenceImpactRanking(graph, "missing", CancellationToken.None));
+
+        StringAssert.Contains(exception.Message, "missing");
+    }
+
+    [TestMethod]
+    public void GetEvidenceImpactRanking_ThrowsWhenCancelled()
+    {
+        var graph = GraphWith([Node("A")], []);
+        var service = CreateService(Mock.Of<IGraphRepository>());
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            service.GetEvidenceImpactRanking(graph, "A", cancellation.Token));
+    }
 
     private static bool Approximately(decimal actual, decimal expected, decimal tolerance = 0.000001m)
     {
