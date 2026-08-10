@@ -244,6 +244,24 @@ public class GraphLikelihoodCalculatorTests
     }
 
     [TestMethod]
+    public void GetAccumlatedLR_BranchingPaths()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("A"), Node("B1"), Node("B2"), Node("C1", kind: "evidence"), Node("C2", kind: "rebut"), Node("C3")],
+            [Edge("E-B1-A", "B1", "A", kind: "support", importanceToParent: 1.3m),
+            Edge("E-B2-A", "B2", "A", kind: "support", importanceToParent: 1.1m),
+            Edge("E-C1-B1", "C1", "B1", kind: "support", importanceToParent: 1.2m),
+            Edge("E-C2-B1", "C2", "B1", kind: "objection", importanceToParent: 0.01m),
+            Edge("E-C2-B2", "C2", "B2", kind: "objection", importanceToParent: 0.1m),
+            Edge("E-C3-B2", "C3", "B2", kind: "support", importanceToParent: 1.5m)]
+        );
+
+        var result = _calculator.GetSingleAccumulatedLR(context, "C2", "A");
+        Assert.IsNotNull(result);
+        AssertDecimalEqual(0.013m, result.Value);
+    }
+
+    [TestMethod]
     public void GetAccumulatedLR_ReturnsTheOnlyPathLikelihoodRatio()
     {
         var context = GraphCalculationContext.From(
@@ -490,6 +508,87 @@ public class GraphLikelihoodCalculatorTests
             _calculator.GetMinLogPath(context, "start", "claim"));
 
         StringAssert.Contains(exception.Message, "must be greater than zero");
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_TraversesUpFromChildToAncestors()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("premise"), Node("evidence"), Node("unrelated")],
+            [
+                Edge("E-evidence-premise", "evidence", "premise", importanceToParent: 2m),
+                Edge("E-premise-claim", "premise", "claim", importanceToParent: 3m)
+            ]);
+
+        var result = _calculator.GetStrongestPaths(context, "evidence", PathDirection.Up);
+
+        CollectionAssert.AreEquivalent(
+            new[] { "evidence", "premise", "claim" },
+            result.Keys.ToArray());
+        AssertDecimalEqual(0m, result["evidence"]);
+        AssertDecimalEqual((decimal)Math.Log(2d), result["premise"]);
+        AssertDecimalEqual((decimal)Math.Log(6d), result["claim"]);
+        Assert.IsFalse(result.ContainsKey("unrelated"));
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_TraversesDownFromParentToDescendants()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("premise"), Node("evidence")],
+            [
+                Edge("E-evidence-premise", "evidence", "premise", importanceToParent: 2m),
+                Edge("E-premise-claim", "premise", "claim", importanceToParent: 3m)
+            ]);
+
+        var result = _calculator.GetStrongestPaths(context, "claim", PathDirection.Down);
+
+        AssertDecimalEqual(0m, result["claim"]);
+        AssertDecimalEqual((decimal)Math.Log(3d), result["premise"]);
+        AssertDecimalEqual((decimal)Math.Log(6d), result["evidence"]);
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_SelectsPathFarthestFromNeutralForEachNode()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("path-a"), Node("path-b"), Node("evidence")],
+            [
+                Edge("E-evidence-a", "evidence", "path-a", importanceToParent: 0.1m),
+                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
+                Edge("E-evidence-b", "evidence", "path-b", importanceToParent: 2m),
+                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+            ]);
+
+        var result = _calculator.GetStrongestPaths(context, "evidence", PathDirection.Up);
+
+        AssertDecimalEqual((decimal)Math.Log(0.1d), result["path-a"]);
+        AssertDecimalEqual((decimal)Math.Log(2d), result["path-b"]);
+        AssertDecimalEqual((decimal)Math.Log(0.05d), result["claim"]);
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_ReturnsOnlyStartNodeWhenItHasNoReachableNeighbors()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("other")],
+            []);
+
+        var result = _calculator.GetStrongestPaths(context, "start", PathDirection.Up);
+
+        Assert.AreEqual(1, result.Count);
+        AssertDecimalEqual(0m, result["start"]);
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_ThrowsWhenStartNodeDoesNotExist()
+    {
+        var context = GraphCalculationContext.From([Node("claim")], []);
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            _calculator.GetStrongestPaths(context, "missing", PathDirection.Up));
+
+        StringAssert.Contains(exception.Message, "Node 'missing'");
     }
 
     private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
