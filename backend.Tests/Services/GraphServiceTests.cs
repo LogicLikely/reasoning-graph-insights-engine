@@ -499,6 +499,7 @@ public class GraphServiceTests
         Assert.IsTrue(Approximately(result.SupportingEvidence[0].LogLr, (decimal)Math.Log(3d)));
         Assert.IsTrue(Approximately(result.CounterEvidence[0].LogLr, (decimal)Math.Log(0.1d)));
     }
+    
 
     private static bool Approximately(decimal actual, decimal expected, decimal tolerance = 0.000001m)
     {

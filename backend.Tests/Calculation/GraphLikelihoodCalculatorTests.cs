@@ -591,6 +591,29 @@ public class GraphLikelihoodCalculatorTests
         StringAssert.Contains(exception.Message, "Node 'missing'");
     }
 
+    [TestMethod]
+    public void GetStrongestPaths_BranchingPaths()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("A"), Node("B1"), Node("B2"), Node("C1", kind: "evidence"), Node("C2", kind: "rebut"), Node("C3")],
+            [Edge("E-B1-A", "B1", "A", kind: "support", importanceToParent: 1.3m),
+            Edge("E-B2-A", "B2", "A", kind: "support", importanceToParent: 1.1m),
+            Edge("E-C1-B1", "C1", "B1", kind: "support", importanceToParent: 1.2m),
+            Edge("E-C2-B1", "C2", "B1", kind: "objection", importanceToParent: 0.01m),
+            Edge("E-C2-B2", "C2", "B2", kind: "objection", importanceToParent: 0.1m),
+            Edge("E-C3-B2", "C3", "B2", kind: "support", importanceToParent: 1.5m)]
+        );
+
+        var result = _calculator.GetStrongestPaths(context, "A", PathDirection.Down);
+        Assert.IsNotNull(result);
+        AssertDecimalEqual(0.2623m, result["B1"], 0.0001m);
+        AssertDecimalEqual(0.0953m, result["B2"], 0.0001m);
+        AssertDecimalEqual(0.4446m, result["C1"], 0.0001m);
+        AssertDecimalEqual(-4.3428m, result["C2"], 0.0001m);
+    }
+
+
+
     private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
     {
         return new GraphNode
