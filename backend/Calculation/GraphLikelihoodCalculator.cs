@@ -298,7 +298,7 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Uses Bellman ford to find all strongest paths upstream or downstream from a node
-    private static Dictionary<string, decimal> GetStrongestPaths(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
+    public Dictionary<string, decimal> GetStrongestPaths(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
     {
         List<string> usedNodeIds = GetReachableNodes(context, startNodeId, pathDirection);
         int n = usedNodeIds.Count;
