@@ -301,7 +301,7 @@ public class GraphService : IGraphService
     }
 
     // Returns supporting and counter evidence ranked by their signed log-LR impact.
-    private EvidenceImpactRankingDto GetEvidenceImpactRanking(
+    public EvidenceImpactRankingDto GetEvidenceImpactRanking(
         Graph graph,
         string targetClaimId,
         CancellationToken cancellationToken)
