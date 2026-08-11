@@ -22,7 +22,8 @@ export interface GraphFixtureNode {
   bodyText: string
   category?: string
   tags?: string[]
-  logOdds: number
+  priorOdds: number
+  posteriorOdds: number
   evidence?: GraphEvidenceDetails
 }
 
@@ -54,7 +55,8 @@ export const sampleGraph: GraphFixture = {
       title: 'The Earth is flat',
       bodyText: 'The Earth is flat.',
       tags: ['flat-earth', 'root'],
-      logOdds: -1.15,
+      priorOdds: -1.15,
+      posteriorOdds: -1.15,
     },
     {
       id: 'C1',
@@ -63,7 +65,8 @@ export const sampleGraph: GraphFixture = {
       bodyText: 'The horizon appears flat to everyday observation.',
       category: 'observation',
       tags: ['visual'],
-      logOdds: -0.53,
+      priorOdds: -0.53,
+      posteriorOdds: -0.53,
     },
     {
       id: 'C2',
@@ -71,7 +74,8 @@ export const sampleGraph: GraphFixture = {
       title: 'Water finds level',
       bodyText: 'Water seeks its level and should not conform to a sphere.',
       category: 'physical-intuition',
-      logOdds: -0.2,
+      priorOdds: -0.2,
+      posteriorOdds: -0.2,
     },
     {
       id: 'C3',
@@ -79,7 +83,8 @@ export const sampleGraph: GraphFixture = {
       title: 'No obvious curvature from high-altitude passenger footage',
       bodyText: 'Images from balloons and planes do not show obvious curvature.',
       category: 'visual-observation',
-      logOdds: -0.8,
+      priorOdds: -0.8,
+      posteriorOdds: -0.8,
     },
     {
       id: 'P1',
@@ -87,7 +92,8 @@ export const sampleGraph: GraphFixture = {
       title: 'Beach and ocean horizons appear straight',
       bodyText: 'At sea level, the horizon usually appears flat and level.',
       category: 'observation',
-      logOdds: -0.49,
+      priorOdds: -0.49,
+      posteriorOdds: -0.49,
     },
     {
       id: 'P2',
@@ -95,7 +101,8 @@ export const sampleGraph: GraphFixture = {
       title: 'Canals and lakes look level',
       bodyText: 'Large bodies of water appear level over long distances.',
       category: 'observation',
-      logOdds: 0.2,
+      priorOdds: 0.2,
+      posteriorOdds: 0.2,
     },
     {
       id: 'E1',
@@ -103,7 +110,8 @@ export const sampleGraph: GraphFixture = {
       title: 'Photographs from beaches',
       bodyText: 'Collections of beach and ocean photographs are cited as visual support.',
       tags: ['observational'],
-      logOdds: 0.08,
+      priorOdds: 0.08,
+      posteriorOdds: 0.08,
       evidence: {
         type: 'observational',
         score: 52,
@@ -117,7 +125,8 @@ export const sampleGraph: GraphFixture = {
       title: 'Canal observations',
       bodyText: 'Flat-earth arguments often cite calm water surfaces and canal observations.',
       tags: ['observational'],
-      logOdds: 0,
+      priorOdds: 0,
+      posteriorOdds: 0,
       evidence: {
         type: 'observational',
         score: 50,
@@ -130,7 +139,8 @@ export const sampleGraph: GraphFixture = {
       bodyText:
         "At normal scales, human vision is not a reliable way to detect Earth's curvature.",
       category: 'visual-limit',
-      logOdds: 1.32,
+      priorOdds: 1.32,
+      posteriorOdds: 1.32,
     },
     {
       id: 'O2',
@@ -139,7 +149,8 @@ export const sampleGraph: GraphFixture = {
       bodyText:
         'Refraction can make distant objects appear higher or more visible than expected.',
       category: 'optics',
-      logOdds: 1.39,
+      priorOdds: 1.39,
+      posteriorOdds: 1.39,
     },
   ],
   edges: [

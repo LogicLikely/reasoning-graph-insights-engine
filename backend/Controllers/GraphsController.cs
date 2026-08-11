@@ -38,6 +38,24 @@ public class GraphsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{slug}/nodes/{targetNodeId}/minimal-counter-set")]
+    public async Task<IActionResult> GetMinimalCounterSet(
+        string slug,
+        string targetNodeId,
+        [FromBody] GraphDto? graphContext,
+        CancellationToken cancellationToken)
+    {
+        var counterNodeIds = graphContext is null
+            ? await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, cancellationToken)
+            : await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, graphContext, cancellationToken);
+
+        Console.WriteLine(
+            $"Minimal counter set for node '{targetNodeId}': " +
+            (counterNodeIds is null ? "null" : $"[{string.Join(", ", counterNodeIds)}]"));
+
+        return Ok(new { counterNodeIds });
+    }
+
     [HttpDelete("{slug}/nodes/{nodeId}")]
     public async Task<IActionResult> DeleteNode(
         string slug,
@@ -61,7 +79,7 @@ public class GraphsController : ControllerBase
         CancellationToken cancellationToken,
         [FromQuery] string? parentID = null,
         [FromQuery] string edgeKind = "support",
-        [FromQuery] int importanceToParent = 1)
+        [FromQuery] decimal importanceToParent = 1m)
     {
         Console.WriteLine($"Adding node to graph {slug}");
         var success = await _graphService.AddNodeAsync(slug, nodeDto, parentID, edgeKind, importanceToParent, cancellationToken);

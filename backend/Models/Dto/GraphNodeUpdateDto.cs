@@ -8,5 +8,6 @@ public class GraphNodeUpdateDto
 
     public string? BodyText { get; set; }
 
-    public decimal? LogOdds { get; set; }
+    public decimal? PriorOdds { get; set; }
+    public decimal? PosteriorOdds { get; set; }
 }

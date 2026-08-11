@@ -121,7 +121,7 @@ export function GraphDetailsPanel({
     Number.isFinite(likelihoodPercentValue) &&
     likelihoodPercentValue > 0 &&
     likelihoodPercentValue < 100
-  const isImportanceValid = (value: number) => Number.isInteger(value) && value >= 1 && value <= 10
+  const isImportanceValid = (value: number) => Number.isFinite(value) && value > 0 && value <= 10
   const isParentImportanceValid = isImportanceValid(parentImportanceValue)
   const areEdgeImportancesValid = edgeImportanceValues.every(isImportanceValid)
   const isNewParentEdgeValid =
@@ -140,7 +140,7 @@ export function GraphDetailsPanel({
     const submissionData: Partial<GraphFixtureNode> = {
       title: (formData.title ?? '').trim(),
       bodyText: (formData.bodyText ?? '').trim(),
-      logOdds: probabilityToLogOdds(probability)
+      priorOdds: probabilityToLogOdds(probability)
     }
 
     if (mode === 'add') {
@@ -190,7 +190,7 @@ export function GraphDetailsPanel({
       title: node.title ?? '',
       bodyText: node.bodyText ?? '',
       kind: node.kind,
-      likelihoodPercent: formatLogOddsAsPercent(node.logOdds) ?? '',
+      likelihoodPercent: formatLogOddsAsPercent(node.priorOdds) ?? '',
       parentImportance: '1'
     })
     setEdgeImportanceData(parentImportanceEntries)
@@ -304,12 +304,12 @@ export function GraphDetailsPanel({
                         id={`edge-importance-${relation.edge.id}`}
                         className="form-input"
                         max="10"
-                        min="1"
+                        min="0.001"
                         onChange={(event) => setEdgeImportanceData({
                           ...edgeImportanceData,
                           [relation.edge.id]: event.target.value,
                         })}
-                        step="1"
+                        step="0.001"
                         type="number"
                         value={edgeImportanceData[relation.edge.id] ?? String(relation.edge.importanceToParent)}
                       />
@@ -344,12 +344,12 @@ export function GraphDetailsPanel({
                       id="new-parent-importance"
                       className="form-input"
                       max="10"
-                      min="1"
+                      min="0.001"
                       onChange={(event) => setNewParentEdge({
                         ...newParentEdge,
                         importanceToParent: event.target.value,
                       })}
-                      step="1"
+                      step="0.001"
                       type="number"
                       value={newParentEdge.importanceToParent}
                     />
@@ -366,9 +366,9 @@ export function GraphDetailsPanel({
                   id="parent-edge-importance"
                   className="form-input"
                   max="10"
-                  min="1"
+                  min="0.001"
                   onChange={(event) => setFormData({ ...formData, parentImportance: event.target.value })}
-                  step="1"
+                  step="0.001"
                   type="number"
                   value={formData.parentImportance}
                 />
@@ -426,10 +426,16 @@ export function GraphDetailsPanel({
             </dd>
           </>
         ) : null}
-        {formatMetric(node.logOdds) ? (
+        {formatMetric(node.priorOdds) ? (
           <>
-            <dt>Likelihood</dt>
-            <dd>{formatLogOddsAsPercent(node.logOdds)}%</dd>
+            <dt>Prior likelihood</dt>
+            <dd>{formatLogOddsAsPercent(node.priorOdds)}%</dd>
+          </>
+        ) : null}
+        {formatMetric(node.posteriorOdds) ? (
+          <>
+            <dt>Posterior likelihood</dt>
+            <dd>{formatLogOddsAsPercent(node.posteriorOdds)}%</dd>
           </>
         ) : null}
         {node.kind == 'evidence' && node.evidence ? (

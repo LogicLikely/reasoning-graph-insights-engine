@@ -28,7 +28,8 @@ public class GraphRepository : IGraphRepository
             body_text AS "BodyText",
             category,
             tags,
-            log_odds AS "LogOdds",
+            prior_odds AS "PriorOdds",
+            posterior_odds AS "PosteriorOdds",
             evidence::text AS evidence
         FROM nodes
         WHERE graph_id = @GraphId
@@ -108,7 +109,8 @@ public class GraphRepository : IGraphRepository
             BodyText = row.BodyText,
             Category = row.Category,
             Tags = row.Tags?.ToList() ?? new List<string>(),
-            LogOdds = row.LogOdds,
+            PriorOdds = row.PriorOdds,
+            PosteriorOdds = row.PosteriorOdds,
             Evidence = string.IsNullOrEmpty(row.Evidence)
                 ? null
                 : JsonSerializer.Deserialize<GraphEvidenceDetails>(row.Evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
@@ -148,7 +150,7 @@ public class GraphRepository : IGraphRepository
         public string From { get; set; } = default!;
         public string To { get; set; } = default!;
         public string Kind { get; set; } = default!;
-        public int ImportanceToParent { get; set; } = 1;
+        public decimal ImportanceToParent { get; set; } = 1m;
     }
 
     private sealed class NodeRow
@@ -159,7 +161,8 @@ public class GraphRepository : IGraphRepository
         public string BodyText { get; set; } = default!;
         public string? Category { get; set; }
         public string[]? Tags { get; set; }
-        public decimal LogOdds { get; set; }
+        public decimal PriorOdds { get; set; }
+        public decimal PosteriorOdds { get; set; }
         public string? Evidence { get; set; }
     }
 
@@ -178,7 +181,7 @@ public class GraphRepository : IGraphRepository
         if (string.Equals(node.Kind, "evidence", StringComparison.OrdinalIgnoreCase))
         {
             evidence ??= new GraphEvidenceDto();
-            evidence.Score = GetEvidenceScoreFromLogOdds(node.LogOdds);
+            evidence.Score = GetEvidenceScoreFromLogOdds(node.PriorOdds);
         }
 
         return evidence != null
@@ -230,7 +233,7 @@ public class GraphRepository : IGraphRepository
         GraphNodeDto node,
         string? parentID = null,
         string edgeKind = "support",
-        int importanceToParent = 1,
+        decimal importanceToParent = 1m,
         CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
@@ -242,10 +245,10 @@ public class GraphRepository : IGraphRepository
             const string InsertNodeSql = """
                 INSERT INTO nodes (
                     id, graph_id, kind, title, body_text, 
-                    category, tags, log_odds, evidence
+                    category, tags, prior_odds, posterior_odds, evidence
                 ) VALUES (
                     @Id, (SELECT id FROM graphs WHERE slug = @Slug), @Kind, @Title, @BodyText, 
-                    @Category, @Tags, @LogOdds, @Evidence::jsonb
+                    @Category, @Tags, @PriorOdds, @PosteriorOdds, @Evidence::jsonb
                 );
                 """;
 
@@ -258,7 +261,8 @@ public class GraphRepository : IGraphRepository
                 node.BodyText,
                 node.Category,
                 Tags = node.Tags.ToArray(),
-                LogOdds = node.LogOdds,
+                node.PriorOdds,
+                node.PosteriorOdds,
                 Evidence = SerializeEvidenceForNode(node)
             };
 
@@ -307,7 +311,8 @@ public class GraphRepository : IGraphRepository
             SET
                 title = COALESCE(@Title, title),
                 body_text = COALESCE(@BodyText, body_text),
-                log_odds = COALESCE(@LogOdds, log_odds),
+                prior_odds = COALESCE(@PriorOdds, prior_odds),
+                posterior_odds = COALESCE(@PosteriorOdds, posterior_odds),
                 evidence = CASE
                     WHEN LOWER(kind) = 'evidence' AND @EvidenceScore IS NOT NULL
                         THEN jsonb_set(COALESCE(evidence, '{}'::jsonb), '{score}', to_jsonb(@EvidenceScore), true)
@@ -326,9 +331,10 @@ public class GraphRepository : IGraphRepository
                 NodeId = nodeId,
                 node.Title,
                 node.BodyText,
-                node.LogOdds,
-                EvidenceScore = node.LogOdds.HasValue
-                    ? GetEvidenceScoreFromLogOdds(node.LogOdds.Value)
+                node.PriorOdds,
+                node.PosteriorOdds,
+                EvidenceScore = node.PriorOdds.HasValue
+                    ? GetEvidenceScoreFromLogOdds(node.PriorOdds.Value)
                     : (decimal?)null
             },
             cancellationToken: cancellationToken));
@@ -398,36 +404,36 @@ public class GraphRepository : IGraphRepository
         return rowsAffected > 0;
     }
 
-    public async Task UpdateNodeLogOddsBatchAsync(
+    public async Task UpdateNodePosteriorOddsBatchAsync(
         int graphId,
-        IReadOnlyDictionary<string, decimal> logOddsByNodeId,
+        IReadOnlyDictionary<string, decimal> posteriorOddsByNodeId,
         CancellationToken cancellationToken = default)
     {
-        if (logOddsByNodeId.Count == 0)
+        if (posteriorOddsByNodeId.Count == 0)
         {
             return;
         }
 
         using var connection = _dbConnectionFactory.CreateConnection();
 
-        const string UpdateNodeLogOddsSql = """
+        const string UpdateNodePosteriorOddsSql = """
             UPDATE nodes
             SET
-                log_odds = @LogOdds,
+                posterior_odds = @PosteriorOdds,
                 updated_at = now()
             WHERE id = @NodeId
             AND graph_id = @GraphId;
             """;
 
-        var updateRows = logOddsByNodeId.Select(entry => new
+        var updateRows = posteriorOddsByNodeId.Select(entry => new
         {
             GraphId = graphId,
             NodeId = entry.Key,
-            LogOdds = entry.Value
+            PosteriorOdds = entry.Value
         });
 
         await connection.ExecuteAsync(new CommandDefinition(
-            UpdateNodeLogOddsSql,
+            UpdateNodePosteriorOddsSql,
             updateRows,
             cancellationToken: cancellationToken));
     }

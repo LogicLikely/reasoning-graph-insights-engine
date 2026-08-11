@@ -23,6 +23,7 @@ export async function getGraphBySlug(
 export async function deleteNode(slug: string, nodeId: string): Promise<void> {
   await httpClient.delete(`/api/graphs/${slug}/nodes/${nodeId}`)
 }
+
 export async function addNode(
   slug: string,
   node: GraphFixtureNode,
@@ -36,6 +37,22 @@ export async function addNode(
       importanceToParent: edge?.importanceToParent,
     },
   })
+}
+
+export async function getNodeCounterSet(
+  slug: string,
+  targetNodeId: string,
+  dataSource: GraphDataSource = getDefaultGraphDataSource(),
+): Promise<string[] | null> {
+  const graphContext = dataSource === 'fixture'
+    ? await getGraphBySlugFromFixture(slug)
+    : undefined
+
+  const response = await httpClient.post<{
+    counterNodeIds: string[] | null
+  }>(`/api/graphs/${slug}/nodes/${targetNodeId}/minimal-counter-set`, graphContext)
+
+  return response.data.counterNodeIds
 }
 
 export async function updateNode(

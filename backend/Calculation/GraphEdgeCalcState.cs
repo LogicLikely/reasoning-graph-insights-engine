@@ -5,4 +5,4 @@ public sealed record GraphEdgeCalcState(
     string FromNodeId,
     string ToNodeId,
     string Kind,
-    int ImportanceToParent);
+    decimal ImportanceToParent);

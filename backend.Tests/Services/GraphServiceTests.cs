@@ -101,6 +101,24 @@ public class GraphServiceTests
     }
 
     [TestMethod]
+    public async Task GetMinimalCounterSetAsync_HandlesTargetThatIsACounterNode()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [Node("O3", kind: "objection")],
+            []);
+
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .GetMinimalCounterSetAsync("sample-medium", "O3", CancellationToken.None);
+
+        Assert.IsNull(result);
+    }
+
+    [TestMethod]
     public async Task UpdateNodeAsync_PassesUpdateThroughToRepository()
     {
         var repositoryMock = new Mock<IGraphRepository>();
@@ -109,7 +127,7 @@ public class GraphServiceTests
             Kind = "claim",
             Title = "Updated title",
             BodyText = "Updated body",
-            LogOdds = 0.75m
+            PriorOdds = 0.75m
         };
 
         repositoryMock
@@ -140,7 +158,7 @@ public class GraphServiceTests
                 Node("B", 1m)
             ],
             [Edge("E-B-A", "B", "A", "support", 10)]);
-        var update = new GraphNodeUpdateDto { LogOdds = 1m };
+        var update = new GraphNodeUpdateDto { PriorOdds = 1m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "B", update, It.IsAny<CancellationToken>()))
@@ -170,7 +188,7 @@ public class GraphServiceTests
                 Edge("E-E-B", "E", "B", "support", 10),
                 Edge("E-F-B", "F", "B", "support", 10)
             ]);
-        var update = new GraphNodeUpdateDto { LogOdds = -0.5m };
+        var update = new GraphNodeUpdateDto { PriorOdds = -0.5m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "F", update, It.IsAny<CancellationToken>()))
@@ -200,7 +218,7 @@ public class GraphServiceTests
                 Edge("E-F-B", "F", "B", "support", 10),
                 Edge("E-B-A", "B", "A", "support", 10)
             ]);
-        var update = new GraphNodeUpdateDto { LogOdds = 1m };
+        var update = new GraphNodeUpdateDto { PriorOdds = 1m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "F", update, It.IsAny<CancellationToken>()))
@@ -247,7 +265,7 @@ public class GraphServiceTests
     {
         var repositoryMock = new Mock<IGraphRepository>();
         var graph = GraphWith([Node("A", 1m)], []);
-        var update = new GraphNodeUpdateDto { LogOdds = 1m };
+        var update = new GraphNodeUpdateDto { PriorOdds = 1m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "A", update, It.IsAny<CancellationToken>()))
@@ -260,7 +278,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         repositoryMock.Verify(
-            repository => repository.UpdateNodeLogOddsBatchAsync(
+            repository => repository.UpdateNodePosteriorOddsBatchAsync(
                 It.IsAny<int>(),
                 It.IsAny<IReadOnlyDictionary<string, decimal>>(),
                 It.IsAny<CancellationToken>()),
@@ -277,7 +295,7 @@ public class GraphServiceTests
                 Node("B", 1m)
             ],
             [Edge("E-B-A", "B", "A", "rebut", 10)]);
-        var update = new GraphNodeUpdateDto { LogOdds = 1m };
+        var update = new GraphNodeUpdateDto { PriorOdds = 1m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "B", update, It.IsAny<CancellationToken>()))
@@ -411,15 +429,16 @@ public class GraphServiceTests
         };
     }
 
-    private static GraphNode Node(string id, decimal logOdds = 0m)
+    private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
     {
         return new GraphNode
         {
             Id = id,
-            Kind = "claim",
+            Kind = kind,
             Title = id,
             BodyText = id,
-            LogOdds = logOdds
+            PriorOdds = logOdds,
+            PosteriorOdds = logOdds
         };
     }
 
@@ -446,7 +465,7 @@ public class GraphServiceTests
         Func<IReadOnlyDictionary<string, decimal>, bool> matches)
     {
         repositoryMock.Verify(
-            repository => repository.UpdateNodeLogOddsBatchAsync(
+            repository => repository.UpdateNodePosteriorOddsBatchAsync(
                 graphId,
                 It.Is<IReadOnlyDictionary<string, decimal>>(values => matches(values)),
                 It.IsAny<CancellationToken>()),

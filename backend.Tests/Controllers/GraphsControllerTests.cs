@@ -62,7 +62,7 @@ public class GraphsControllerTests
             Kind = "claim",
             Title = "Updated title",
             BodyText = "Updated body",
-            LogOdds = 0.75m
+            PriorOdds = 0.75m
         };
 
         serviceMock

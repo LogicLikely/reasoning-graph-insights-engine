@@ -11,6 +11,7 @@ import {
   deleteNode,
   getDefaultGraphDataSource,
   getGraphBySlug,
+  getNodeCounterSet,
   resetDatabase,
   updateEdge,
   updateNode,
@@ -135,6 +136,15 @@ export function DemoPage() {
     }
   }, [graphDataSource])
 
+  const handleNodeCounterSet = useCallback(async (nodeId: string) => {
+    try {
+      const counterNodeIds = await getNodeCounterSet(DEMO_GRAPH_SLUG, nodeId, graphDataSource)
+      console.log(counterNodeIds)
+    } catch {
+      setError('Failed to get the minimal counter set from the server.')
+    }
+  }, [graphDataSource])
+
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
     data: Partial<GraphFixtureNode> = {},
@@ -249,11 +259,17 @@ export function DemoPage() {
           void handleAddSupportingNode(selectedNodeId)
         }
       }
+      else if (event.key.toLowerCase() === 'i') {
+        if (selectedNodeId !== undefined) {
+          void handleNodeCounterSet(selectedNodeId)
+        }
+      }
+
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode])
+  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null

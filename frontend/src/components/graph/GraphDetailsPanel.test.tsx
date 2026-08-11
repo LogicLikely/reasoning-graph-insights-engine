@@ -22,7 +22,7 @@ describe('GraphDetailsPanel', () => {
 
     expect(screen.getByText('Photographs from beaches')).toBeInTheDocument()
     expect(screen.getAllByText(/observational/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/52\.00/)).toBeInTheDocument()
+    expect(screen.getAllByText(/52\.00/)).toHaveLength(2)
     expect(screen.getByText(/This node supports/i)).toBeInTheDocument()
     expect(screen.getByText('The horizon looks flat')).toBeInTheDocument()
     expect(screen.getByText('Importance to that claim: 5/10')).toBeInTheDocument()
@@ -62,7 +62,7 @@ describe('GraphDetailsPanel', () => {
 
     const submittedData = onUpdate.mock.calls[0][1]
     expect(submittedData.kind).toBeUndefined()
-    expect(submittedData.logOdds).toBeCloseTo(Math.log(0.245 / 0.755), 5)
+    expect(submittedData.priorOdds).toBeCloseTo(Math.log(0.245 / 0.755), 5)
     expect(onUpdateEdge).toHaveBeenCalledWith('E-C1-E1', { importanceToParent: 7 })
     expect(onAddParentEdge).toHaveBeenCalledWith({
       from: 'E1',
@@ -92,7 +92,7 @@ describe('GraphDetailsPanel', () => {
     const submittedData = onAddSupporting.mock.calls[0][1]
     expect(onAddSupporting.mock.calls[0][0]).toBe('E1')
     expect(submittedData.kind).toBe('objection')
-    expect(submittedData.logOdds).toBeCloseTo(Math.log(0.65 / 0.35), 5)
+    expect(submittedData.priorOdds).toBeCloseTo(Math.log(0.65 / 0.35), 5)
     expect(onAddSupporting.mock.calls[0][2]).toEqual({
       kind: 'rebut',
       importanceToParent: 4,
