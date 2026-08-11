@@ -9,13 +9,13 @@ public class GraphLikelihoodCalculatorTests
     private readonly GraphLikelihoodCalculator _calculator = new();
 
     [TestMethod]
-    public void RecalculateAncestors_CalculatesTwoChildSupportCase()
+    public void RecalculateAncestors_AddsIndependentEvidenceLogLrs()
     {
         var context = GraphCalculationContext.From(
             [
                 Node("A"),
-                Node("B", -1.0986122887m),
-                Node("C", 1.0986122887m)
+                Node("B", kind: "evidence"),
+                Node("C", kind: "evidence")
             ],
             [
                 Edge("E-B-A", "B", "A", "support", 4),
@@ -24,21 +24,23 @@ public class GraphLikelihoodCalculatorTests
 
         var result = _calculator.RecalculateAncestors(context, "B");
 
-        AssertDecimalEqual(0.43944491548m, result["A"]);
-        AssertDecimalEqual(0.43944491548m, context.NodesById["A"].PosteriorOdds);
+        var expected = (decimal)Math.Log(4d) + (decimal)Math.Log(8d);
+        AssertDecimalEqual(expected, result["A"]);
+        AssertDecimalEqual(expected, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
-    public void RecalculateAncestors_AppliesRebutDirection()
+    public void RecalculateAncestors_UsesLrBelowOneForCounterImpact()
     {
         var context = GraphCalculationContext.From(
-            [Node("A"), Node("B", 1.0m)],
-            [Edge("E-B-A", "B", "A", "rebut", 10)]);
+            [Node("A"), Node("B", kind: "objection")],
+            [Edge("E-B-A", "B", "A", "rebut", 0.1m)]);
 
         var result = _calculator.RecalculateAncestors(context, "B");
 
-        Assert.AreEqual(-1.0m, result["A"]);
-        Assert.AreEqual(-1.0m, context.NodesById["A"].PosteriorOdds);
+        var expected = (decimal)Math.Log(0.1d);
+        AssertDecimalEqual(expected, result["A"]);
+        AssertDecimalEqual(expected, context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -47,18 +49,19 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [
                 Node("B"),
-                Node("E", 1.0m),
-                Node("F", -0.5m)
+                Node("E", kind: "evidence"),
+                Node("F", kind: "evidence")
             ],
             [
-                Edge("E-E-B", "E", "B", "support", 10),
-                Edge("E-F-B", "F", "B", "support", 10)
+                Edge("E-E-B", "E", "B", "support", 4),
+                Edge("E-F-B", "F", "B", "support", 0.5m)
             ]);
 
         var result = _calculator.RecalculateAncestors(context, "F");
 
-        Assert.AreEqual(0.5m, result["B"]);
-        Assert.AreEqual(0.5m, context.NodesById["B"].PosteriorOdds);
+        var expected = (decimal)Math.Log(4d) + (decimal)Math.Log(0.5d);
+        AssertDecimalEqual(expected, result["B"]);
+        AssertDecimalEqual(expected, context.NodesById["B"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -68,46 +71,46 @@ public class GraphLikelihoodCalculatorTests
             [
                 Node("A"),
                 Node("B"),
-                Node("F", 1.0m)
+                Node("F", kind: "evidence")
             ],
             [
-                Edge("E-F-B", "F", "B", "support", 10),
-                Edge("E-B-A", "B", "A", "support", 10)
+                Edge("E-F-B", "F", "B", "support", 2),
+                Edge("E-B-A", "B", "A", "support", 3)
             ]);
 
         var result = _calculator.RecalculateAncestors(context, "F");
 
         Assert.AreEqual(2, result.Count);
-        Assert.AreEqual(1.0m, result["B"]);
-        Assert.AreEqual(1.0m, result["A"]);
-        Assert.AreEqual(1.0m, context.NodesById["B"].PosteriorOdds);
-        Assert.AreEqual(1.0m, context.NodesById["A"].PosteriorOdds);
+        AssertDecimalEqual((decimal)Math.Log(2d), result["B"]);
+        AssertDecimalEqual((decimal)Math.Log(6d), result["A"]);
+        AssertDecimalEqual((decimal)Math.Log(2d), context.NodesById["B"].PosteriorOdds);
+        AssertDecimalEqual((decimal)Math.Log(6d), context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
-    public void RecalculateAncestors_RecalculatesSharedAncestorAfterBothBranches()
+    public void RecalculateAncestors_UsesStrongestPathForSharedEvidence()
     {
         var context = GraphCalculationContext.From(
             [
                 Node("A"),
                 Node("B"),
                 Node("C"),
-                Node("F", 1.0m)
+                Node("F", kind: "evidence")
             ],
             [
-                Edge("E-F-B", "F", "B", "support", 10),
-                Edge("E-F-C", "F", "C", "support", 10),
-                Edge("E-B-A", "B", "A", "support", 10),
-                Edge("E-C-A", "C", "A", "support", 10)
+                Edge("E-F-B", "F", "B", "support", 2),
+                Edge("E-F-C", "F", "C", "support", 3),
+                Edge("E-B-A", "B", "A", "support", 2),
+                Edge("E-C-A", "C", "A", "support", 3)
             ]);
 
         var result = _calculator.RecalculateAncestors(context, "F");
 
         Assert.AreEqual(3, result.Count);
-        Assert.AreEqual(1.0m, result["B"]);
-        Assert.AreEqual(1.0m, result["C"]);
-        Assert.AreEqual(2.0m, result["A"]);
-        Assert.AreEqual(2.0m, context.NodesById["A"].PosteriorOdds);
+        AssertDecimalEqual((decimal)Math.Log(2d), result["B"]);
+        AssertDecimalEqual((decimal)Math.Log(3d), result["C"]);
+        AssertDecimalEqual((decimal)Math.Log(9d), result["A"]);
+        AssertDecimalEqual((decimal)Math.Log(9d), context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -119,24 +122,24 @@ public class GraphLikelihoodCalculatorTests
                 Node("B"),
                 Node("C"),
                 Node("D"),
-                Node("F", 1.0m)
+                Node("F", kind: "evidence")
             ],
             [
-                Edge("E-F-B", "F", "B", "support", 10),
-                Edge("E-B-A", "B", "A", "support", 10),
-                Edge("E-F-C", "F", "C", "support", 10),
-                Edge("E-C-D", "C", "D", "support", 10),
-                Edge("E-D-A", "D", "A", "support", 10)
+                Edge("E-F-B", "F", "B", "support", 2),
+                Edge("E-B-A", "B", "A", "support", 2),
+                Edge("E-F-C", "F", "C", "support", 3),
+                Edge("E-C-D", "C", "D", "support", 3),
+                Edge("E-D-A", "D", "A", "support", 3)
             ]);
 
         var result = _calculator.RecalculateAncestors(context, "F");
 
         Assert.AreEqual(4, result.Count);
-        Assert.AreEqual(1.0m, result["B"]);
-        Assert.AreEqual(1.0m, result["C"]);
-        Assert.AreEqual(1.0m, result["D"]);
-        Assert.AreEqual(2.0m, result["A"]);
-        Assert.AreEqual(2.0m, context.NodesById["A"].PosteriorOdds);
+        AssertDecimalEqual((decimal)Math.Log(2d), result["B"]);
+        AssertDecimalEqual((decimal)Math.Log(3d), result["C"]);
+        AssertDecimalEqual((decimal)Math.Log(9d), result["D"]);
+        AssertDecimalEqual((decimal)Math.Log(27d), result["A"]);
+        AssertDecimalEqual((decimal)Math.Log(27d), context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
@@ -155,25 +158,28 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [
                 Node("A", 1m),
-                Node("B", 1m)
+                Node("B", 1m, "evidence")
             ],
             [Edge("E-B-A", "B", "A", "support", 10)]);
 
         var result = _calculator.RecalculateNodesAndAncestors(context, ["B"]);
 
         Assert.AreEqual(2, result.Count);
-        Assert.AreEqual(0m, result["B"]);
-        Assert.AreEqual(0m, result["A"]);
-        Assert.AreEqual(0m, context.NodesById["B"].PosteriorOdds);
-        Assert.AreEqual(0m, context.NodesById["A"].PosteriorOdds);
+        Assert.AreEqual(1m, result["B"]);
+        AssertDecimalEqual(1m + (decimal)Math.Log(10d), result["A"]);
+        Assert.AreEqual(1m, context.NodesById["B"].PosteriorOdds);
+        AssertDecimalEqual(1m + (decimal)Math.Log(10d), context.NodesById["A"].PosteriorOdds);
     }
 
     [TestMethod]
     public void RecalculateAncestors_ClampsHighLogOdds()
     {
         var context = GraphCalculationContext.From(
-            [Node("A"), Node("B", 125m)],
-            [Edge("E-B-A", "B", "A", "support", 10)]);
+            [Node("A"), Node("B", kind: "evidence"), Node("C", kind: "evidence")],
+            [
+                Edge("E-B-A", "B", "A", "support", 10000000000000000000000000000m),
+                Edge("E-C-A", "C", "A", "support", 10000000000000000000000000000m)
+            ]);
 
         var result = _calculator.RecalculateAncestors(context, "B");
 
@@ -185,8 +191,11 @@ public class GraphLikelihoodCalculatorTests
     public void RecalculateAncestors_ClampsLowLogOdds()
     {
         var context = GraphCalculationContext.From(
-            [Node("A"), Node("B", 125m)],
-            [Edge("E-B-A", "B", "A", "rebut", 10)]);
+            [Node("A"), Node("B", kind: "evidence"), Node("C", kind: "evidence")],
+            [
+                Edge("E-B-A", "B", "A", "rebut", 0.0000000000000000000000000001m),
+                Edge("E-C-A", "C", "A", "rebut", 0.0000000000000000000000000001m)
+            ]);
 
         var result = _calculator.RecalculateAncestors(context, "B");
 
@@ -195,29 +204,27 @@ public class GraphLikelihoodCalculatorTests
     }
 
     [TestMethod]
-    public void RecalculateAncestors_ThrowsForUnknownEdgeKind()
+    public void RecalculateAncestors_DoesNotUseEdgeKindToDetermineDirection()
     {
         var context = GraphCalculationContext.From(
-            [Node("A"), Node("B", 1m)],
+            [Node("A"), Node("B", kind: "evidence")],
             [Edge("E-B-A", "B", "A", "mystery", 10)]);
 
-        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
-            _calculator.RecalculateAncestors(context, "B"));
+        var result = _calculator.RecalculateAncestors(context, "B");
 
-        StringAssert.Contains(exception.Message, "Unknown edge kind 'mystery'.");
+        AssertDecimalEqual((decimal)Math.Log(10d), result["A"]);
     }
 
     [TestMethod]
-    public void RecalculateAncestors_ThrowsForLegacyCounterEdgeKind()
+    public void RecalculateAncestors_CounterLabelDoesNotInvertPositiveLr()
     {
         var context = GraphCalculationContext.From(
-            [Node("A"), Node("B", 1m)],
+            [Node("A"), Node("B", kind: "evidence")],
             [Edge("E-B-A", "B", "A", "counter", 10)]);
 
-        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
-            _calculator.RecalculateAncestors(context, "B"));
+        var result = _calculator.RecalculateAncestors(context, "B");
 
-        StringAssert.Contains(exception.Message, "Unknown edge kind 'counter'.");
+        AssertDecimalEqual((decimal)Math.Log(10d), result["A"]);
     }
 
     [TestMethod]
@@ -234,6 +241,24 @@ public class GraphLikelihoodCalculatorTests
             _calculator.RecalculateAncestors(context, "A"));
 
         StringAssert.Contains(exception.Message, "Cycle detected");
+    }
+
+    [TestMethod]
+    public void GetAccumlatedLR_BranchingPaths()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("A"), Node("B1"), Node("B2"), Node("C1", kind: "evidence"), Node("C2", kind: "rebut"), Node("C3")],
+            [Edge("E-B1-A", "B1", "A", kind: "support", importanceToParent: 1.3m),
+            Edge("E-B2-A", "B2", "A", kind: "support", importanceToParent: 1.1m),
+            Edge("E-C1-B1", "C1", "B1", kind: "support", importanceToParent: 1.2m),
+            Edge("E-C2-B1", "C2", "B1", kind: "objection", importanceToParent: 0.01m),
+            Edge("E-C2-B2", "C2", "B2", kind: "objection", importanceToParent: 0.1m),
+            Edge("E-C3-B2", "C3", "B2", kind: "support", importanceToParent: 1.5m)]
+        );
+
+        var result = _calculator.GetSingleAccumulatedLR(context, "C2", "A");
+        Assert.IsNotNull(result);
+        AssertDecimalEqual(0.013m, result.Value);
     }
 
     [TestMethod]
@@ -484,6 +509,110 @@ public class GraphLikelihoodCalculatorTests
 
         StringAssert.Contains(exception.Message, "must be greater than zero");
     }
+
+    [TestMethod]
+    public void GetStrongestPaths_TraversesUpFromChildToAncestors()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("premise"), Node("evidence"), Node("unrelated")],
+            [
+                Edge("E-evidence-premise", "evidence", "premise", importanceToParent: 2m),
+                Edge("E-premise-claim", "premise", "claim", importanceToParent: 3m)
+            ]);
+
+        var result = _calculator.GetStrongestPaths(context, "evidence", PathDirection.Up);
+
+        CollectionAssert.AreEquivalent(
+            new[] { "evidence", "premise", "claim" },
+            result.Keys.ToArray());
+        AssertDecimalEqual(0m, result["evidence"]);
+        AssertDecimalEqual((decimal)Math.Log(2d), result["premise"]);
+        AssertDecimalEqual((decimal)Math.Log(6d), result["claim"]);
+        Assert.IsFalse(result.ContainsKey("unrelated"));
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_TraversesDownFromParentToDescendants()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("premise"), Node("evidence")],
+            [
+                Edge("E-evidence-premise", "evidence", "premise", importanceToParent: 2m),
+                Edge("E-premise-claim", "premise", "claim", importanceToParent: 3m)
+            ]);
+
+        var result = _calculator.GetStrongestPaths(context, "claim", PathDirection.Down);
+
+        AssertDecimalEqual(0m, result["claim"]);
+        AssertDecimalEqual((decimal)Math.Log(3d), result["premise"]);
+        AssertDecimalEqual((decimal)Math.Log(6d), result["evidence"]);
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_SelectsPathFarthestFromNeutralForEachNode()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("claim"), Node("path-a"), Node("path-b"), Node("evidence")],
+            [
+                Edge("E-evidence-a", "evidence", "path-a", importanceToParent: 0.1m),
+                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
+                Edge("E-evidence-b", "evidence", "path-b", importanceToParent: 2m),
+                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+            ]);
+
+        var result = _calculator.GetStrongestPaths(context, "evidence", PathDirection.Up);
+
+        AssertDecimalEqual((decimal)Math.Log(0.1d), result["path-a"]);
+        AssertDecimalEqual((decimal)Math.Log(2d), result["path-b"]);
+        AssertDecimalEqual((decimal)Math.Log(0.05d), result["claim"]);
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_ReturnsOnlyStartNodeWhenItHasNoReachableNeighbors()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("start"), Node("other")],
+            []);
+
+        var result = _calculator.GetStrongestPaths(context, "start", PathDirection.Up);
+
+        Assert.AreEqual(1, result.Count);
+        AssertDecimalEqual(0m, result["start"]);
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_ThrowsWhenStartNodeDoesNotExist()
+    {
+        var context = GraphCalculationContext.From([Node("claim")], []);
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            _calculator.GetStrongestPaths(context, "missing", PathDirection.Up));
+
+        StringAssert.Contains(exception.Message, "Node 'missing'");
+    }
+
+    [TestMethod]
+    public void GetStrongestPaths_BranchingPaths()
+    {
+        var context = GraphCalculationContext.From(
+            [Node("A"), Node("B1"), Node("B2"), Node("C1", kind: "evidence"), Node("C2", kind: "rebut"), Node("C3")],
+            [Edge("E-B1-A", "B1", "A", kind: "support", importanceToParent: 1.3m),
+            Edge("E-B2-A", "B2", "A", kind: "support", importanceToParent: 1.1m),
+            Edge("E-C1-B1", "C1", "B1", kind: "support", importanceToParent: 1.2m),
+            Edge("E-C2-B1", "C2", "B1", kind: "objection", importanceToParent: 0.01m),
+            Edge("E-C2-B2", "C2", "B2", kind: "objection", importanceToParent: 0.1m),
+            Edge("E-C3-B2", "C3", "B2", kind: "support", importanceToParent: 1.5m)]
+        );
+
+        var result = _calculator.GetStrongestPaths(context, "A", PathDirection.Down);
+        Assert.IsNotNull(result);
+        AssertDecimalEqual(0.2623m, result["B1"], 0.0001m);
+        AssertDecimalEqual(0.0953m, result["B2"], 0.0001m);
+        AssertDecimalEqual(0.4446m, result["C1"], 0.0001m);
+        AssertDecimalEqual(-4.3428m, result["C2"], 0.0001m);
+    }
+
+
 
     private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
     {

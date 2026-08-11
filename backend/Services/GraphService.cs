@@ -101,6 +101,33 @@ public class GraphService : IGraphService
         return await GetMinimalCounterSet(graph, targetNodeId, graph.Nodes.Select(node => node.Id), cancellationToken);
     }
 
+    public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        return graph is null
+            ? null
+            : GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken);
+    }
+
+    public Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
+        {
+            return Task.FromResult<EvidenceImpactRankingDto?>(null);
+        }
+
+        var graph = ToDomainGraph(graphContext);
+        return Task.FromResult<EvidenceImpactRankingDto?>(
+            GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken));
+    }
+
     public async Task<bool> DeleteNodeAsync(
         string slug,
         string nodeId,
@@ -307,6 +334,69 @@ public class GraphService : IGraphService
         }
 
         return recalculatedLogOdds;
+    }
+
+    // Returns supporting and counter evidence ranked by their signed log-LR impact.
+    public EvidenceImpactRankingDto GetEvidenceImpactRanking(
+        Graph graph,
+        string targetClaimId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+
+        if (!context.NodesById.ContainsKey(targetClaimId))
+        {
+            throw new InvalidOperationException(
+                $"Target node '{targetClaimId}' does not exist in the calculation context.");
+        }
+
+        var evidenceLogLrs = _calculator.GetDownstreamEvidenceLogLRs(context, targetClaimId);
+        var posteriorLogOddsWithAllEvidence = _calculator.CalculateNodeLogPosteriorOdds(context, targetClaimId);
+        var probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOddsWithAllEvidence);
+
+        EvidenceImpactDto ToImpact(KeyValuePair<string, decimal> entry)
+        {
+            var posteriorLogOddsWithoutEvidence = posteriorLogOddsWithAllEvidence - entry.Value;
+            var probabilityWithoutEvidence = LogOddsToProbability(posteriorLogOddsWithoutEvidence);
+
+            return new EvidenceImpactDto
+            {
+                NodeId = entry.Key,
+                LogLr = entry.Value,
+                ProbabilityDifference = probabilityWithAllEvidence - probabilityWithoutEvidence
+            };
+        }
+
+        return new EvidenceImpactRankingDto
+        {
+            SupportingEvidence = evidenceLogLrs
+                .Where(entry => entry.Value > 0m)
+                .Select(ToImpact)
+                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
+                .ToList(),
+            CounterEvidence = evidenceLogLrs
+                .Where(entry => entry.Value < 0m)
+                .Select(ToImpact)
+                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
+                .ToList()
+        };
+    }
+
+    private static double LogOddsToProbability(decimal logOdds)
+    {
+        var value = (double)logOdds;
+        if (value >= 0d)
+        {
+            var inverseOdds = Math.Exp(-value);
+            return 1d / (1d + inverseOdds);
+        }
+
+        var odds = Math.Exp(value);
+        return odds / (1d + odds);
     }
 
     private async Task<List<string>?> GetMinimalCounterSet(

@@ -8,11 +8,13 @@ const resetDatabaseMock = vi.fn()
 const addNodeMock = vi.fn()
 const deleteNodeMock = vi.fn()
 const updateNodeMock = vi.fn()
+const getEvidenceImpactRankingMock = vi.fn()
 
 vi.mock('../services/graphService', () => ({
   addNode: (...args: unknown[]) => addNodeMock(...args),
   deleteNode: (...args: unknown[]) => deleteNodeMock(...args),
   getDefaultGraphDataSource: () => 'database',
+  getEvidenceImpactRanking: (...args: unknown[]) => getEvidenceImpactRankingMock(...args),
   getGraphBySlug: (slug: string, dataSource: string) => getGraphBySlugMock(slug, dataSource),
   resetDatabase: () => resetDatabaseMock(),
   updateNode: (...args: unknown[]) => updateNodeMock(...args),
@@ -44,6 +46,7 @@ describe('DemoPage', () => {
     addNodeMock.mockReset()
     deleteNodeMock.mockReset()
     updateNodeMock.mockReset()
+    getEvidenceImpactRankingMock.mockReset()
   })
 
   afterEach(() => {
@@ -125,6 +128,42 @@ describe('DemoPage', () => {
 
     expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--open')
     expect(screen.getByRole('region', { name: 'Node details' })).toBeInTheDocument()
+  })
+
+  it('prints the evidence impact ranking when e is pressed with a selected node', async () => {
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    getEvidenceImpactRankingMock.mockResolvedValue({
+      supportingEvidence: [
+        { nodeId: 'C1', logLr: 1, probabilityDifference: 0.2 },
+        { nodeId: 'E2', logLr: 0.52, probabilityDifference: 0.1 },
+        { nodeId: 'E1', logLr: 0.47, probabilityDifference: 0.09 },
+      ],
+      counterEvidence: [
+        { nodeId: 'O3', logLr: -1.87, probabilityDifference: -0.3 },
+        { nodeId: 'O2', logLr: -1.53, probabilityDifference: -0.25 },
+        { nodeId: 'O1', logLr: -1.49, probabilityDifference: -0.2 },
+      ],
+    })
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
+    fireEvent.keyDown(window, { key: 'e' })
+
+    await waitFor(() => {
+      expect(getEvidenceImpactRankingMock).toHaveBeenCalledWith('sample-medium', 'E1', 'database')
+      expect(consoleLogSpy).toHaveBeenCalledWith({
+        supportingEvidence: [
+          { nodeId: 'E2', logLr: 0.52, probabilityDifference: 0.1 },
+          { nodeId: 'E1', logLr: 0.47, probabilityDifference: 0.09 },
+        ],
+        counterEvidence: [
+          { nodeId: 'O2', logLr: -1.53, probabilityDifference: -0.25 },
+          { nodeId: 'O1', logLr: -1.49, probabilityDifference: -0.2 },
+        ],
+      })
+    })
   })
 
   it('expands the graph to the viewport and restores its original size', async () => {

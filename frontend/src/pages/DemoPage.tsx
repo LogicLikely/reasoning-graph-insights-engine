@@ -10,6 +10,7 @@ import {
   addNode,
   deleteNode,
   getDefaultGraphDataSource,
+  getEvidenceImpactRanking,
   getGraphBySlug,
   getNodeCounterSet,
   resetDatabase,
@@ -145,6 +146,22 @@ export function DemoPage() {
     }
   }, [graphDataSource])
 
+  const handleEvidenceImpactRanking = useCallback(async (nodeId: string) => {
+    try {
+      const ranking = await getEvidenceImpactRanking(DEMO_GRAPH_SLUG, nodeId, graphDataSource)
+      const isEvidenceNode = (nodeId: string) => graph?.nodes.some((node) =>
+        node.id === nodeId && (node.kind === 'evidence' || node.kind === 'objection')
+      )
+
+      console.log({
+        supportingEvidence: ranking.supportingEvidence.filter((impact) => isEvidenceNode(impact.nodeId)),
+        counterEvidence: ranking.counterEvidence.filter((impact) => isEvidenceNode(impact.nodeId)),
+      })
+    } catch {
+      setError('Failed to get the evidence impact ranking from the server.')
+    }
+  }, [graph?.nodes, graphDataSource])
+
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
     data: Partial<GraphFixtureNode> = {},
@@ -264,12 +281,17 @@ export function DemoPage() {
           void handleNodeCounterSet(selectedNodeId)
         }
       }
+      else if (event.key.toLowerCase() === 'e') {
+        if (selectedNodeId !== undefined) {
+          void handleEvidenceImpactRanking(selectedNodeId)
+        }
+      }
 
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet])
+  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null

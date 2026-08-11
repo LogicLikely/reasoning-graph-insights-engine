@@ -155,7 +155,7 @@ public class GraphServiceTests
         var graph = GraphWith(
             [
                 Node("A"),
-                Node("B", 1m)
+                Node("B", 1m, "evidence")
             ],
             [Edge("E-B-A", "B", "A", "support", 10)]);
         var update = new GraphNodeUpdateDto { PriorOdds = 1m };
@@ -171,7 +171,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && expected["A"] == 1m);
+            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
     }
 
     [TestMethod]
@@ -181,8 +181,8 @@ public class GraphServiceTests
         var graph = GraphWith(
             [
                 Node("B"),
-                Node("E", 1m),
-                Node("F", -0.5m)
+                Node("E", 1m, "evidence"),
+                Node("F", -0.5m, "evidence")
             ],
             [
                 Edge("E-E-B", "E", "B", "support", 10),
@@ -201,7 +201,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && expected["B"] == 0.5m);
+            expected.Count == 1 && Approximately(expected["B"], (decimal)Math.Log(100d)));
     }
 
     [TestMethod]
@@ -212,7 +212,7 @@ public class GraphServiceTests
             [
                 Node("A"),
                 Node("B"),
-                Node("F", 1m)
+                Node("F", 1m, "evidence")
             ],
             [
                 Edge("E-F-B", "F", "B", "support", 10),
@@ -231,7 +231,9 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 2 && expected["B"] == 1m && expected["A"] == 1m);
+            expected.Count == 2 &&
+            Approximately(expected["B"], (decimal)Math.Log(10d)) &&
+            Approximately(expected["A"], (decimal)Math.Log(100d)));
     }
 
     [TestMethod]
@@ -241,7 +243,7 @@ public class GraphServiceTests
         var graph = GraphWith(
             [
                 Node("A"),
-                Node("B", 1m)
+                Node("B", 1m, "evidence")
             ],
             [Edge("E-B-A", "B", "A", "support", 10)]);
         var update = new GraphEdgeUpdateDto { ImportanceToParent = 10 };
@@ -257,7 +259,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && expected["A"] == 1m);
+            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
     }
 
     [TestMethod]
@@ -286,16 +288,16 @@ public class GraphServiceTests
     }
 
     [TestMethod]
-    public async Task UpdateNodeAsync_RecalculatesRebutParent()
+    public async Task UpdateNodeAsync_UsesLrBelowOneForCounterImpact()
     {
         var repositoryMock = new Mock<IGraphRepository>();
         var graph = GraphWith(
             [
                 Node("A"),
-                Node("B", 1m)
+                Node("B", -1m, "evidence")
             ],
-            [Edge("E-B-A", "B", "A", "rebut", 10)]);
-        var update = new GraphNodeUpdateDto { PriorOdds = 1m };
+            [Edge("E-B-A", "B", "A", "rebut", 0.1m)]);
+        var update = new GraphNodeUpdateDto { PriorOdds = -1m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "B", update, It.IsAny<CancellationToken>()))
@@ -308,7 +310,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && expected["A"] == -1m);
+            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(0.1d)));
     }
 
     [TestMethod]
@@ -318,8 +320,8 @@ public class GraphServiceTests
         var graphBeforeDelete = GraphWith(
             [
                 Node("A"),
-                Node("B", 1m),
-                Node("C", 0.5m)
+                Node("B", 1m, "evidence"),
+                Node("C", 0.5m, "evidence")
             ],
             [
                 Edge("E-B-A", "B", "A", "support", 10),
@@ -328,7 +330,7 @@ public class GraphServiceTests
         var graphAfterDelete = GraphWith(
             [
                 Node("A"),
-                Node("C", 0.5m)
+                Node("C", 0.5m, "evidence")
             ],
             [Edge("E-C-A", "C", "A", "support", 10)]);
 
@@ -344,7 +346,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
-            expected.Count == 1 && expected["A"] == 0.5m);
+            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
     }
 
     [TestMethod]
@@ -371,7 +373,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
-            expected.Count == 1 && expected["A"] == 0m);
+            expected.Count == 1 && expected["A"] == 1m);
     }
 
     [TestMethod]
@@ -407,7 +409,7 @@ public class GraphServiceTests
 
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
-            expected.Count == 2 && expected["B"] == 0m && expected["A"] == 0m);
+            expected.Count == 2 && expected["B"] == 1m && expected["A"] == 1m);
     }
 
     private static GraphService CreateService(IGraphRepository repository)
@@ -447,7 +449,7 @@ public class GraphServiceTests
         string from,
         string to,
         string kind,
-        int importanceToParent)
+        decimal importanceToParent)
     {
         return new GraphEdge
         {
@@ -457,6 +459,118 @@ public class GraphServiceTests
             Kind = kind,
             ImportanceToParent = importanceToParent
         };
+    }
+
+    [TestMethod]
+    public async Task GetEvidenceImpactRankingAsync_SplitsAndSortsSupportingAndCounterEvidence()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("R"),
+                Node("E1", kind: "evidence"),
+                Node("E2", kind: "evidence"),
+                Node("O1", kind: "objection"),
+                Node("O2", kind: "objection")
+            ],
+            [
+                Edge("E-E1-R", "E1", "R", "support", 2m),
+                Edge("E-E2-R", "E2", "R", "support", 3m),
+                Edge("E-O1-R", "O1", "R", "rebut", 0.25m),
+                Edge("E-O2-R", "O2", "R", "rebut", 0.1m)
+            ]);
+
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .GetEvidenceImpactRankingAsync("sample-medium", "R", CancellationToken.None);
+
+        Assert.IsNotNull(result);
+        CollectionAssert.AreEqual(
+            new[] { "E2", "E1" },
+            result.SupportingEvidence.Select(impact => impact.NodeId).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "O2", "O1" },
+            result.CounterEvidence.Select(impact => impact.NodeId).ToArray());
+        Assert.IsTrue(result.SupportingEvidence.All(impact => impact.ProbabilityDifference > 0d));
+        Assert.IsTrue(result.CounterEvidence.All(impact => impact.ProbabilityDifference < 0d));
+        Assert.IsTrue(Approximately(result.SupportingEvidence[0].LogLr, (decimal)Math.Log(3d)));
+        Assert.IsTrue(Approximately(result.CounterEvidence[0].LogLr, (decimal)Math.Log(0.1d)));
+    }
+
+    [TestMethod]
+    public void GetEvidenceImpactRanking_RanksEvidenceAcrossBranchingPaths()
+    {
+        var graph = GraphWith(
+            [
+                Node("A"),
+                Node("B1"),
+                Node("B2"),
+                Node("C1", kind: "evidence"),
+                Node("C2", kind: "objection"),
+                Node("C3", kind: "evidence")
+            ],
+            [
+                Edge("E-B1-A", "B1", "A", "support", 1.3m),
+                Edge("E-B2-A", "B2", "A", "support", 1.1m),
+                Edge("E-C1-B1", "C1", "B1", "support", 1.2m),
+                Edge("E-C2-B1", "C2", "B1", "objection", 0.01m),
+                Edge("E-C2-B2", "C2", "B2", "objection", 0.1m),
+                Edge("E-C3-B2", "C3", "B2", "support", 1.5m)
+            ]);
+
+        var service = CreateService(Mock.Of<IGraphRepository>());
+
+        var result = service.GetEvidenceImpactRanking(graph, "A", CancellationToken.None);
+
+        CollectionAssert.AreEqual(
+            new[] { "C3", "C1" },
+            result.SupportingEvidence.Select(impact => impact.NodeId).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "C2" },
+            result.CounterEvidence.Select(impact => impact.NodeId).ToArray());
+
+        var c3 = result.SupportingEvidence.Single(impact => impact.NodeId == "C3");
+        var c1 = result.SupportingEvidence.Single(impact => impact.NodeId == "C1");
+        var counter = result.CounterEvidence.Single();
+
+        Assert.AreEqual(2, result.SupportingEvidence.Count);
+        Assert.IsTrue(Approximately(c3.LogLr, (decimal)Math.Log(1.65d)));
+        Assert.IsTrue(Approximately(c1.LogLr, (decimal)Math.Log(1.56d)));
+        Assert.IsTrue(Approximately(counter.LogLr, (decimal)Math.Log(0.013d)));
+        Assert.IsTrue(result.SupportingEvidence.All(impact => impact.ProbabilityDifference > 0d));
+        Assert.IsTrue(counter.ProbabilityDifference < 0d);
+    }
+
+    [TestMethod]
+    public void GetEvidenceImpactRanking_ThrowsWhenTargetDoesNotExist()
+    {
+        var graph = GraphWith([Node("A")], []);
+        var service = CreateService(Mock.Of<IGraphRepository>());
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            service.GetEvidenceImpactRanking(graph, "missing", CancellationToken.None));
+
+        StringAssert.Contains(exception.Message, "missing");
+    }
+
+    [TestMethod]
+    public void GetEvidenceImpactRanking_ThrowsWhenCancelled()
+    {
+        var graph = GraphWith([Node("A")], []);
+        var service = CreateService(Mock.Of<IGraphRepository>());
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            service.GetEvidenceImpactRanking(graph, "A", cancellation.Token));
+    }
+
+    private static bool Approximately(decimal actual, decimal expected, decimal tolerance = 0.000001m)
+    {
+        return Math.Abs(actual - expected) <= tolerance;
     }
 
     private static void VerifyBatch(
