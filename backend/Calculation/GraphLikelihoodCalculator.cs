@@ -423,11 +423,24 @@ public sealed class GraphLikelihoodCalculator
         var odds = Math.Exp(value);
         return odds / (1d + odds);
     }
-    
-    // private static decimal GetNodeFragility(GraphCalculationContext context, string targetId)
-    // {
-        
-    // }
+
+    public decimal? GetNodeFragility(Graph graph, string targetId, CancellationToken cancellationToken)
+    {
+        EvidenceImpactRankingDto impacts = GetEvidenceImpactRanking(graph, targetId, cancellationToken);
+        decimal? counterFragility = null;
+        decimal? supportingFragility = null;
+        decimal? fragility = null;
+
+        if (impacts.CounterEvidence.Count > 0) counterFragility = (decimal)impacts.CounterEvidence[0].ProbabilityDifference;
+        if (impacts.SupportingEvidence.Count > 0) supportingFragility = (decimal)impacts.SupportingEvidence[0].ProbabilityDifference;
+
+        if (counterFragility == null && supportingFragility == null) fragility = null;
+        else if (counterFragility == null) fragility = supportingFragility;
+        else if (supportingFragility == null) fragility = counterFragility;
+        else fragility = decimal.Max(counterFragility.Value, supportingFragility.Value);
+
+        return fragility;
+    }
 
     private static decimal GetLogEdgeWeight(GraphEdgeCalcState edge)
     {
