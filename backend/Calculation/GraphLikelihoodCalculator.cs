@@ -1,3 +1,6 @@
+using Backend.Models.Domain;
+using Backend.Models.Dto;
+
 namespace Backend.Calculation;
 
 public enum LogPathSelection
@@ -358,6 +361,73 @@ public sealed class GraphLikelihoodCalculator
                 ? minimumLogPaths[id]!.Value
                 : maximumLogPaths[id]!.Value);
     }
+
+    // Returns supporting and counter evidence ranked by their impact (difference in posterior odds when removed vs. present).
+    public EvidenceImpactRankingDto GetEvidenceImpactRanking(
+        Graph graph,
+        string targetClaimId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+
+        if (!context.NodesById.ContainsKey(targetClaimId))
+        {
+            throw new InvalidOperationException(
+                $"Target node '{targetClaimId}' does not exist in the calculation context.");
+        }
+
+        var evidenceLogLrs = GetDownstreamEvidenceLogLRs(context, targetClaimId);
+        var posteriorLogOddsWithAllEvidence = CalculateNodeLogPosteriorOdds(context, targetClaimId);
+        var probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOddsWithAllEvidence);
+
+        EvidenceImpactDto ToImpact(KeyValuePair<string, decimal> entry)
+        {
+            var posteriorLogOddsWithoutEvidence = posteriorLogOddsWithAllEvidence - entry.Value;
+            var probabilityWithoutEvidence = LogOddsToProbability(posteriorLogOddsWithoutEvidence);
+
+            return new EvidenceImpactDto
+            {
+                NodeId = entry.Key,
+                LogLr = entry.Value,
+                ProbabilityDifference = probabilityWithAllEvidence - probabilityWithoutEvidence
+            };
+        }
+
+        return new EvidenceImpactRankingDto
+        {
+            SupportingEvidence = evidenceLogLrs
+                .Where(entry => entry.Value > 0m)
+                .Select(ToImpact)
+                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
+                .ToList(),
+            CounterEvidence = evidenceLogLrs
+                .Where(entry => entry.Value < 0m)
+                .Select(ToImpact)
+                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
+                .ToList()
+        };
+    }
+    private static double LogOddsToProbability(decimal logOdds)
+    {
+        var value = (double)logOdds;
+        if (value >= 0d)
+        {
+            var inverseOdds = Math.Exp(-value);
+            return 1d / (1d + inverseOdds);
+        }
+
+        var odds = Math.Exp(value);
+        return odds / (1d + odds);
+    }
+    
+    // private static decimal GetNodeFragility(GraphCalculationContext context, string targetId)
+    // {
+        
+    // }
 
     private static decimal GetLogEdgeWeight(GraphEdgeCalcState edge)
     {

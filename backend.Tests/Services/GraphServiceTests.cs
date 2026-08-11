@@ -521,9 +521,9 @@ public class GraphServiceTests
                 Edge("E-C3-B2", "C3", "B2", "support", 1.5m)
             ]);
 
-        var service = CreateService(Mock.Of<IGraphRepository>());
+        var calculator = new GraphLikelihoodCalculator();
 
-        var result = service.GetEvidenceImpactRanking(graph, "A", CancellationToken.None);
+        var result = calculator.GetEvidenceImpactRanking(graph, "A", CancellationToken.None);
 
         CollectionAssert.AreEqual(
             new[] { "C3", "C1" },
@@ -548,10 +548,10 @@ public class GraphServiceTests
     public void GetEvidenceImpactRanking_ThrowsWhenTargetDoesNotExist()
     {
         var graph = GraphWith([Node("A")], []);
-        var service = CreateService(Mock.Of<IGraphRepository>());
+        var calculator = new GraphLikelihoodCalculator();
 
         var exception = Assert.ThrowsException<InvalidOperationException>(() =>
-            service.GetEvidenceImpactRanking(graph, "missing", CancellationToken.None));
+            calculator.GetEvidenceImpactRanking(graph, "missing", CancellationToken.None));
 
         StringAssert.Contains(exception.Message, "missing");
     }
@@ -560,12 +560,12 @@ public class GraphServiceTests
     public void GetEvidenceImpactRanking_ThrowsWhenCancelled()
     {
         var graph = GraphWith([Node("A")], []);
-        var service = CreateService(Mock.Of<IGraphRepository>());
+        var calculator = new GraphLikelihoodCalculator();
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
         Assert.ThrowsException<OperationCanceledException>(() =>
-            service.GetEvidenceImpactRanking(graph, "A", cancellation.Token));
+            calculator.GetEvidenceImpactRanking(graph, "A", cancellation.Token));
     }
 
     private static bool Approximately(decimal actual, decimal expected, decimal tolerance = 0.000001m)
