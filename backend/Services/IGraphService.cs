@@ -25,5 +25,9 @@ public interface IGraphService
         CancellationToken cancellationToken = default);
     Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(string slug, GraphDto graphContext,
         CancellationToken cancellationToken = default);
+    Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(string slug,
+        CancellationToken cancellationToken = default);
+    Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(string slug, GraphDto graphContext,
+        CancellationToken cancellationToken = default);
     Task ResetDatabaseAsync(CancellationToken cancellationToken = default);
 }

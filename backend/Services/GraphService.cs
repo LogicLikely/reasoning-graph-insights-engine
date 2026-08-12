@@ -123,6 +123,24 @@ public class GraphService : IGraphService
         };
     }
 
+    public List<NodeRobustnessDto> GetNodeRobustnessRanking(
+        Graph graph,
+        CancellationToken cancellationToken = default)
+    {
+        var nodesById = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
+
+        return _calculator.GetAllNodeRobustness(graph, cancellationToken)
+            .OrderBy(entry => entry.Value)
+            .ThenBy(entry => entry.Key, StringComparer.Ordinal)
+            .Select(entry => new NodeRobustnessDto
+            {
+                NodeId = entry.Key,
+                NodeTitle = nodesById[entry.Key].Title,
+                Robustness = entry.Value
+            })
+            .ToList();
+    }
+
     public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
         string slug,
         CancellationToken cancellationToken = default)
@@ -142,6 +160,28 @@ public class GraphService : IGraphService
         }
 
         return Task.FromResult(GetLeastRobustNode(ToDomainGraph(graphContext), cancellationToken));
+    }
+
+    public async Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
+        string slug,
+        CancellationToken cancellationToken = default)
+    {
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        return graph is null ? null : GetNodeRobustnessRanking(graph, cancellationToken);
+    }
+
+    public Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
+        string slug,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
+        {
+            return Task.FromResult<List<NodeRobustnessDto>?>(null);
+        }
+
+        return Task.FromResult<List<NodeRobustnessDto>?>(
+            GetNodeRobustnessRanking(ToDomainGraph(graphContext), cancellationToken));
     }
 
     public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(

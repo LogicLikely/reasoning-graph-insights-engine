@@ -10,6 +10,7 @@ const deleteNodeMock = vi.fn()
 const updateNodeMock = vi.fn()
 const getEvidenceImpactRankingMock = vi.fn()
 const getLeastRobustNodeMock = vi.fn()
+const getNodeRobustnessRankingMock = vi.fn()
 
 vi.mock('../services/graphService', () => ({
   addNode: (...args: unknown[]) => addNodeMock(...args),
@@ -17,6 +18,7 @@ vi.mock('../services/graphService', () => ({
   getDefaultGraphDataSource: () => 'database',
   getEvidenceImpactRanking: (...args: unknown[]) => getEvidenceImpactRankingMock(...args),
   getLeastRobustNode: (...args: unknown[]) => getLeastRobustNodeMock(...args),
+  getNodeRobustnessRanking: (...args: unknown[]) => getNodeRobustnessRankingMock(...args),
   getGraphBySlug: (slug: string, dataSource: string) => getGraphBySlugMock(slug, dataSource),
   resetDatabase: () => resetDatabaseMock(),
   updateNode: (...args: unknown[]) => updateNodeMock(...args),
@@ -50,6 +52,7 @@ describe('DemoPage', () => {
     updateNodeMock.mockReset()
     getEvidenceImpactRankingMock.mockReset()
     getLeastRobustNodeMock.mockReset()
+    getNodeRobustnessRankingMock.mockReset()
   })
 
   afterEach(() => {
@@ -93,6 +96,29 @@ describe('DemoPage', () => {
     await waitFor(() => {
       expect(getLeastRobustNodeMock).toHaveBeenCalledWith('sample-medium', 'database')
       expect(consoleLog).toHaveBeenCalledWith('Least robust claim: 0.75')
+    })
+  })
+
+  it('prints node IDs and robustness scores in ascending order when j is pressed', async () => {
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const ranking = [
+      { nodeId: 'C1', nodeTitle: 'First', robustness: 0.25 },
+      { nodeId: 'E1', nodeTitle: 'Second', robustness: 0.75 },
+    ]
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    getNodeRobustnessRankingMock.mockResolvedValue(ranking)
+
+    render(<DemoPage />)
+    await screen.findByTestId('graph-canvas')
+
+    fireEvent.keyDown(window, { key: 'j' })
+
+    await waitFor(() => {
+      expect(getNodeRobustnessRankingMock).toHaveBeenCalledWith('sample-medium', 'database')
+      expect(consoleLog).toHaveBeenCalledWith([
+        { nodeId: 'C1', robustness: 0.25 },
+        { nodeId: 'E1', robustness: 0.75 },
+      ])
     })
   })
 

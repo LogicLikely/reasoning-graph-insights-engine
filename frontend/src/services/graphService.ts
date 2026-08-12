@@ -88,6 +88,22 @@ export async function getLeastRobustNode(
   return response.data
 }
 
+export async function getNodeRobustnessRanking(
+  slug: string,
+  dataSource: GraphDataSource = getDefaultGraphDataSource(),
+): Promise<NodeRobustness[]> {
+  const graphContext = dataSource === 'fixture'
+    ? await getGraphBySlugFromFixture(slug)
+    : undefined
+
+  const response = await httpClient.post<NodeRobustness[]>(
+    `/api/graphs/${slug}/node-robustness-ranking`,
+    graphContext,
+  )
+
+  return response.data
+}
+
 export async function getEvidenceImpactRanking(
   slug: string,
   targetNodeId: string,
