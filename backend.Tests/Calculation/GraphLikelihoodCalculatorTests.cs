@@ -145,7 +145,7 @@ public class GraphLikelihoodCalculatorTests
     [TestMethod]
     public void RecalculateAncestors_ReturnsEmptyDictionaryWhenChangedNodeHasNoParents()
     {
-        var context = GraphCalculationContext.From([Node("A", 1.0m)], []);
+        var context = GraphCalculationContext.From([Node("A", logPriorOdds: 1.0m, logPosteriorOdds: 1.0m)], []);
 
         var result = _calculator.RecalculateAncestors(context, "A");
 
@@ -157,8 +157,8 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [
-                Node("A", 1m),
-                Node("B", 1m, "evidence")
+                Node("A", logPriorOdds: 1m, logPosteriorOdds: 1m),
+                Node("B", logPriorOdds: 1m, logPosteriorOdds: 1m, kind: "evidence")
             ],
             [Edge("E-B-A", "B", "A", "support", 10)]);
 
@@ -231,7 +231,10 @@ public class GraphLikelihoodCalculatorTests
     public void RecalculateAncestors_ThrowsForCycle()
     {
         var context = GraphCalculationContext.From(
-            [Node("A", 1m), Node("B", 1m)],
+            [
+                Node("A", logPriorOdds: 1m, logPosteriorOdds: 1m),
+                Node("B", logPriorOdds: 1m, logPosteriorOdds: 1m)
+            ],
             [
                 Edge("E-A-B", "A", "B"),
                 Edge("E-B-A", "B", "A")
@@ -613,14 +616,14 @@ public class GraphLikelihoodCalculatorTests
     }
 
     [TestMethod]
-    public void GetNodeFragilities_CalculatesRecurrenceForEveryNode()
+    public void GetAllNodeRobustness_CalculatesRecurrenceForEveryNode()
     {
         var graph = new Graph
         {
             Nodes =
             [
-                Node("root", logOdds: 0.4m),
-                Node("branch", logOdds: 1m),
+                Node("root", logPriorOdds: 0.4m, logPosteriorOdds: 0.4m),
+                Node("branch", logPriorOdds: 1m, logPosteriorOdds: 1m),
                 Node("support-leaf", kind: "evidence"),
                 Node("counter-leaf", kind: "objection"),
                 Node("direct-counter-leaf", kind: "objection")
@@ -634,30 +637,28 @@ public class GraphLikelihoodCalculatorTests
             ]
         };
 
-        var result = _calculator.GetNodeFragilities(graph);
+        var result = _calculator.GetAllNodeRobustness(graph);
 
         Assert.AreEqual(graph.Nodes.Count, result.Count);
-        AssertDecimalEqual(0m, result["support-leaf"]);
-        AssertDecimalEqual(0m, result["counter-leaf"]);
-        AssertDecimalEqual(0m, result["direct-counter-leaf"]);
+        AssertDecimalEqual(1m, result["support-leaf"]);
+        AssertDecimalEqual(1m, result["counter-leaf"]);
+        AssertDecimalEqual(1m, result["direct-counter-leaf"]);
 
-        decimal expectedBranchFragility = MaximumAbsoluteProbabilityDifference(
+        decimal expectedBranchRobustness = RobustnessAfterRemovingPath(
             posteriorLogOdds: 1m,
-            minimumLogLr: (decimal)Math.Log(0.5d),
-            maximumLogLr: (decimal)Math.Log(2d));
-        AssertDecimalEqual(expectedBranchFragility, result["branch"]);
+            pathLogLr: (decimal)Math.Log(2d));
+        AssertDecimalEqual(expectedBranchRobustness, result["branch"]);
 
-        decimal expectedRootFragility = MaximumAbsoluteProbabilityDifference(
+        decimal expectedRootRobustness = RobustnessAfterRemovingPath(
             posteriorLogOdds: 0.4m,
-            minimumLogLr: (decimal)Math.Log(0.1d),
-            maximumLogLr: (decimal)Math.Log(6d));
-        AssertDecimalEqual(expectedRootFragility, result["root"]);
-        Assert.IsTrue(result["branch"] > 0m);
-        Assert.IsTrue(result["root"] > 0m);
+            pathLogLr: (decimal)Math.Log(6d));
+        AssertDecimalEqual(expectedRootRobustness, result["root"]);
+        Assert.IsTrue(result["branch"] is > 0m and <= 1m);
+        Assert.IsTrue(result["root"] is > 0m and <= 1m);
     }
 
     [TestMethod]
-    public void GetNodeFragilities_RejectsCycles()
+    public void GetAllNodeRobustness_RejectsCycles()
     {
         var graph = new Graph
         {
@@ -670,32 +671,75 @@ public class GraphLikelihoodCalculatorTests
         };
 
         var exception = Assert.ThrowsException<InvalidOperationException>(() =>
-            _calculator.GetNodeFragilities(graph));
+            _calculator.GetAllNodeRobustness(graph));
 
         StringAssert.Contains(exception.Message, "Cycle detected");
     }
 
     [TestMethod]
-    public void GetNodeFragilities_ThrowsWhenCancelled()
+    public void GetAllNodeRobustness_ThrowsWhenCancelled()
     {
         var graph = new Graph { Nodes = [Node("A")] };
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
         Assert.ThrowsException<OperationCanceledException>(() =>
-            _calculator.GetNodeFragilities(graph, cancellation.Token));
+            _calculator.GetAllNodeRobustness(graph, cancellation.Token));
+    }
+
+    [TestMethod]
+    public void GetAllNodeRobustness_BranchPaths()
+    {
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("A", logPriorOdds: -0.2m, logPosteriorOdds: 0.157674m),
+                Node("B1", logPriorOdds: 0.4m, logPosteriorOdds: -4.022849m),
+                Node("B2", logPriorOdds: -0.3m, logPosteriorOdds: -2.197120m),
+                Node("C1", logPriorOdds: 0.8m, logPosteriorOdds: 0.8m, kind: "evidence"),
+                Node("C2", logPriorOdds: -0.6m, logPosteriorOdds: -0.6m, kind: "objection"),
+                Node("C3", logPriorOdds: 1.1m, logPosteriorOdds: 1.1m, kind: "evidence")
+            ],
+            Edges =
+            [
+                Edge("E-B1-A", "B1", "A", "support", 1.3m),
+                Edge("E-B2-A", "B2", "A", "support", 1.1m),
+                Edge("E-C1-B1", "C1", "B1", "support", 1.2m),
+                Edge("E-C2-B1", "C2", "B1", "objection", 0.01m),
+                Edge("E-C2-B2", "C2", "B2", "objection", 0.1m),
+                Edge("E-C3-B2", "C3", "B2", "support", 1.5m)
+            ]
+        };
+
+        var calculator = new GraphLikelihoodCalculator();
+        var result = calculator.GetAllNodeRobustness(graph, CancellationToken.None);
+
+        foreach (var node in graph.Nodes)
+        {
+            Assert.IsTrue(result.ContainsKey(node.Id));
+        }
+        decimal expectedRobustness = RobustnessAfterRemovingPath(
+            posteriorLogOdds: 0.157674m,
+            pathLogLr: (decimal)Math.Log(1.5d * 1.1d));
+        AssertDecimalEqual(expectedRobustness, result["A"], 0.0001m);
     }
 
 
 
-    private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
+
+    private static GraphNode Node(
+        string id,
+        decimal logPriorOdds = 0m,
+        decimal logPosteriorOdds = 0m,
+        string kind = "claim")
     {
         return new GraphNode
         {
             Id = id,
             Kind = kind,
-            PriorOdds = logOdds,
-            PosteriorOdds = logOdds
+            PriorOdds = logPriorOdds,
+            PosteriorOdds = logPosteriorOdds
         };
     }
 
@@ -723,19 +767,16 @@ public class GraphLikelihoodCalculatorTests
             $"Expected {actual} to be within {tolerance} of {expected}.");
     }
 
-    private static decimal MaximumAbsoluteProbabilityDifference(
+    private static decimal RobustnessAfterRemovingPath(
         decimal posteriorLogOdds,
-        decimal minimumLogLr,
-        decimal maximumLogLr)
+        decimal pathLogLr)
     {
         static double ToProbability(decimal logOdds) => 1d / (1d + Math.Exp(-(double)logOdds));
 
         double probabilityWithAllEvidence = ToProbability(posteriorLogOdds);
-        double minimumPathDifference = Math.Abs(
-            probabilityWithAllEvidence - ToProbability(posteriorLogOdds - minimumLogLr));
-        double maximumPathDifference = Math.Abs(
-            probabilityWithAllEvidence - ToProbability(posteriorLogOdds - maximumLogLr));
+        double probabilityWithoutPath = ToProbability(posteriorLogOdds - pathLogLr);
+        double probabilityDifference = Math.Abs(probabilityWithAllEvidence - probabilityWithoutPath);
 
-        return (decimal)Math.Max(minimumPathDifference, maximumPathDifference);
+        return (decimal)Math.Exp(-probabilityDifference);
     }
 }

@@ -428,7 +428,7 @@ public sealed class GraphLikelihoodCalculator
 
     // Calculates each node's fragility from the strongest leaf-to-node path.
     // The recursive results are memoized, so every node and edge is evaluated once.
-    public Dictionary<string, decimal> GetNodeFragilities(
+    public Dictionary<string, decimal> GetAllNodeRobustness(
         Graph graph,
         CancellationToken cancellationToken = default)
     {
@@ -437,7 +437,7 @@ public sealed class GraphLikelihoodCalculator
         var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
         var pathExtremesByNodeId = new Dictionary<string, LogPathExtremes>();
         var nodesBeingCalculated = new HashSet<string>();
-        var fragilities = new Dictionary<string, decimal>(context.NodesById.Count);
+        var robustnessValues = new Dictionary<string, decimal>(context.NodesById.Count);
 
         foreach (string nodeId in context.NodesById.Keys)
         {
@@ -452,35 +452,26 @@ public sealed class GraphLikelihoodCalculator
 
             decimal posteriorLogOdds = context.NodesById[nodeId].PosteriorOdds;
             double probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOdds);
-            double probabilityWithoutMinimalPath = LogOddsToProbability(posteriorLogOdds - pathExtremes.Minimum);
+            // double probabilityWithoutMinimalPath = LogOddsToProbability(posteriorLogOdds - pathExtremes.Minimum);
             double probabilityWithoutMaximalPath = LogOddsToProbability(posteriorLogOdds - pathExtremes.Maximum);
+            double probabilityDifference = probabilityWithAllEvidence - probabilityWithoutMaximalPath;
 
-            decimal result = (decimal)double.Max(
-                Math.Abs(probabilityWithAllEvidence - probabilityWithoutMinimalPath),
-                Math.Abs(probabilityWithAllEvidence - probabilityWithoutMaximalPath));
-            fragilities[nodeId] = result;
-            // fragilities[nodeId] = decimal.Max(posteriorLogOdds - (priorLogOdds + pathExtremes.Maximum), )
-            // decimal strongestLogLr = Math.Abs(pathExtremes.Minimum) > Math.Abs(pathExtremes.Maximum)
-            //     ? pathExtremes.Minimum
-            //     : pathExtremes.Maximum;
-            // decimal posteriorLogOdds = context.NodesById[nodeId].PosteriorOdds;
-            // double probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOdds);
-            // double probabilityWithoutStrongestPath = LogOddsToProbability(posteriorLogOdds - strongestLogLr);
-
-            // fragilities[nodeId] = (decimal)(probabilityWithAllEvidence - probabilityWithoutStrongestPath);
+            decimal result = (decimal)Math.Exp(
+                -Math.Abs(probabilityDifference));
+            robustnessValues[nodeId] = result;
         }
 
-        return fragilities;
+        return robustnessValues;
     }
 
-    public decimal? GetNodeFragility(
+    public decimal? GetNodeRobustness(
         Graph graph,
         string targetId,
         CancellationToken cancellationToken = default)
     {
-        var fragilities = GetNodeFragilities(graph, cancellationToken);
-        return fragilities.TryGetValue(targetId, out decimal fragility)
-            ? fragility
+        var robustnessValues = GetAllNodeRobustness(graph, cancellationToken);
+        return robustnessValues.TryGetValue(targetId, out decimal robustness)
+            ? robustness
             : null;
     }
 
