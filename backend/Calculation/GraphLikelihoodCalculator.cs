@@ -1,3 +1,7 @@
+using System.Net.Mime;
+using Backend.Models.Domain;
+using Backend.Models.Dto;
+
 namespace Backend.Calculation;
 
 public enum LogPathSelection
@@ -359,6 +363,192 @@ public sealed class GraphLikelihoodCalculator
                 : maximumLogPaths[id]!.Value);
     }
 
+    // Returns supporting and counter evidence ranked by their impact (difference in posterior odds when removed vs. present).
+    public EvidenceImpactRankingDto GetEvidenceImpactRanking(
+        Graph graph,
+        string targetClaimId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+
+        if (!context.NodesById.ContainsKey(targetClaimId))
+        {
+            throw new InvalidOperationException(
+                $"Target node '{targetClaimId}' does not exist in the calculation context.");
+        }
+
+        var evidenceLogLrs = GetDownstreamEvidenceLogLRs(context, targetClaimId);
+        var posteriorLogOddsWithAllEvidence = CalculateNodeLogPosteriorOdds(context, targetClaimId);
+        var probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOddsWithAllEvidence);
+
+        EvidenceImpactDto ToImpact(KeyValuePair<string, decimal> entry)
+        {
+            var posteriorLogOddsWithoutEvidence = posteriorLogOddsWithAllEvidence - entry.Value;
+            var probabilityWithoutEvidence = LogOddsToProbability(posteriorLogOddsWithoutEvidence);
+
+            return new EvidenceImpactDto
+            {
+                NodeId = entry.Key,
+                LogLr = entry.Value,
+                ProbabilityDifference = probabilityWithAllEvidence - probabilityWithoutEvidence
+            };
+        }
+
+        return new EvidenceImpactRankingDto
+        {
+            SupportingEvidence = evidenceLogLrs
+                .Where(entry => entry.Value > 0m)
+                .Select(ToImpact)
+                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
+                .ToList(),
+            CounterEvidence = evidenceLogLrs
+                .Where(entry => entry.Value < 0m)
+                .Select(ToImpact)
+                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
+                .ToList()
+        };
+    }
+
+    private static double LogOddsToProbability(decimal logOdds)
+    {
+        var value = (double)logOdds;
+        if (value >= 0d)
+        {
+            var inverseOdds = Math.Exp(-value);
+            return 1d / (1d + inverseOdds);
+        }
+
+        var odds = Math.Exp(value);
+        return odds / (1d + odds);
+    }
+
+    // Calculates each node's fragility from the strongest leaf-to-node path.
+    // The recursive results are memoized, so every node and edge is evaluated once.
+    public Dictionary<string, decimal> GetNodeFragilities(
+        Graph graph,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        var pathExtremesByNodeId = new Dictionary<string, LogPathExtremes>();
+        var nodesBeingCalculated = new HashSet<string>();
+        var fragilities = new Dictionary<string, decimal>(context.NodesById.Count);
+
+        foreach (string nodeId in context.NodesById.Keys)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var pathExtremes = GetLeafPathExtremes(
+                context,
+                nodeId,
+                pathExtremesByNodeId,
+                nodesBeingCalculated,
+                cancellationToken);
+
+            decimal posteriorLogOdds = context.NodesById[nodeId].PosteriorOdds;
+            double probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOdds);
+            double probabilityWithoutMinimalPath = LogOddsToProbability(posteriorLogOdds - pathExtremes.Minimum);
+            double probabilityWithoutMaximalPath = LogOddsToProbability(posteriorLogOdds - pathExtremes.Maximum);
+
+            decimal result = (decimal)double.Max(
+                Math.Abs(probabilityWithAllEvidence - probabilityWithoutMinimalPath),
+                Math.Abs(probabilityWithAllEvidence - probabilityWithoutMaximalPath));
+            fragilities[nodeId] = result;
+            // fragilities[nodeId] = decimal.Max(posteriorLogOdds - (priorLogOdds + pathExtremes.Maximum), )
+            // decimal strongestLogLr = Math.Abs(pathExtremes.Minimum) > Math.Abs(pathExtremes.Maximum)
+            //     ? pathExtremes.Minimum
+            //     : pathExtremes.Maximum;
+            // decimal posteriorLogOdds = context.NodesById[nodeId].PosteriorOdds;
+            // double probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOdds);
+            // double probabilityWithoutStrongestPath = LogOddsToProbability(posteriorLogOdds - strongestLogLr);
+
+            // fragilities[nodeId] = (decimal)(probabilityWithAllEvidence - probabilityWithoutStrongestPath);
+        }
+
+        return fragilities;
+    }
+
+    public decimal? GetNodeFragility(
+        Graph graph,
+        string targetId,
+        CancellationToken cancellationToken = default)
+    {
+        var fragilities = GetNodeFragilities(graph, cancellationToken);
+        return fragilities.TryGetValue(targetId, out decimal fragility)
+            ? fragility
+            : null;
+    }
+
+    private static LogPathExtremes GetLeafPathExtremes(
+        GraphCalculationContext context,
+        string nodeId,
+        Dictionary<string, LogPathExtremes> memo,
+        HashSet<string> nodesBeingCalculated,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (memo.TryGetValue(nodeId, out var cachedResult))
+        {
+            return cachedResult;
+        }
+
+        if (!nodesBeingCalculated.Add(nodeId))
+        {
+            throw new InvalidOperationException(
+                $"Cycle detected while calculating node fragility at node '{nodeId}'.");
+        }
+
+        try
+        {
+            if (!context.ChildEdgesByParentId.TryGetValue(nodeId, out var childEdges) || childEdges.Count == 0)
+            {
+                var leafResult = new LogPathExtremes(0m, 0m);
+                memo[nodeId] = leafResult;
+                return leafResult;
+            }
+
+            decimal? minimum = null;
+            decimal? maximum = null;
+
+            //Updates minimum and maximum for each child edge and memoizes it
+            foreach (var edge in childEdges)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var childExtremes = GetLeafPathExtremes(
+                    context,
+                    edge.FromNodeId,
+                    memo,
+                    nodesBeingCalculated,
+                    cancellationToken);
+                decimal logWeight = GetLogEdgeWeight(edge);
+                decimal minimumCandidate = logWeight + childExtremes.Minimum;
+                decimal maximumCandidate = logWeight + childExtremes.Maximum;
+
+                minimum = !minimum.HasValue || minimumCandidate < minimum.Value
+                    ? minimumCandidate
+                    : minimum;
+                maximum = !maximum.HasValue || maximumCandidate > maximum.Value
+                    ? maximumCandidate
+                    : maximum;
+            }
+
+            var result = new LogPathExtremes(minimum!.Value, maximum!.Value);
+            memo[nodeId] = result;
+            return result;
+        }
+        finally
+        {
+            nodesBeingCalculated.Remove(nodeId);
+        }
+    }
+
     private static decimal GetLogEdgeWeight(GraphEdgeCalcState edge)
     {
         if (edge.ImportanceToParent <= 0m)
@@ -409,6 +599,8 @@ public sealed class GraphLikelihoodCalculator
     {
         return Math.Clamp(value, MinLogOdds, MaxLogOdds);
     }
+
+    private sealed record LogPathExtremes(decimal Minimum, decimal Maximum);
 
     private sealed record AncestorTraversalState(string NodeId, int Distance, HashSet<string> Path);
 }

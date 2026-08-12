@@ -612,6 +612,80 @@ public class GraphLikelihoodCalculatorTests
         AssertDecimalEqual(-4.3428m, result["C2"], 0.0001m);
     }
 
+    [TestMethod]
+    public void GetNodeFragilities_CalculatesRecurrenceForEveryNode()
+    {
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("root", logOdds: 0.4m),
+                Node("branch", logOdds: 1m),
+                Node("support-leaf", kind: "evidence"),
+                Node("counter-leaf", kind: "objection"),
+                Node("direct-counter-leaf", kind: "objection")
+            ],
+            Edges =
+            [
+                Edge("E-support-branch", "support-leaf", "branch", importanceToParent: 2m),
+                Edge("E-counter-branch", "counter-leaf", "branch", importanceToParent: 0.5m),
+                Edge("E-branch-root", "branch", "root", importanceToParent: 3m),
+                Edge("E-counter-root", "direct-counter-leaf", "root", importanceToParent: 0.1m)
+            ]
+        };
+
+        var result = _calculator.GetNodeFragilities(graph);
+
+        Assert.AreEqual(graph.Nodes.Count, result.Count);
+        AssertDecimalEqual(0m, result["support-leaf"]);
+        AssertDecimalEqual(0m, result["counter-leaf"]);
+        AssertDecimalEqual(0m, result["direct-counter-leaf"]);
+
+        decimal expectedBranchFragility = MaximumAbsoluteProbabilityDifference(
+            posteriorLogOdds: 1m,
+            minimumLogLr: (decimal)Math.Log(0.5d),
+            maximumLogLr: (decimal)Math.Log(2d));
+        AssertDecimalEqual(expectedBranchFragility, result["branch"]);
+
+        decimal expectedRootFragility = MaximumAbsoluteProbabilityDifference(
+            posteriorLogOdds: 0.4m,
+            minimumLogLr: (decimal)Math.Log(0.1d),
+            maximumLogLr: (decimal)Math.Log(6d));
+        AssertDecimalEqual(expectedRootFragility, result["root"]);
+        Assert.IsTrue(result["branch"] > 0m);
+        Assert.IsTrue(result["root"] > 0m);
+    }
+
+    [TestMethod]
+    public void GetNodeFragilities_RejectsCycles()
+    {
+        var graph = new Graph
+        {
+            Nodes = [Node("A"), Node("B")],
+            Edges =
+            [
+                Edge("E-A-B", "A", "B", importanceToParent: 2m),
+                Edge("E-B-A", "B", "A", importanceToParent: 3m)
+            ]
+        };
+
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            _calculator.GetNodeFragilities(graph));
+
+        StringAssert.Contains(exception.Message, "Cycle detected");
+    }
+
+    [TestMethod]
+    public void GetNodeFragilities_ThrowsWhenCancelled()
+    {
+        var graph = new Graph { Nodes = [Node("A")] };
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            _calculator.GetNodeFragilities(graph, cancellation.Token));
+    }
+
 
 
     private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
@@ -647,5 +721,21 @@ public class GraphLikelihoodCalculatorTests
         Assert.IsTrue(
             Math.Abs(expected - actual) <= tolerance,
             $"Expected {actual} to be within {tolerance} of {expected}.");
+    }
+
+    private static decimal MaximumAbsoluteProbabilityDifference(
+        decimal posteriorLogOdds,
+        decimal minimumLogLr,
+        decimal maximumLogLr)
+    {
+        static double ToProbability(decimal logOdds) => 1d / (1d + Math.Exp(-(double)logOdds));
+
+        double probabilityWithAllEvidence = ToProbability(posteriorLogOdds);
+        double minimumPathDifference = Math.Abs(
+            probabilityWithAllEvidence - ToProbability(posteriorLogOdds - minimumLogLr));
+        double maximumPathDifference = Math.Abs(
+            probabilityWithAllEvidence - ToProbability(posteriorLogOdds - maximumLogLr));
+
+        return (decimal)Math.Max(minimumPathDifference, maximumPathDifference);
     }
 }
