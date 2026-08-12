@@ -9,12 +9,14 @@ const addNodeMock = vi.fn()
 const deleteNodeMock = vi.fn()
 const updateNodeMock = vi.fn()
 const getEvidenceImpactRankingMock = vi.fn()
+const getLeastRobustNodeMock = vi.fn()
 
 vi.mock('../services/graphService', () => ({
   addNode: (...args: unknown[]) => addNodeMock(...args),
   deleteNode: (...args: unknown[]) => deleteNodeMock(...args),
   getDefaultGraphDataSource: () => 'database',
   getEvidenceImpactRanking: (...args: unknown[]) => getEvidenceImpactRankingMock(...args),
+  getLeastRobustNode: (...args: unknown[]) => getLeastRobustNodeMock(...args),
   getGraphBySlug: (slug: string, dataSource: string) => getGraphBySlugMock(slug, dataSource),
   resetDatabase: () => resetDatabaseMock(),
   updateNode: (...args: unknown[]) => updateNodeMock(...args),
@@ -47,6 +49,7 @@ describe('DemoPage', () => {
     deleteNodeMock.mockReset()
     updateNodeMock.mockReset()
     getEvidenceImpactRankingMock.mockReset()
+    getLeastRobustNodeMock.mockReset()
   })
 
   afterEach(() => {
@@ -71,6 +74,26 @@ describe('DemoPage', () => {
     expect(
       screen.getByRole('heading', { level: 2, name: sampleGraph.title }),
     ).toBeInTheDocument()
+  })
+
+  it('prints the least robust node when r is pressed', async () => {
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    getLeastRobustNodeMock.mockResolvedValue({
+      nodeId: 'C1',
+      nodeTitle: 'Least robust claim',
+      robustness: 0.75,
+    })
+
+    render(<DemoPage />)
+    await screen.findByTestId('graph-canvas')
+
+    fireEvent.keyDown(window, { key: 'r' })
+
+    await waitFor(() => {
+      expect(getLeastRobustNodeMock).toHaveBeenCalledWith('sample-medium', 'database')
+      expect(consoleLog).toHaveBeenCalledWith('Least robust claim: 0.75')
+    })
   })
 
   it('shows an error state and retries loading when requested', async () => {

@@ -21,5 +21,9 @@ public interface IGraphService
         CancellationToken cancellationToken = default);
     Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(string slug, string targetNodeId,
         GraphDto graphContext, CancellationToken cancellationToken = default);
+    Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(string slug,
+        CancellationToken cancellationToken = default);
+    Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(string slug, GraphDto graphContext,
+        CancellationToken cancellationToken = default);
     Task ResetDatabaseAsync(CancellationToken cancellationToken = default);
 }

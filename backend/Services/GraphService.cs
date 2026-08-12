@@ -101,6 +101,49 @@ public class GraphService : IGraphService
         return await GetMinimalCounterSet(graph, targetNodeId, graph.Nodes.Select(node => node.Id), cancellationToken);
     }
 
+    public NodeRobustnessDto? GetLeastRobustNode(
+        Graph graph,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var robustnessValues = _calculator.GetAllNodeRobustness(graph, cancellationToken);
+        if (robustnessValues.Count == 0)
+        {
+            return null;
+        }
+
+        var leastRobust = robustnessValues.MinBy(entry => entry.Value);
+        var node = graph.Nodes.First(node => node.Id == leastRobust.Key);
+
+        return new NodeRobustnessDto
+        {
+            NodeId = node.Id,
+            NodeTitle = node.Title,
+            Robustness = leastRobust.Value
+        };
+    }
+
+    public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
+        string slug,
+        CancellationToken cancellationToken = default)
+    {
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        return graph is null ? null : GetLeastRobustNode(graph, cancellationToken);
+    }
+
+    public Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
+        string slug,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
+        {
+            return Task.FromResult<NodeRobustnessDto?>(null);
+        }
+
+        return Task.FromResult(GetLeastRobustNode(ToDomainGraph(graphContext), cancellationToken));
+    }
+
     public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
         string slug,
         string targetNodeId,

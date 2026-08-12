@@ -66,6 +66,28 @@ export type EvidenceImpact = {
   probabilityDifference: number
 }
 
+export type NodeRobustness = {
+  nodeId: string
+  nodeTitle: string
+  robustness: number
+}
+
+export async function getLeastRobustNode(
+  slug: string,
+  dataSource: GraphDataSource = getDefaultGraphDataSource(),
+): Promise<NodeRobustness> {
+  const graphContext = dataSource === 'fixture'
+    ? await getGraphBySlugFromFixture(slug)
+    : undefined
+
+  const response = await httpClient.post<NodeRobustness>(
+    `/api/graphs/${slug}/least-robust-node`,
+    graphContext,
+  )
+
+  return response.data
+}
+
 export async function getEvidenceImpactRanking(
   slug: string,
   targetNodeId: string,

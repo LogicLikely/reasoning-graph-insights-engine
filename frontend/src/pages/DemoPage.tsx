@@ -12,6 +12,7 @@ import {
   getDefaultGraphDataSource,
   getEvidenceImpactRanking,
   getGraphBySlug,
+  getLeastRobustNode,
   getNodeCounterSet,
   resetDatabase,
   updateEdge,
@@ -162,6 +163,15 @@ export function DemoPage() {
     }
   }, [graph?.nodes, graphDataSource])
 
+  const handleLeastRobustNode = useCallback(async () => {
+    try {
+      const result = await getLeastRobustNode(DEMO_GRAPH_SLUG, graphDataSource)
+      console.log(`${result.nodeTitle}: ${result.robustness}`)
+    } catch {
+      setError('Failed to get the least robust node from the server.')
+    }
+  }, [graphDataSource])
+
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
     data: Partial<GraphFixtureNode> = {},
@@ -286,12 +296,15 @@ export function DemoPage() {
           void handleEvidenceImpactRanking(selectedNodeId)
         }
       }
+      else if (event.key.toLowerCase() === 'r') {
+        void handleLeastRobustNode()
+      }
 
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
+  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking, handleLeastRobustNode])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const flowGraph = graph ? mapGraphToFlow(graph) : null
