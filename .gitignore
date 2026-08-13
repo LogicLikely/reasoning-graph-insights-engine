@@ -61,6 +61,7 @@ web_modules/
 
 # Output of 'npm pack'
 *.tgz
+!frontend/vendor/logiclikely-graphmap-0.2.0-next.0.tgz
 
 # Yarn Integrity file
 .yarn-integrity
