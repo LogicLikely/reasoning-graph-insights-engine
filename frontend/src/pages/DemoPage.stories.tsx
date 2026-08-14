@@ -42,6 +42,26 @@ export const Default: Story = {
   },
 }
 
+export const CompactView: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Switches the shared demo workspace to the compact GraphMap renderer while keeping the same Insights graph and overview controls.',
+      },
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByTestId('graph-canvas')).toBeVisible()
+    await userEvent.click(canvas.getByRole('button', { name: 'Compact' }))
+    await expect(await canvas.findByTestId('insights-graph-canvas')).toBeVisible()
+    await expect(canvas.getByRole('button', { name: 'Compact' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  },
+}
+
 export const LoadingState: Story = {
   parameters: {
     docs: {

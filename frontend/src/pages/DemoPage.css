@@ -86,9 +86,16 @@
   border-radius: 0;
 }
 
-.demo-stage--expanded .graph-canvas-shell {
+.demo-stage--expanded .graph-canvas-shell,
+.demo-stage--expanded .insights-graphmap-host,
+.demo-stage--expanded .insights-graphmap-root,
+.demo-stage--expanded .insights-graphmap-canvas {
   height: 100dvh;
   min-height: 0;
+}
+
+.demo-stage--expanded .graph-canvas-shell,
+.demo-stage--expanded .insights-graphmap-canvas {
   border: 0;
   border-radius: 0;
 }

@@ -5,9 +5,9 @@ consumed without a public package registry.
 
 ## GraphMap
 
-- Artifact: `logiclikely-graphmap-0.2.0-next.0.tgz`
-- Package version: `0.2.0-next.0`
-- SHA-256: `dd7f886263e60d6adbd6974801931ff734c2051a2182add1f9a3dd3c239a994f`
+- Artifact: `logiclikely-graphmap-0.2.0-next.2.tgz`
+- Package version: `0.2.0-next.2`
+- SHA-256: `591b9e7046fde4438dc7f85a766c1ae21aeb44119dec41a4001757ab79a4881b`
 
 The dependency in `../package.json` must use the exact matching `file:vendor/...`
 path. The archive and `package-lock.json` must be committed together so a clean

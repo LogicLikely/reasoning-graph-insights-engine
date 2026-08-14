@@ -38,6 +38,7 @@ export function InsightsGraphCanvas({
         adapter={insightsGraphAdapter}
         selectedNodeId={selectedNodeId ?? null}
         onSelect={onNodeSelect}
+        defaultTheme="insights"
         orientation={orientation}
         onOrientationChange={setOrientation}
         renderNode={renderInsightsGraphNode}

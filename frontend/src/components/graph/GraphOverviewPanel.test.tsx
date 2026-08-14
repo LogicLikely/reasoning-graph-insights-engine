@@ -16,6 +16,7 @@ describe('GraphOverviewPanel', () => {
         edgeCount={9}
         fixtureName="sample-medium"
         dataSource="fixture"
+        renderer="standard"
       />,
     )
 
@@ -39,6 +40,7 @@ describe('GraphOverviewPanel', () => {
         edgeCount={9}
         fixtureName="sample-medium"
         dataSource="fixture"
+        renderer="standard"
       />,
     )
 
@@ -56,6 +58,7 @@ describe('GraphOverviewPanel', () => {
         edgeCount={9}
         fixtureName="sample-medium"
         dataSource="database"
+        renderer="standard"
       />,
     )
 
@@ -74,6 +77,7 @@ describe('GraphOverviewPanel', () => {
         edgeCount={9}
         fixtureName="sample-medium"
         dataSource="database"
+        renderer="standard"
         onResetDatabase={onResetDatabase}
       />,
     )
@@ -94,6 +98,7 @@ describe('GraphOverviewPanel', () => {
         edgeCount={9}
         fixtureName="sample-medium"
         dataSource="fixture"
+        renderer="standard"
         onResetDatabase={vi.fn()}
       />,
     )
@@ -112,6 +117,7 @@ describe('GraphOverviewPanel', () => {
         edgeCount={9}
         fixtureName="sample-medium"
         dataSource="database"
+        renderer="standard"
         onDataSourceChange={onDataSourceChange}
       />,
     )
@@ -122,5 +128,31 @@ describe('GraphOverviewPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fixture' }))
 
     expect(onDataSourceChange).toHaveBeenCalledWith('fixture')
+  })
+
+  it('allows switching between standard and compact renderers', () => {
+    const onRendererChange = vi.fn()
+
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A database graph description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+        dataSource="database"
+        renderer="standard"
+        onRendererChange={onRendererChange}
+      />,
+    )
+
+    const rendererGroup = screen.getByRole('group', { name: 'Graph renderer' })
+    expect(rendererGroup).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Standard' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Compact' })).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compact' }))
+
+    expect(onRendererChange).toHaveBeenCalledWith('compact')
   })
 })

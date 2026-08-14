@@ -1,8 +1,57 @@
 import { useState, type CSSProperties } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { expect, userEvent, waitFor } from 'storybook/test'
-import { sampleGraph, type GraphFixtureNode } from '../../fixtures/sampleGraph'
+import {
+  sampleGraph,
+  type GraphFixture,
+  type GraphFixtureNode,
+} from '../../fixtures/sampleGraph'
 import { InsightsGraphCanvas } from './InsightsGraphCanvas'
+
+const moreNodesGraph: GraphFixture = {
+  ...sampleGraph,
+  slug: 'sample-compact-more',
+  title: 'Sample Compact Graph with More Nodes',
+  nodes: [
+    ...sampleGraph.nodes,
+    {
+      id: 'E3',
+      kind: 'evidence',
+      title: 'Additional survey evidence',
+      bodyText: 'A fourth direct child used to exercise compact sibling disclosure.',
+      tags: ['compact-demo'],
+      priorOdds: 0.1,
+      posteriorOdds: 0.1,
+      evidence: { type: 'statistical', score: 61 },
+    },
+    {
+      id: 'O3',
+      kind: 'objection',
+      title: 'Additional root objection',
+      bodyText: 'A fifth direct child used to exercise the More node.',
+      category: 'compact-demo',
+      priorOdds: -0.4,
+      posteriorOdds: -0.4,
+    },
+  ],
+  edges: [
+    ...sampleGraph.edges,
+    {
+      id: 'E-R-E3',
+      from: 'E3',
+      to: 'R1',
+      kind: 'support',
+      importanceToParent: 4,
+    },
+    {
+      id: 'E-R-O3',
+      from: 'O3',
+      to: 'R1',
+      kind: 'rebut',
+      importanceToParent: 3,
+    },
+  ],
+}
 
 const normalStageStyle: CSSProperties = {
   display: 'grid',
@@ -23,9 +72,9 @@ const expandedStageStyle: CSSProperties = {
   height: '100dvh',
 }
 
-function InsightsGraphCanvasHarness() {
+function InsightsGraphCanvasHarness({ graph = sampleGraph }: { graph?: GraphFixture }) {
   const [selectedNode, setSelectedNode] = useState<GraphFixtureNode | null>(
-    sampleGraph.nodes[0],
+    graph.nodes[0],
   )
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -35,7 +84,7 @@ function InsightsGraphCanvasHarness() {
       style={isExpanded ? expandedStageStyle : normalStageStyle}
     >
       <InsightsGraphCanvas
-        graph={sampleGraph}
+        graph={graph}
         selectedNodeId={selectedNode?.id}
         onNodeSelect={setSelectedNode}
         isExpanded={isExpanded}
@@ -61,7 +110,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'An isolated integration harness for the vendored GraphMap package. It adapts the full Insights graph shape without replacing the production DemoPage renderer yet.',
+          'The Compact renderer backed by the vendored GraphMap package. It adapts the full Insights graph shape and remains available alongside the Standard renderer.',
       },
     },
   },
@@ -91,5 +140,24 @@ export const Default: Story = {
     await expect(
       canvas.getByRole('button', { name: 'Restore graph size' }),
     ).toBeVisible()
+  },
+}
+
+export const WithMoreNodes: Story = {
+  args: {
+    graph: moreNodesGraph,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Adds five direct children to the root so the compact renderer exposes its synthetic More node without changing the production sample graph.',
+      },
+    },
+  },
+  play: async ({ canvas }) => {
+    await waitFor(() => {
+      expect(canvas.getByText(/More at this level \(2 hidden\)/i)).toBeVisible()
+    })
   },
 }

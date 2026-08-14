@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
+import { InsightsGraphCanvas } from '../components/graph/InsightsGraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
-import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
+import {
+  GraphOverviewPanel,
+  type GraphRenderer,
+} from '../components/graph/GraphOverviewPanel'
 import { mapGraphToFlow } from '../components/graph/graphMapping'
 import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
 import {
@@ -34,6 +38,7 @@ export function DemoPage() {
   const [isGraphExpanded, setIsGraphExpanded] = useState(false)
   const [isResettingDatabase, setIsResettingDatabase] = useState(false)
   const [graphDataSource, setGraphDataSource] = useState<GraphDataSource>(() => getDefaultGraphDataSource())
+  const [graphRenderer, setGraphRenderer] = useState<GraphRenderer>('standard')
 
   const dismissNodeDetails = useCallback(() => {
     setSelectedNodeId(undefined)
@@ -72,10 +77,8 @@ export function DemoPage() {
         }
 
         setGraph(result)
-        setSelectedNodeId(undefined)
-        // We remove the explicit reset here so that updates and additions
-        // don't lose the user's current focus/selection during a reload.
-        // Deletions still handle their own cleanup.
+        // Preserve selection across mutation-driven reloads. Data-source
+        // changes, resets, and deletions clear it in their own handlers.
 
       } catch {
         if (!isActive) {
@@ -252,6 +255,10 @@ export function DemoPage() {
     setGraphDataSource(nextDataSource)
   }, [graphDataSource])
 
+  const handleCompactNodeSelect = useCallback((node: GraphFixtureNode | null) => {
+    setSelectedNodeId(node?.id)
+  }, [])
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Prevent trigger if user is typing in an input or textarea
@@ -294,7 +301,10 @@ export function DemoPage() {
   }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
-  const flowGraph = graph ? mapGraphToFlow(graph) : null
+  const flowGraph = useMemo(
+    () => graphRenderer === 'standard' && graph ? mapGraphToFlow(graph) : null,
+    [graph, graphRenderer],
+  )
   const shouldShowOverviewPanel = graph !== null || error !== null
   const overviewTitle = graph?.title ?? DB_UNREACHABLE_TITLE
   const overviewDescription = graph?.description ?? error ?? ''
@@ -377,6 +387,14 @@ export function DemoPage() {
                 Retry
               </button>
             </div>
+          ) : graphRenderer === 'compact' && graph ? (
+            <InsightsGraphCanvas
+              graph={graph}
+              selectedNodeId={selectedNodeId}
+              onNodeSelect={handleCompactNodeSelect}
+              isExpanded={isGraphExpanded}
+              onToggleExpanded={toggleGraphExpanded}
+            />
           ) : flowGraph && graph ? (
             <GraphCanvas
               nodes={flowGraph.nodes}
@@ -389,8 +407,8 @@ export function DemoPage() {
           ) : null}
 
           <p>
-            Click a node to inspect its details. Pan and zoom are handled by
-            React Flow, with dagre providing the initial layout.
+            Click a node to inspect its details. Standard shows the complete
+            layout, while Compact reveals large branches progressively.
           </p>
         </article>
 
@@ -404,8 +422,10 @@ export function DemoPage() {
               edgeCount={overviewEdgeCount}
               fixtureName={overviewFixtureName}
               dataSource={graphDataSource}
+              renderer={graphRenderer}
               isResettingDatabase={isResettingDatabase}
               onDataSourceChange={handleGraphDataSourceChange}
+              onRendererChange={setGraphRenderer}
               onResetDatabase={handleResetDatabase}
             />
           ) : null}

@@ -99,6 +99,62 @@ Then('I should see the graph workspace title', async function (this: StorybookWo
   ).toBeVisible()
 })
 
+Then('the standard graph view should be selected', async function (this: StorybookWorld) {
+  await expect(this.storyPage.getByRole('button', { name: 'Standard' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await expect(this.storyPage.getByTestId('graph-canvas')).toBeVisible()
+})
+
+When('I switch to the compact graph view', async function (this: StorybookWorld) {
+  await this.storyPage.getByRole('button', { name: 'Compact' }).click()
+})
+
+Then('I should see the compact graph canvas', async function (this: StorybookWorld) {
+  await expect(this.storyPage.getByTestId('insights-graph-canvas')).toBeVisible()
+  await expect(this.storyPage.getByTestId('graph-canvas')).toHaveCount(0)
+})
+
+When('I expand the compact graph to the viewport', async function (this: StorybookWorld) {
+  await this.storyPage.getByRole('button', { name: 'Expand graph to viewport' }).click()
+})
+
+Then('the compact graph should fill the viewport', async function (this: StorybookWorld) {
+  const viewport = this.storyPage.viewportSize()
+  const compactCanvas = await this.storyPage.getByTestId('insights-graph-canvas').boundingBox()
+
+  expect(viewport).not.toBeNull()
+  expect(compactCanvas).not.toBeNull()
+  expect(Math.abs((compactCanvas?.width ?? 0) - (viewport?.width ?? 0))).toBeLessThanOrEqual(2)
+  expect(Math.abs((compactCanvas?.height ?? 0) - (viewport?.height ?? 0))).toBeLessThanOrEqual(2)
+})
+
+When('I restore the compact graph size', async function (this: StorybookWorld) {
+  await this.storyPage.getByRole('button', { name: 'Restore graph size' }).click()
+})
+
+When('I switch to the standard graph view', async function (this: StorybookWorld) {
+  await this.storyPage.getByRole('button', { name: 'Standard' }).click()
+})
+
+Then('I should see the standard graph canvas', async function (this: StorybookWorld) {
+  await expect(this.storyPage.getByTestId('graph-canvas')).toBeVisible()
+  await expect(this.storyPage.getByTestId('insights-graph-canvas')).toHaveCount(0)
+})
+
+Then('standard support and rebut edges should retain different colors', async function (this: StorybookWorld) {
+  const supportEdge = this.storyPage.locator('.graph-edge--support .react-flow__edge-path').first()
+  const rebutEdge = this.storyPage.locator('.graph-edge--rebut .react-flow__edge-path').first()
+  await expect(supportEdge).toBeVisible()
+  await expect(rebutEdge).toBeVisible()
+
+  const supportStroke = await supportEdge.evaluate((element) => getComputedStyle(element).stroke)
+  const rebutStroke = await rebutEdge.evaluate((element) => getComputedStyle(element).stroke)
+
+  expect(supportStroke).not.toBe(rebutStroke)
+})
+
 Then('I should see that the graph is loading', async function (this: StorybookWorld) {
   await expect(
     this.storyPage.getByRole('heading', { level: 2, name: 'Loading graph demo' }),

@@ -64,6 +64,7 @@ describe('InsightsGraphCanvas', () => {
       graph: sampleGraph,
       adapter: insightsGraphAdapter,
       selectedNodeId: 'E1',
+      defaultTheme: 'insights',
       orientation: 'LR',
       renderNode: renderInsightsGraphNode,
       getNodePresentation: getInsightsNodePresentation,
