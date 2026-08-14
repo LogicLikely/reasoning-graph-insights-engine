@@ -39,11 +39,6 @@ export const renderInsightsGraphNode: GraphMapNodeRenderer<GraphFixtureNode> = (
     <span className="insights-graphmap-card__metric">
       {formatLikelihood(node.posteriorOdds)}
     </span>
-    {node.evidence ? (
-      <span className="insights-graphmap-card__evidence">
-        Evidence score {node.evidence.score}
-      </span>
-    ) : null}
     <div className="insights-graphmap-card__tooltip" role="tooltip">
       {node.bodyText}
     </div>

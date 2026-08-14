@@ -14,7 +14,7 @@ import {
 } from './insightsGraphPresentation'
 
 describe('Insights GraphMap presentation', () => {
-  it('renders likelihood, evidence, selection, and the full body tooltip from the raw node', () => {
+  it('renders likelihood, selection, and the full body tooltip without duplicating evidence details', () => {
     const canonical = insightsGraphAdapter(sampleGraph)
     const graphNode = canonical.nodes.find((node) => node.id === 'E1')!
     const context: GraphMapNodeRenderContext<(typeof graphNode)['raw']> = {
@@ -38,7 +38,7 @@ describe('Insights GraphMap presentation', () => {
 
     expect(screen.getByText('Photographs from beaches')).toBeInTheDocument()
     expect(screen.getByText('52.00% likely')).toBeInTheDocument()
-    expect(screen.getByText('Evidence score 52')).toBeInTheDocument()
+    expect(screen.queryByText(/Evidence score/i)).not.toBeInTheDocument()
     expect(screen.getByRole('tooltip')).toHaveTextContent(
       'Collections of beach and ocean photographs are cited as visual support.',
     )

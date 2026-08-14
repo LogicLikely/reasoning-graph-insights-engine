@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { AdaptedGraphMapProps } from '@logiclikely/graphmap'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -30,7 +29,6 @@ vi.mock('@logiclikely/graphmap', () => ({
 
     return (
       <div data-testid="adapted-graphmap-mock">
-        {props.additionalControls as ReactNode}
         <button type="button" onClick={() => props.onOrientationChange?.('TB')}>
           Set vertical
         </button>
@@ -54,8 +52,8 @@ describe('InsightsGraphCanvas', () => {
         graph={sampleGraph}
         selectedNodeId="E1"
         onNodeSelect={() => undefined}
-        isExpanded={false}
-        onToggleExpanded={() => undefined}
+        isFullscreen={false}
+        onFullscreenChange={() => undefined}
       />,
     )
 
@@ -73,6 +71,7 @@ describe('InsightsGraphCanvas', () => {
       defaultNodesDraggable: true,
       minZoom: 0.35,
       maxZoom: 1.5,
+      fullscreen: { value: false },
       className: 'insights-graphmap-root',
       canvasClassName: 'insights-graphmap-canvas',
     })
@@ -84,8 +83,8 @@ describe('InsightsGraphCanvas', () => {
       <InsightsGraphCanvas
         graph={sampleGraph}
         onNodeSelect={onNodeSelect}
-        isExpanded={false}
-        onToggleExpanded={() => undefined}
+        isFullscreen={false}
+        onFullscreenChange={() => undefined}
       />,
     )
 
@@ -105,8 +104,8 @@ describe('InsightsGraphCanvas', () => {
       <InsightsGraphCanvas
         graph={sampleGraph}
         onNodeSelect={() => undefined}
-        isExpanded={false}
-        onToggleExpanded={() => undefined}
+        isFullscreen={false}
+        onFullscreenChange={() => undefined}
       />,
     )
 
@@ -115,29 +114,30 @@ describe('InsightsGraphCanvas', () => {
     expect(getLatestProps().orientation).toBe('TB')
   })
 
-  it('delegates fullscreen ownership and updates the host control label', () => {
-    const onToggleExpanded = vi.fn()
+  it('delegates controlled fullscreen ownership to GraphMap', () => {
+    const onFullscreenChange = vi.fn()
     const { rerender } = render(
       <InsightsGraphCanvas
         graph={sampleGraph}
         onNodeSelect={() => undefined}
-        isExpanded={false}
-        onToggleExpanded={onToggleExpanded}
+        isFullscreen={false}
+        onFullscreenChange={onFullscreenChange}
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand graph to viewport' }))
-    expect(onToggleExpanded).toHaveBeenCalledOnce()
+    act(() => getLatestProps().fullscreen?.onChange?.(true))
+    expect(onFullscreenChange).toHaveBeenCalledWith(true)
+    expect(getLatestProps().fullscreen).toMatchObject({ value: false })
 
     rerender(
       <InsightsGraphCanvas
         graph={sampleGraph}
         onNodeSelect={() => undefined}
-        isExpanded
-        onToggleExpanded={onToggleExpanded}
+        isFullscreen
+        onFullscreenChange={onFullscreenChange}
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'Restore graph size' })).toBeInTheDocument()
+    expect(getLatestProps().fullscreen).toMatchObject({ value: true })
   })
 })

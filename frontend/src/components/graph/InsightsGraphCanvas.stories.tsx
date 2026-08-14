@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { expect, userEvent, waitFor } from 'storybook/test'
+import { expect, userEvent, waitFor, within } from 'storybook/test'
 import {
   sampleGraph,
   type GraphFixture,
@@ -64,31 +64,23 @@ const normalStageStyle: CSSProperties = {
   background: '#eef2e6',
 }
 
-const expandedStageStyle: CSSProperties = {
-  ...normalStageStyle,
-  position: 'fixed',
-  inset: 0,
-  zIndex: 1000,
-  height: '100dvh',
-}
-
 function InsightsGraphCanvasHarness({ graph = sampleGraph }: { graph?: GraphFixture }) {
   const [selectedNode, setSelectedNode] = useState<GraphFixtureNode | null>(
     graph.nodes[0],
   )
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   return (
     <div
       data-testid="insights-graph-story-stage"
-      style={isExpanded ? expandedStageStyle : normalStageStyle}
+      style={normalStageStyle}
     >
       <InsightsGraphCanvas
         graph={graph}
         selectedNodeId={selectedNode?.id}
         onNodeSelect={setSelectedNode}
-        isExpanded={isExpanded}
-        onToggleExpanded={() => setIsExpanded((current) => !current)}
+        isFullscreen={isFullscreen}
+        onFullscreenChange={setIsFullscreen}
       />
       <output
         data-testid="insights-graph-selection"
@@ -110,7 +102,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The Compact renderer backed by the vendored GraphMap package. It adapts the full Insights graph shape and remains available alongside the Standard renderer.',
+          'The production Insights graph renderer backed by the vendored GraphMap package. It preserves the full Insights graph shape while progressively revealing large branches.',
       },
     },
   },
@@ -122,7 +114,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {
-  play: async ({ canvas }) => {
+  play: async ({ canvas, canvasElement }) => {
     await expect(canvas.getByTestId('insights-graph-canvas')).toBeVisible()
 
     await waitFor(() => {
@@ -134,11 +126,31 @@ export const Default: Story = {
       'Selected C1 · observation · posterior odds -0.53',
     )
 
+    await userEvent.click(canvas.getByRole('button', { name: 'Expand all' }))
+    await waitFor(() => {
+      expect(
+        canvas.getByText('Human perception is a poor curvature detector'),
+      ).toBeVisible()
+    })
+
+    const claimCard = canvas.getByText('The horizon looks flat').closest('.insights-graphmap-card')
+    const objectionCard = canvas
+      .getByText('Human perception is a poor curvature detector')
+      .closest('.insights-graphmap-card')
+
+    expect(claimCard).not.toBeNull()
+    expect(objectionCard).not.toBeNull()
+    expect(getComputedStyle(objectionCard!).backgroundColor).not.toBe(
+      getComputedStyle(claimCard!).backgroundColor,
+    )
+    expect(canvas.queryByText(/Evidence score/i)).not.toBeInTheDocument()
+
     await userEvent.click(
       canvas.getByRole('button', { name: 'Expand graph to viewport' }),
     )
+    const body = within(canvasElement.ownerDocument.body)
     await expect(
-      canvas.getByRole('button', { name: 'Restore graph size' }),
+      body.getByRole('button', { name: 'Restore graph size' }),
     ).toBeVisible()
   },
 }

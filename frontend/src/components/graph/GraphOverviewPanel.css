@@ -56,18 +56,7 @@
   grid-column: 1 / -1;
 }
 
-.graph-overview-panel__control {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.graph-overview-panel__control-label {
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.graph-overview-panel__segmented-toggle {
+.graph-overview-panel__source-toggle {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 0.2rem;
@@ -76,7 +65,7 @@
   background: rgba(253, 253, 248, 0.8);
 }
 
-.graph-overview-panel__segmented-option {
+.graph-overview-panel__source-option {
   min-height: 2.35rem;
   border: 0;
   border-radius: 0.35rem;
@@ -87,16 +76,16 @@
   font-weight: 700;
 }
 
-.graph-overview-panel__segmented-option[aria-pressed='true'] {
+.graph-overview-panel__source-option[aria-pressed='true'] {
   background: var(--color-text);
   color: var(--color-surface);
 }
 
-.graph-overview-panel__segmented-option:hover {
+.graph-overview-panel__source-option:hover {
   color: var(--color-text);
 }
 
-.graph-overview-panel__segmented-option[aria-pressed='true']:hover {
+.graph-overview-panel__source-option[aria-pressed='true']:hover {
   color: var(--color-surface);
 }
 

@@ -21,11 +21,10 @@ describe('AppRouter', () => {
     expect(screen.getByRole('navigation', { name: /primary/i })).toBeInTheDocument()
   })
 
-  it('renders the demo page for the demo route', async () => {
+  it('renders the demo page for the demo route', () => {
     renderAtRoute('/demo')
 
     expect(screen.getByTestId('demo-page')).toBeInTheDocument()
-    // expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
   })
 
   it('renders the about page for the about route', () => {

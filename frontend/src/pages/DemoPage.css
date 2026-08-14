@@ -75,37 +75,6 @@
   min-height: 42rem;
 }
 
-.demo-stage--expanded {
-  position: fixed;
-  inset: 0;
-  z-index: 900;
-  display: block;
-  min-height: 100dvh;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-}
-
-.demo-stage--expanded .graph-canvas-shell,
-.demo-stage--expanded .insights-graphmap-host,
-.demo-stage--expanded .insights-graphmap-root,
-.demo-stage--expanded .insights-graphmap-canvas {
-  height: 100dvh;
-  min-height: 0;
-}
-
-.demo-stage--expanded .graph-canvas-shell,
-.demo-stage--expanded .insights-graphmap-canvas {
-  border: 0;
-  border-radius: 0;
-}
-
-.demo-stage--expanded .demo-stage__header,
-.demo-stage--expanded > p,
-.demo-stage--expanded::after {
-  display: none;
-}
-
 .demo-stage__header {
   display: grid;
   gap: 0.75rem;

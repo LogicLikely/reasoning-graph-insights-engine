@@ -1,13 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { InsightsGraphCanvas } from '../components/graph/InsightsGraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
-import {
-  GraphOverviewPanel,
-  type GraphRenderer,
-} from '../components/graph/GraphOverviewPanel'
-import { mapGraphToFlow } from '../components/graph/graphMapping'
+import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
 import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
 import {
   addEdge,
@@ -35,31 +30,13 @@ export function DemoPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [reloadKey, setReloadKey] = useState(0)
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
-  const [isGraphExpanded, setIsGraphExpanded] = useState(false)
+  const [isGraphFullscreen, setIsGraphFullscreen] = useState(false)
   const [isResettingDatabase, setIsResettingDatabase] = useState(false)
   const [graphDataSource, setGraphDataSource] = useState<GraphDataSource>(() => getDefaultGraphDataSource())
-  const [graphRenderer, setGraphRenderer] = useState<GraphRenderer>('standard')
 
   const dismissNodeDetails = useCallback(() => {
     setSelectedNodeId(undefined)
   }, [])
-
-  const toggleGraphExpanded = useCallback(() => {
-    setIsGraphExpanded((isExpanded) => !isExpanded)
-  }, [])
-
-  useEffect(() => {
-    if (!isGraphExpanded) {
-      return
-    }
-
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [isGraphExpanded])
 
   useEffect(() => {
     let isActive = true
@@ -255,20 +232,24 @@ export function DemoPage() {
     setGraphDataSource(nextDataSource)
   }, [graphDataSource])
 
-  const handleCompactNodeSelect = useCallback((node: GraphFixtureNode | null) => {
+  const handleGraphNodeSelect = useCallback((node: GraphFixtureNode | null) => {
     setSelectedNodeId(node?.id)
   }, [])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return
+      }
+
       // Prevent trigger if user is typing in an input or textarea
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return
       }
 
       if (event.key === 'Escape') {
-        if (isGraphExpanded) {
-          setIsGraphExpanded(false)
+        if (isGraphFullscreen) {
+          setIsGraphFullscreen(false)
         } else {
           dismissNodeDetails()
         }
@@ -298,13 +279,9 @@ export function DemoPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphExpanded, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
+  }, [selectedNodeId, isGraphFullscreen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
-  const flowGraph = useMemo(
-    () => graphRenderer === 'standard' && graph ? mapGraphToFlow(graph) : null,
-    [graph, graphRenderer],
-  )
   const shouldShowOverviewPanel = graph !== null || error !== null
   const overviewTitle = graph?.title ?? DB_UNREACHABLE_TITLE
   const overviewDescription = graph?.description ?? error ?? ''
@@ -313,7 +290,7 @@ export function DemoPage() {
   const overviewFixtureName = graph?.slug ?? DB_UNREACHABLE_TITLE
   const detailsSheet = (
     <div
-      className={`demo-details-sheet${isGraphExpanded ? ' demo-details-sheet--sheet-mode' : ''}${selectedNode ? ' demo-details-sheet--open' : ''}`}
+      className={`demo-details-sheet${isGraphFullscreen ? ' demo-details-sheet--sheet-mode' : ''}${selectedNode ? ' demo-details-sheet--open' : ''}`}
       data-testid="demo-details-sheet"
     >
       <button
@@ -363,7 +340,7 @@ export function DemoPage() {
 
       <section className="demo-visualization-grid">
         <article
-          className={`demo-stage demo-stage--live${isGraphExpanded ? ' demo-stage--expanded' : ''}`}
+          className="demo-stage demo-stage--live"
           data-testid="demo-graph-stage"
         >
           <div className="demo-stage__header">
@@ -387,33 +364,24 @@ export function DemoPage() {
                 Retry
               </button>
             </div>
-          ) : graphRenderer === 'compact' && graph ? (
+          ) : graph ? (
             <InsightsGraphCanvas
               graph={graph}
               selectedNodeId={selectedNodeId}
-              onNodeSelect={handleCompactNodeSelect}
-              isExpanded={isGraphExpanded}
-              onToggleExpanded={toggleGraphExpanded}
-            />
-          ) : flowGraph && graph ? (
-            <GraphCanvas
-              nodes={flowGraph.nodes}
-              edges={flowGraph.edges}
-              selectedNodeId={selectedNodeId}
-              onNodeSelect={setSelectedNodeId}
-              isExpanded={isGraphExpanded}
-              onToggleExpanded={toggleGraphExpanded}
+              onNodeSelect={handleGraphNodeSelect}
+              isFullscreen={isGraphFullscreen}
+              onFullscreenChange={setIsGraphFullscreen}
             />
           ) : null}
 
           <p>
-            Click a node to inspect its details. Standard shows the complete
-            layout, while Compact reveals large branches progressively.
+            Click a node to inspect its details. Expand branches progressively
+            to explore the graph while keeping the current reasoning path compact.
           </p>
         </article>
 
         <div className="demo-sidebar-stack">
-          {isGraphExpanded ? null : detailsSheet}
+          {isGraphFullscreen ? null : detailsSheet}
           {shouldShowOverviewPanel ? (
             <GraphOverviewPanel
               title={overviewTitle}
@@ -422,17 +390,15 @@ export function DemoPage() {
               edgeCount={overviewEdgeCount}
               fixtureName={overviewFixtureName}
               dataSource={graphDataSource}
-              renderer={graphRenderer}
               isResettingDatabase={isResettingDatabase}
               onDataSourceChange={handleGraphDataSourceChange}
-              onRendererChange={setGraphRenderer}
               onResetDatabase={handleResetDatabase}
             />
           ) : null}
         </div>
       </section>
 
-      {isGraphExpanded ? createPortal(detailsSheet, document.body) : null}
+      {isGraphFullscreen ? createPortal(detailsSheet, document.body) : null}
 
       <section className="demo-support-strip">
         <article className="feature-card">

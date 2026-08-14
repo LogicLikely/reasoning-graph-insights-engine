@@ -84,19 +84,11 @@
   line-clamp: 2;
 }
 
-.insights-graphmap-card__metric,
-.insights-graphmap-card__evidence {
+.insights-graphmap-card__metric {
   font-size: 0.76em;
   font-weight: 700;
   line-height: 1.15;
-}
-
-.insights-graphmap-card__metric {
   color: var(--muted, #506560);
-}
-
-.insights-graphmap-card__evidence {
-  color: var(--insights-evidence, #8a6418);
 }
 
 .insights-graphmap-card__tooltip {
@@ -139,7 +131,12 @@
 }
 
 .insights-graphmap-node--objection .insights-graphmap-card {
-  border-color: color-mix(in srgb, var(--insights-rebut, #ca5a3d) 34%, transparent);
+  border-color: color-mix(in srgb, var(--insights-rebut, #ca5a3d) 48%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--insights-rebut, #ca5a3d) 12%,
+    var(--card, #fdfdf8)
+  );
 }
 
 .insights-graphmap-node--evidence .insights-graphmap-card {
@@ -157,30 +154,20 @@
   background: var(--insights-rebut, #ca5a3d) !important;
 }
 
-.insights-graphmap-host .react-flow__edge.insights-graphmap-edge--support .react-flow__edge-path {
+.insights-graphmap-root .react-flow__edge.insights-graphmap-edge--support .react-flow__edge-path {
   stroke: var(--insights-support, #0d5d56) !important;
   stroke-width: 2;
 }
 
-.insights-graphmap-host .react-flow__edge.insights-graphmap-edge--rebut .react-flow__edge-path {
+.insights-graphmap-root .react-flow__edge.insights-graphmap-edge--rebut .react-flow__edge-path {
   stroke: var(--insights-rebut, #ca5a3d) !important;
   stroke-width: 2;
 }
 
-.insights-graphmap-host .react-flow__edge-text {
+.insights-graphmap-root .react-flow__edge-text {
   fill: var(--text, #16302c);
 }
 
-.insights-graphmap-host .react-flow__edge-textbg {
+.insights-graphmap-root .react-flow__edge-textbg {
   fill: var(--panel-bg, rgba(253, 253, 248, 0.96));
-}
-
-.insights-graphmap-expand-control svg {
-  width: 1rem;
-  height: 1rem;
-  fill: none !important;
-  stroke: currentColor !important;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2;
 }
