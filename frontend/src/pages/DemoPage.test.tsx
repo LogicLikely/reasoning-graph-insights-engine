@@ -20,20 +20,27 @@ vi.mock('../services/graphService', () => ({
   updateNode: (...args: unknown[]) => updateNodeMock(...args),
 }))
 
-vi.mock('../components/graph/GraphCanvas', () => ({
-  GraphCanvas: ({
+vi.mock('../components/graph/InsightsGraphCanvas', () => ({
+  InsightsGraphCanvas: ({
+    graph,
     onNodeSelect,
-    isExpanded,
-    onToggleExpanded,
+    isFullscreen,
+    onFullscreenChange,
   }: {
-    onNodeSelect: (nodeId: string) => void
-    isExpanded: boolean
-    onToggleExpanded: () => void
+    graph: typeof sampleGraph
+    onNodeSelect: (node: (typeof sampleGraph.nodes)[number] | null) => void
+    isFullscreen: boolean
+    onFullscreenChange: (isFullscreen: boolean) => void
   }) => (
-    <div data-testid="graph-canvas">
-      <button onClick={() => onNodeSelect('E1')} type="button">Select evidence node</button>
-      <button onClick={onToggleExpanded} type="button">
-        {isExpanded ? 'Restore graph size' : 'Expand graph to viewport'}
+    <div data-testid="insights-graph-canvas">
+      <button
+        onClick={() => onNodeSelect(graph.nodes.find((node) => node.id === 'E1')!)}
+        type="button"
+      >
+        Select evidence node
+      </button>
+      <button onClick={() => onFullscreenChange(!isFullscreen)} type="button">
+        {isFullscreen ? 'Restore graph size' : 'Expand graph to viewport'}
       </button>
     </div>
   ),
@@ -66,7 +73,9 @@ describe('DemoPage', () => {
 
     render(<DemoPage />)
 
-    expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
+    expect(await screen.findByTestId('insights-graph-canvas')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Graph renderer' })).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Graph data source' })).toBeInTheDocument()
     expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'database')
     expect(
       screen.getByRole('heading', { level: 2, name: sampleGraph.title }),
@@ -88,7 +97,7 @@ describe('DemoPage', () => {
       expect(getGraphBySlugMock).toHaveBeenCalledTimes(2)
     })
 
-    expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
+    expect(await screen.findByTestId('insights-graph-canvas')).toBeInTheDocument()
   })
 
   it('keeps the overview panel and data source controls available when database loading fails', async () => {
@@ -110,7 +119,7 @@ describe('DemoPage', () => {
       expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'fixture')
     })
 
-    expect(await screen.findByTestId('graph-canvas')).toBeInTheDocument()
+    expect(await screen.findByTestId('insights-graph-canvas')).toBeInTheDocument()
   })
 
   it('opens node details on selection and allows them to be dismissed', async () => {
@@ -128,6 +137,48 @@ describe('DemoPage', () => {
 
     expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--open')
     expect(screen.getByRole('region', { name: 'Node details' })).toBeInTheDocument()
+  })
+
+  it('keeps the graph available when switching data sources and clears stale details', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    await screen.findByTestId('insights-graph-canvas')
+    fireEvent.click(screen.getByRole('button', { name: 'Select evidence node' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fixture' }))
+
+    expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--open')
+
+    await waitFor(() => {
+      expect(getGraphBySlugMock).toHaveBeenCalledWith('sample-medium', 'fixture')
+      expect(screen.getByTestId('insights-graph-canvas')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Fixture' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('preserves selection across a database mutation reload', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    updateNodeMock.mockResolvedValue(undefined)
+
+    render(<DemoPage />)
+
+    await screen.findByTestId('insights-graph-canvas')
+    fireEvent.click(screen.getByRole('button', { name: 'Select evidence node' }))
+    fireEvent.click(screen.getByRole('button', {
+      name: /Edit this node's title, type, likelihood, and description/i,
+    }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => {
+      expect(updateNodeMock).toHaveBeenCalled()
+      expect(getGraphBySlugMock).toHaveBeenCalledTimes(2)
+    })
+
+    expect(screen.getByTestId('insights-graph-canvas')).toBeInTheDocument()
+    expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--open')
+    expect(screen.getByText('Photographs from beaches')).toBeInTheDocument()
   })
 
   it('prints the evidence impact ranking when e is pressed with a selected node', async () => {
@@ -166,17 +217,16 @@ describe('DemoPage', () => {
     })
   })
 
-  it('expands the graph to the viewport and restores its original size', async () => {
+  it('keeps page details in sync with GraphMap fullscreen requests', async () => {
     getGraphBySlugMock.mockResolvedValue(sampleGraph)
 
     render(<DemoPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Expand graph to viewport' }))
 
-    expect(screen.getByTestId('demo-graph-stage')).toHaveClass('demo-stage--expanded')
+    expect(screen.getByTestId('demo-graph-stage')).not.toHaveClass('demo-stage--expanded')
     expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--sheet-mode')
     expect(screen.getByTestId('demo-details-sheet').parentElement).toBe(document.body)
-    expect(document.body).toHaveStyle({ overflow: 'hidden' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Select evidence node' }))
 
@@ -188,7 +238,6 @@ describe('DemoPage', () => {
 
     expect(screen.getByTestId('demo-graph-stage')).not.toHaveClass('demo-stage--expanded')
     expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--sheet-mode')
-    expect(document.body).not.toHaveStyle({ overflow: 'hidden' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand graph to viewport' }))
     fireEvent.keyDown(window, { key: 'Escape' })
