@@ -24,7 +24,7 @@
     "chromatic": "chromatic"
   },
   "dependencies": {
-    "@logiclikely/graphmap": "file:vendor/logiclikely-graphmap-0.2.0-next.3.tgz",
+    "@logiclikely/graphmap": "file:vendor/logiclikely-graphmap-0.2.0.tgz",
     "@xyflow/react": "^12.8.5",
     "axios": "^1.12.2",
     "react": "^19.2.4",
