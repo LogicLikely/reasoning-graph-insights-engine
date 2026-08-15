@@ -41,23 +41,67 @@ Every source download fails closed if its SHA-256 differs from the pinned
 manifest. Project Gutenberg URLs identify editions but their bytes can change,
 so the recorded hashes are authoritative.
 
+The editorial pattern policy is maintainer-only. Its canonical local path is
+`tools/stress-corpus/sensitive-content-policy.local.json`, which is ignored by
+Git. `sensitive-content-policy.example.json` documents the JSON schema using
+harmless placeholders and declares itself incomplete. It cannot be used for
+generation or editorial validation and is not a substitute for the policy that
+produced the committed corpus. Keep the real local policy backed up in private
+storage because `.gitignore` is not a backup.
+
+The full builder requires an explicit `--content-policy PATH` to a policy that
+declares `"complete": true`; there is no silent default. This fail-closed
+behavior prevents an apparently successful rebuild from silently omitting the
+editorial screen or using the tracked example.
+
 Use the Node version in `.nvmrc`; sentence boundaries depend on its ICU data.
-Generate and then verify all outputs with:
+First validate and reproduce the current outputs without writing anything:
 
 ```sh
-node tools/stress-corpus/build-full-corpus.mjs \
-  --source-dir /tmp/insights-stress-corpus
 node tools/stress-corpus/validate-full-corpus.mjs \
   --source-dir /tmp/insights-stress-corpus
 node tools/stress-corpus/build-full-corpus.mjs \
-  --source-dir /tmp/insights-stress-corpus --check
+  --source-dir /tmp/insights-stress-corpus \
+  --content-policy tools/stress-corpus/sensitive-content-policy.local.json \
+  --check
 ```
 
 `--check` regenerates everything in memory and fails if any committed shard,
-runtime asset, manifest statistic, hash, or fingerprint is stale. The validator
-also checks the exact reviewed prefix, case-insensitive uniqueness, Unicode and
-length limits, sorted tags, source locators, the 1K/10K fingerprints, and the
-ten-repeat 100K mapping.
+runtime asset, manifest statistic, hash, or fingerprint is stale. Running it
+before a write prevents a misplaced or incorrect policy from being normalized
+into both the generated files and their manifest. The validator also checks the
+exact reviewed prefix, case-insensitive uniqueness, Unicode and length limits,
+sorted tags, source locators, the 1K/10K fingerprints, and the ten-repeat 100K
+mapping.
+
+Only after reviewing an expected `--check` failure should a maintainer perform
+an intentional rebuild, followed immediately by another read-only check:
+
+```sh
+node tools/stress-corpus/build-full-corpus.mjs \
+  --source-dir /tmp/insights-stress-corpus \
+  --content-policy tools/stress-corpus/sensitive-content-policy.local.json
+node tools/stress-corpus/build-full-corpus.mjs \
+  --source-dir /tmp/insights-stress-corpus \
+  --content-policy tools/stress-corpus/sensitive-content-policy.local.json \
+  --check
+```
+
+Structural and provenance validation deliberately works without the private
+policy. To include the same optional editorial scan used by the builder, pass
+the policy explicitly:
+
+```sh
+node tools/stress-corpus/validate-full-corpus.mjs \
+  --source-dir /tmp/insights-stress-corpus \
+  --content-policy tools/stress-corpus/sensitive-content-policy.local.json
+```
+
+The builder and optional editorial scan load and validate the same policy
+schema, compiling every pattern with fixed Unicode and case-insensitive flags.
+Exact canonical regeneration requires the original maintainer policy; the
+committed runtime corpus, shards, manifest hashes, and fingerprints remain
+publicly verifiable without it.
 
 Generated outputs are:
 

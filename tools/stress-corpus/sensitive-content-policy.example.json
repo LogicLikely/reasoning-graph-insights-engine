@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "complete": false,
+  "groups": [
+    {
+      "rejectionReason": "overt-term",
+      "patterns": ["\\bexample-only-term\\b"]
+    },
+    {
+      "rejectionReason": "graphic-content",
+      "patterns": ["\\bexample-only phrase\\b"]
+    }
+  ]
+}
