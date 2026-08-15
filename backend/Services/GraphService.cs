@@ -18,6 +18,21 @@ public class GraphService : IGraphService
         _calculator = graphLikelihoodCalculator;
     }
 
+    public async Task<IReadOnlyList<GraphSummaryDto>> GetSummariesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var summaries = await _graphRepository.GetSummariesAsync(cancellationToken);
+
+        return summaries
+            .Select(summary => new GraphSummaryDto
+            {
+                Slug = summary.Slug,
+                Title = summary.Title,
+                Description = summary.Description
+            })
+            .ToList();
+    }
+
     public async Task<GraphDto?> GetBySlugAsync(
         string slug,
         CancellationToken cancellationToken = default)

@@ -1,12 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { expect, mocked, userEvent } from 'storybook/test'
 import { sampleGraph } from '../fixtures/sampleGraph'
-import { getGraphBySlug } from '../services/graphService'
+import { getGraphBySlug, getGraphCatalog } from '../services/graphService'
 import { DemoPage } from './DemoPage'
 
 const meta = {
   component: DemoPage,
   beforeEach: async () => {
+    mocked(getGraphCatalog).mockReset()
+    mocked(getGraphCatalog).mockResolvedValue([
+      {
+        slug: sampleGraph.slug,
+        title: sampleGraph.title,
+        description: sampleGraph.description,
+      },
+    ])
     mocked(getGraphBySlug).mockReset()
     mocked(getGraphBySlug).mockResolvedValue(sampleGraph)
   },

@@ -8,6 +8,9 @@ export type EvidenceType =
   | 'experimental'
   | 'physical'
   | 'testimony'
+  | 'video'
+  | 'media-analysis'
+  | 'textual'
 
 export interface GraphEvidenceDetails {
   type: EvidenceType

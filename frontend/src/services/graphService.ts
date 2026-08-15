@@ -1,12 +1,17 @@
 import type { GraphFixture, GraphFixtureEdge, GraphFixtureNode } from '../fixtures/sampleGraph'
-import { getGraphBySlugFromApi } from './graphApi'
+import { getGraphBySlugFromApi, getGraphCatalogFromApi } from './graphApi'
 import { getGraphBySlugFromFixture } from './graphFixture'
+import type { GraphSummary } from './graphTypes'
 import { httpClient } from './httpClient'
 
 export type GraphDataSource = 'fixture' | 'database'
 
 export function getDefaultGraphDataSource(): GraphDataSource {
   return import.meta.env.VITE_USE_FIXTURE === 'true' ? 'fixture' : 'database'
+}
+
+export async function getGraphCatalog(): Promise<GraphSummary[]> {
+  return getGraphCatalogFromApi()
 }
 
 export async function getGraphBySlug(

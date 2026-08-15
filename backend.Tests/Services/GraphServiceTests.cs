@@ -11,6 +11,57 @@ namespace backend.Tests.Services;
 public class GraphServiceTests
 {
     [TestMethod]
+    public async Task GetSummariesAsync_MapsSummariesWithoutChangingOrder()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        repositoryMock
+            .Setup(repository => repository.GetSummariesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+                new List<GraphSummary>
+                {
+                    new()
+                    {
+                        Slug = "sample-medium",
+                        Title = "Sample Medium Reasoning Graph",
+                        Description = "Seed graph"
+                    },
+                    new()
+                    {
+                        Slug = "flat-earth-large",
+                        Title = "Large Flat-Earth Reasoning Graph"
+                    }
+                });
+
+        var service = CreateService(repositoryMock.Object);
+
+        var result = await service.GetSummariesAsync(CancellationToken.None);
+
+        Assert.AreEqual(2, result.Count);
+        Assert.AreEqual("sample-medium", result[0].Slug);
+        Assert.AreEqual("Sample Medium Reasoning Graph", result[0].Title);
+        Assert.AreEqual("Seed graph", result[0].Description);
+        Assert.AreEqual("flat-earth-large", result[1].Slug);
+        Assert.AreEqual("Large Flat-Earth Reasoning Graph", result[1].Title);
+        Assert.IsNull(result[1].Description);
+    }
+
+    [TestMethod]
+    public async Task GetSummariesAsync_ReturnsEmptyList_WhenRepositoryIsEmpty()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        repositoryMock
+            .Setup(repository => repository.GetSummariesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<GraphSummary>());
+
+        var service = CreateService(repositoryMock.Object);
+
+        var result = await service.GetSummariesAsync(CancellationToken.None);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(0, result.Count);
+    }
+
+    [TestMethod]
     public async Task GetBySlugAsync_ReturnsNull_WhenRepositoryReturnsNull()
     {
         var repositoryMock = new Mock<IGraphRepository>();

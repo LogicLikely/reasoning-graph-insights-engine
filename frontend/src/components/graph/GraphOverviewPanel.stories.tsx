@@ -57,6 +57,19 @@ export const SummaryOnly: Story = {
     edgeCount: 4,
     fixtureName: 'sample-small',
     dataSource: 'database',
+    graphs: [
+      {
+        slug: 'sample-small',
+        title: 'Another test graph',
+        description: 'A shorter summary for a different demo fixture.',
+      },
+      {
+        slug: 'sample-large',
+        title: 'A larger test graph',
+        description: 'A second catalog choice.',
+      },
+    ],
+    selectedGraphSlug: 'sample-small',
   },
 }
 

@@ -1,4 +1,5 @@
 import type { GraphDataSource } from '../../services/graphService'
+import type { GraphSummary } from '../../services/graphTypes'
 import './GraphOverviewPanel.css'
 
 interface GraphOverviewPanelProps {
@@ -8,8 +9,12 @@ interface GraphOverviewPanelProps {
   edgeCount: number
   fixtureName: string
   dataSource: GraphDataSource
+  graphs?: GraphSummary[]
+  selectedGraphSlug?: string
+  isGraphCatalogLoading?: boolean
   isResettingDatabase?: boolean
   onDataSourceChange?: (dataSource: GraphDataSource) => void
+  onGraphChange?: (slug: string) => void
   onResetDatabase?: () => void
 }
 
@@ -20,8 +25,12 @@ export function GraphOverviewPanel({
   edgeCount,
   fixtureName,
   dataSource,
+  graphs = [],
+  selectedGraphSlug,
+  isGraphCatalogLoading = false,
   isResettingDatabase = false,
   onDataSourceChange,
+  onGraphChange,
   onResetDatabase,
 }: GraphOverviewPanelProps) {
   const isUsingFixture = dataSource === 'fixture'
@@ -66,6 +75,28 @@ export function GraphOverviewPanel({
           Database
         </button>
       </div>
+      {!isUsingFixture ? (
+        <label className="graph-overview-panel__graph-select">
+          <span>Database graph</span>
+          <select
+            disabled={isGraphCatalogLoading || graphs.length === 0}
+            onChange={(event) => onGraphChange?.(event.target.value)}
+            value={selectedGraphSlug ?? ''}
+          >
+            {isGraphCatalogLoading ? (
+              <option value="">Loading graphs…</option>
+            ) : graphs.length === 0 ? (
+              <option value="">No graphs available</option>
+            ) : (
+              graphs.map((graph) => (
+                <option key={graph.slug} value={graph.slug}>
+                  {graph.title} — {graph.slug}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+      ) : null}
       {!isUsingFixture && onResetDatabase ? (
         <button
           className="graph-overview-panel__reset-button"

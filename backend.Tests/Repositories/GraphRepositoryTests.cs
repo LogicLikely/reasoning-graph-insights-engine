@@ -11,6 +11,67 @@ namespace backend.Tests.Repositories;
 public class GraphRepositoryTests
 {
     [TestMethod]
+    public async Task GetSummariesAsync_ReturnsGraphMetadataInDatabaseOrder()
+    {
+        var connection = new FakeDbConnection();
+        connection.WhenCommandContains(
+            "FROM graphs",
+            [
+                new Dictionary<string, object?>
+                {
+                    ["slug"] = "sample-medium",
+                    ["title"] = "Sample Medium Reasoning Graph",
+                    ["description"] = "Seed graph"
+                },
+                new Dictionary<string, object?>
+                {
+                    ["slug"] = "flat-earth-large",
+                    ["title"] = "Large Flat-Earth Reasoning Graph",
+                    ["description"] = null
+                }
+            ]);
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+
+        var result = await repository.GetSummariesAsync(CancellationToken.None);
+
+        Assert.AreEqual(2, result.Count);
+        Assert.AreEqual("sample-medium", result[0].Slug);
+        Assert.AreEqual("Sample Medium Reasoning Graph", result[0].Title);
+        Assert.AreEqual("Seed graph", result[0].Description);
+        Assert.AreEqual("flat-earth-large", result[1].Slug);
+        Assert.AreEqual("Large Flat-Earth Reasoning Graph", result[1].Title);
+        Assert.IsNull(result[1].Description);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        StringAssert.Contains(connection.ExecutedCommands[0].CommandText, "ORDER BY id");
+    }
+
+    [TestMethod]
+    public async Task GetSummariesAsync_ReturnsEmptyList_WhenNoGraphsExist()
+    {
+        var connection = new FakeDbConnection();
+        connection.WhenCommandContains("FROM graphs", []);
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+
+        var result = await repository.GetSummariesAsync(CancellationToken.None);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(0, result.Count);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+    }
+
+    [TestMethod]
     public async Task GetBySlugAsync_ReturnsNull_WhenGraphIsNotFound()
     {
         var connection = new FakeDbConnection();
