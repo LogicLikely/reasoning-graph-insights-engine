@@ -1,6 +1,8 @@
 using Backend.Models.Dto;
 using Backend.Services;
+using Backend.Seeding;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Backend.Controllers;
 
@@ -39,9 +41,24 @@ public class GraphsController : ControllerBase
     }
 
     [HttpPost("reset")]
-    public async Task<IActionResult> ResetDatabase(CancellationToken cancellationToken)
+    public async Task<IActionResult> ResetDatabase(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ResetDatabaseRequestDto? request,
+        CancellationToken cancellationToken)
     {
-        await _graphService.ResetDatabaseAsync(cancellationToken);
+        try
+        {
+            await _graphService.ResetDatabaseAsync(
+                request?.StressGraphIds ?? [],
+                cancellationToken);
+        }
+        catch (InvalidStressGraphSeedSelectionException exception)
+        {
+            return BadRequest(new
+            {
+                message = exception.Message,
+                unknownStressGraphIds = exception.UnknownIds
+            });
+        }
 
         return NoContent();
     }

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { expect, mocked, userEvent } from 'storybook/test'
 import { sampleGraph } from '../fixtures/sampleGraph'
-import { getGraphBySlug, getGraphCatalog } from '../services/graphService'
+import { getGraphBySlug, getGraphCatalog, resetDatabase } from '../services/graphService'
 import { DemoPage } from './DemoPage'
 
 const meta = {
@@ -13,10 +13,14 @@ const meta = {
         slug: sampleGraph.slug,
         title: sampleGraph.title,
         description: sampleGraph.description,
+        nodeCount: sampleGraph.nodes.length,
+        edgeCount: sampleGraph.edges.length,
       },
     ])
     mocked(getGraphBySlug).mockReset()
     mocked(getGraphBySlug).mockResolvedValue(sampleGraph)
+    mocked(resetDatabase).mockReset()
+    mocked(resetDatabase).mockResolvedValue(undefined)
   },
   parameters: {
     docs: {

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { DatabaseResetDialog } from '../components/graph/DatabaseResetDialog'
 import { InsightsGraphCanvas } from '../components/graph/InsightsGraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
@@ -19,6 +20,7 @@ import {
   type GraphDataSource,
 } from '../services/graphService'
 import type { GraphSummary } from '../services/graphTypes'
+import { isStressGraphId, type StressGraphId } from '../services/stressGraphs'
 import './DemoPage.css'
 
 const FIXTURE_GRAPH_SLUG = 'sample-medium'
@@ -29,8 +31,11 @@ const DB_CATALOG_UNREACHABLE_TITLE = 'Unable to load graph catalog'
 const DB_CATALOG_UNREACHABLE_MESSAGE = 'Unable to load the database graph list right now.'
 const DB_EMPTY_TITLE = 'No database graphs'
 const DB_EMPTY_MESSAGE = 'The database does not contain any graphs yet. Reset the database to restore the seed data.'
+const DB_RESET_ERROR_MESSAGE = 'The database reset failed or could not be confirmed. The current view has been retained.'
 
 export function DemoPage() {
+  const graphCatalogRequestVersionRef = useRef(0)
+  const graphRequestVersionRef = useRef(0)
   const [graph, setGraph] = useState<GraphFixture | null>(null)
   const [graphError, setGraphError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -44,7 +49,13 @@ export function DemoPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false)
   const [isResettingDatabase, setIsResettingDatabase] = useState(false)
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const [resetDatabaseError, setResetDatabaseError] = useState<string | null>(null)
   const [graphDataSource, setGraphDataSource] = useState<GraphDataSource>(() => getDefaultGraphDataSource())
+  const installedStressGraphIds = useMemo(
+    () => graphCatalog.map(({ slug }) => slug).filter(isStressGraphId),
+    [graphCatalog],
+  )
   const activeGraphSlug = graphDataSource === 'fixture'
     ? FIXTURE_GRAPH_SLUG
     : selectedDatabaseGraphSlug
@@ -58,6 +69,7 @@ export function DemoPage() {
 
   useEffect(() => {
     let isActive = true
+    const requestVersion = ++graphCatalogRequestVersionRef.current
 
     async function loadGraphCatalog() {
       setIsGraphCatalogLoading(true)
@@ -66,7 +78,7 @@ export function DemoPage() {
       try {
         const summaries = await getGraphCatalog()
 
-        if (!isActive) {
+        if (!isActive || requestVersion !== graphCatalogRequestVersionRef.current) {
           return
         }
 
@@ -78,11 +90,11 @@ export function DemoPage() {
         ))
         setGraphCatalogVersion((version) => version + 1)
       } catch {
-        if (isActive) {
+        if (isActive && requestVersion === graphCatalogRequestVersionRef.current) {
           setGraphCatalogError(DB_CATALOG_UNREACHABLE_MESSAGE)
         }
       } finally {
-        if (isActive) {
+        if (isActive && requestVersion === graphCatalogRequestVersionRef.current) {
           setIsGraphCatalogLoading(false)
         }
       }
@@ -97,6 +109,7 @@ export function DemoPage() {
 
   useEffect(() => {
     let isActive = true
+    const requestVersion = ++graphRequestVersionRef.current
 
     if (activeGraphCatalogLoading || activeGraphCatalogError) {
       return () => {
@@ -118,7 +131,7 @@ export function DemoPage() {
       try {
         const result = await getGraphBySlug(graphSlug, graphDataSource)
 
-        if (!isActive) {
+        if (!isActive || requestVersion !== graphRequestVersionRef.current) {
           return
         }
 
@@ -127,14 +140,14 @@ export function DemoPage() {
         // changes, resets, and deletions clear it in their own handlers.
 
       } catch {
-        if (!isActive) {
+        if (!isActive || requestVersion !== graphRequestVersionRef.current) {
           return
         }
 
         setGraph(null)
         setGraphError(DB_UNREACHABLE_MESSAGE)
       } finally {
-        if (isActive) {
+        if (isActive && requestVersion === graphRequestVersionRef.current) {
           setIsLoading(false)
         }
       }
@@ -300,26 +313,42 @@ export function DemoPage() {
     }
   }, [activeGraphSlug, graphDataSource])
 
-  const handleResetDatabase = useCallback(async () => {
-    if (!window.confirm('Are you sure you want to reset the database? This will restore the default seed data.')) {
-      return
-    }
-
+  const handleResetDatabase = useCallback(async (stressGraphIds: StressGraphId[]) => {
     setIsResettingDatabase(true)
-    setGraphError(null)
+    setResetDatabaseError(null)
 
     try {
-      await resetDatabase()
+      await resetDatabase(stressGraphIds)
+      graphCatalogRequestVersionRef.current += 1
+      graphRequestVersionRef.current += 1
+      setSelectedDatabaseGraphSlug(undefined)
       setSelectedNodeId(undefined)
       setGraph(null)
+      setGraphCatalog([])
+      setGraphCatalogError(null)
+      setGraphError(null)
+      setIsLoading(true)
       setIsGraphCatalogLoading(true)
+      setIsResetDialogOpen(false)
       setGraphCatalogReloadKey((key) => key + 1)
     } catch {
-      setGraphError('Failed to reset the database.')
+      setResetDatabaseError(DB_RESET_ERROR_MESSAGE)
     } finally {
       setIsResettingDatabase(false)
     }
   }, [])
+
+  const handleOpenResetDialog = useCallback(() => {
+    setResetDatabaseError(null)
+    setIsResetDialogOpen(true)
+  }, [])
+
+  const handleCloseResetDialog = useCallback(() => {
+    if (!isResettingDatabase) {
+      setResetDatabaseError(null)
+      setIsResetDialogOpen(false)
+    }
+  }, [isResettingDatabase])
 
   const handleGraphDataSourceChange = useCallback((nextDataSource: GraphDataSource) => {
     if (graphDataSource === nextDataSource) {
@@ -351,7 +380,7 @@ export function DemoPage() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
+      if (event.defaultPrevented || isResetDialogOpen) {
         return
       }
 
@@ -392,7 +421,7 @@ export function DemoPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphFullscreen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
+  }, [selectedNodeId, isGraphFullscreen, isResetDialogOpen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const activeGraphSummary = graphDataSource === 'database'
@@ -553,13 +582,22 @@ export function DemoPage() {
               isResettingDatabase={isResettingDatabase}
               onDataSourceChange={handleGraphDataSourceChange}
               onGraphChange={handleGraphChange}
-              onResetDatabase={handleResetDatabase}
+              onResetDatabase={handleOpenResetDialog}
             />
           ) : null}
         </div>
       </section>
 
       {isGraphFullscreen ? createPortal(detailsSheet, document.body) : null}
+
+      <DatabaseResetDialog
+        error={resetDatabaseError}
+        initialSelectedStressGraphIds={installedStressGraphIds}
+        isOpen={isResetDialogOpen}
+        isSubmitting={isResettingDatabase}
+        onCancel={handleCloseResetDialog}
+        onConfirm={handleResetDatabase}
+      />
 
       <section className="demo-support-strip">
         <article className="feature-card">

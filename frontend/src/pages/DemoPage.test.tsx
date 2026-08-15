@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sampleGraph } from '../fixtures/sampleGraph'
 import { DemoPage } from './DemoPage'
@@ -19,11 +19,15 @@ const graphCatalog = [
     slug: sampleGraph.slug,
     title: sampleGraph.title,
     description: sampleGraph.description,
+    nodeCount: sampleGraph.nodes.length,
+    edgeCount: sampleGraph.edges.length,
   },
   {
     slug: 'flat-earth-large',
     title: 'Large Flat-Earth Reasoning Graph',
     description: 'A larger database graph.',
+    nodeCount: 1_000,
+    edgeCount: 1_248,
   },
 ]
 
@@ -33,6 +37,23 @@ const largeGraph = {
   title: 'Large Flat-Earth Reasoning Graph',
   description: 'A larger database graph.',
 }
+
+const balancedStressGraphSummary = {
+  slug: 'stress-balanced-1k',
+  title: 'Balanced tree (1,000 nodes)',
+  description: 'A balanced tree stress graph.',
+  nodeCount: 1_000,
+  edgeCount: 999,
+}
+
+const balancedStressGraph = {
+  ...sampleGraph,
+  slug: balancedStressGraphSummary.slug,
+  title: balancedStressGraphSummary.title,
+  description: balancedStressGraphSummary.description,
+}
+
+const graphCatalogWithStressGraph = [...graphCatalog, balancedStressGraphSummary]
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void
@@ -52,7 +73,7 @@ vi.mock('../services/graphService', () => ({
   getGraphCatalog: () => getGraphCatalogMock(),
   getGraphBySlug: (slug: string, dataSource: string) => getGraphBySlugMock(slug, dataSource),
   getNodeCounterSet: (...args: unknown[]) => getNodeCounterSetMock(...args),
-  resetDatabase: () => resetDatabaseMock(),
+  resetDatabase: (...args: unknown[]) => resetDatabaseMock(...args),
   updateEdge: (...args: unknown[]) => updateEdgeMock(...args),
   updateNode: (...args: unknown[]) => updateNodeMock(...args),
 }))
@@ -399,34 +420,131 @@ describe('DemoPage', () => {
     expect(screen.getByTestId('demo-graph-stage')).not.toHaveClass('demo-stage--expanded')
   })
 
-  it('confirms and resets the database before reloading the graph', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('resets with the selected optional stress graphs before reloading the catalog', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
     getGraphBySlugMock.mockResolvedValue(sampleGraph)
     resetDatabaseMock.mockResolvedValue(undefined)
 
     render(<DemoPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Reset database' }))
+    const dialog = screen.getByRole('dialog', { name: 'Reset database' })
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Are you sure you want to reset the database? This will restore the default seed data.',
-    )
+    expect(dialog).toHaveTextContent('The standard example graphs are always installed.')
+    expect(within(dialog).getByRole('group', { name: '1K stress graphs' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('group', { name: '10K stress graphs' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('group', { name: '100K stress graphs' })).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Balanced tree \(1,000 nodes\)/ }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Deep chain \(10,000 nodes\)/ }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reset and rebuild database' }))
 
     await waitFor(() => {
-      expect(resetDatabaseMock).toHaveBeenCalledTimes(1)
+      expect(resetDatabaseMock).toHaveBeenCalledWith([
+        'stress-balanced-1k',
+        'stress-deep-10k',
+      ])
       expect(getGraphBySlugMock).toHaveBeenCalledTimes(2)
     })
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Reset database' })).not.toBeInTheDocument()
   })
 
-  it('falls back to the first graph when reset removes the selected slug', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('returns to the first standard graph even when the selected stress graph is reinstalled', async () => {
     getGraphCatalogMock
-      .mockResolvedValueOnce(graphCatalog)
-      .mockResolvedValueOnce([graphCatalog[0]])
+      .mockResolvedValueOnce(graphCatalogWithStressGraph)
+      .mockResolvedValueOnce(graphCatalogWithStressGraph)
+    getGraphBySlugMock.mockImplementation((slug: string) => (
+      Promise.resolve(slug === balancedStressGraph.slug ? balancedStressGraph : sampleGraph)
+    ))
+    resetDatabaseMock.mockResolvedValue(undefined)
+
+    render(<DemoPage />)
+
+    await screen.findByTestId('insights-graph-canvas')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Database graph' }), {
+      target: { value: balancedStressGraph.slug },
+    })
+    await screen.findByRole('heading', { level: 2, name: balancedStressGraph.title })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset database' }))
+    const dialog = screen.getByRole('dialog', { name: 'Reset database' })
+    expect(within(dialog).getByRole('checkbox', { name: /Balanced tree \(1,000 nodes\)/ }))
+      .toBeChecked()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reset and rebuild database' }))
+
+    await waitFor(() => {
+      expect(getGraphCatalogMock).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole('combobox', { name: 'Database graph' })).toHaveValue(sampleGraph.slug)
+      expect(getGraphBySlugMock).toHaveBeenLastCalledWith(sampleGraph.slug, 'database')
+    })
+    expect(resetDatabaseMock).toHaveBeenCalledWith(['stress-balanced-1k'])
+  })
+
+  it('ignores a pre-reset graph response after returning to the first standard graph', async () => {
+    const staleStressGraphRequest = createDeferred<typeof balancedStressGraph>()
+    getGraphCatalogMock.mockResolvedValue(graphCatalogWithStressGraph)
+    getGraphBySlugMock.mockImplementation((slug: string) => (
+      slug === balancedStressGraph.slug
+        ? staleStressGraphRequest.promise
+        : Promise.resolve(sampleGraph)
+    ))
+    resetDatabaseMock.mockResolvedValue(undefined)
+
+    render(<DemoPage />)
+
+    await screen.findByTestId('insights-graph-canvas')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Database graph' }), {
+      target: { value: balancedStressGraph.slug },
+    })
+    await waitFor(() => {
+      expect(getGraphBySlugMock).toHaveBeenCalledWith(balancedStressGraph.slug, 'database')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset database' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {
+      name: 'Reset and rebuild database',
+    }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Database graph' })).toHaveValue(sampleGraph.slug)
+      expect(getGraphBySlugMock).toHaveBeenLastCalledWith(sampleGraph.slug, 'database')
+    })
+
+    await act(async () => {
+      staleStressGraphRequest.resolve(balancedStressGraph)
+    })
+
+    expect(screen.getByRole('heading', { level: 2, name: sampleGraph.title })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: balancedStressGraph.title }))
+      .not.toBeInTheDocument()
+  })
+
+  it('does not reset when the reset dialog is cancelled', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset database' }))
+    const dialog = screen.getByRole('dialog', { name: 'Reset database' })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Wide star \(1,000 nodes\)/ }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(resetDatabaseMock).not.toHaveBeenCalled()
+    expect(getGraphBySlugMock).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: 'Reset database' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset database' }))
+    expect(within(screen.getByRole('dialog')).getByRole('checkbox', {
+      name: /Wide star \(1,000 nodes\)/,
+    })).not.toBeChecked()
+  })
+
+  it('keeps the current graph and attempted choices when the reset request fails', async () => {
     getGraphBySlugMock.mockImplementation((slug: string) => (
       Promise.resolve(slug === largeGraph.slug ? largeGraph : sampleGraph)
     ))
-    resetDatabaseMock.mockResolvedValue(undefined)
+    resetDatabaseMock.mockRejectedValue(new Error('Reset failed'))
 
     render(<DemoPage />)
 
@@ -437,24 +555,45 @@ describe('DemoPage', () => {
     await screen.findByRole('heading', { level: 2, name: largeGraph.title })
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset database' }))
+    const dialog = screen.getByRole('dialog', { name: 'Reset database' })
+    const selectedOption = within(dialog).getByRole('checkbox', { name: /Wide star \(10,000 nodes\)/ })
+    fireEvent.click(selectedOption)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reset and rebuild database' }))
 
-    await waitFor(() => {
-      expect(getGraphCatalogMock).toHaveBeenCalledTimes(2)
-      expect(screen.getByRole('combobox', { name: 'Database graph' })).toHaveValue(sampleGraph.slug)
-      expect(getGraphBySlugMock).toHaveBeenLastCalledWith(sampleGraph.slug, 'database')
-    })
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'The database reset failed or could not be confirmed. The current view has been retained.',
+    )
+    expect(selectedOption).toBeChecked()
+    expect(screen.getByRole('combobox', { name: 'Database graph' })).toHaveValue(largeGraph.slug)
+    expect(screen.getByRole('heading', { level: 2, name: largeGraph.title })).toBeInTheDocument()
+    expect(getGraphCatalogMock).toHaveBeenCalledTimes(1)
   })
 
-  it('does not reset the database when confirmation is declined', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('shows a catalog error after a successful reset and selects the first graph on retry', async () => {
+    getGraphCatalogMock
+      .mockResolvedValueOnce(graphCatalog)
+      .mockRejectedValueOnce(new Error('Catalog refresh failed'))
+      .mockResolvedValueOnce(graphCatalog)
     getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    resetDatabaseMock.mockResolvedValue(undefined)
 
     render(<DemoPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Reset database' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {
+      name: 'Reset and rebuild database',
+    }))
 
-    expect(resetDatabaseMock).not.toHaveBeenCalled()
-    expect(getGraphBySlugMock).toHaveBeenCalledTimes(1)
+    expect(await screen.findByTestId('demo-error-state')).toHaveTextContent('Unable to load graph catalog')
+    expect(screen.queryByRole('dialog', { name: 'Reset database' })).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Database graph' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Database graph' })).toHaveValue(sampleGraph.slug)
+      expect(getGraphBySlugMock).toHaveBeenLastCalledWith(sampleGraph.slug, 'database')
+    })
   })
 
   it('switches graph data source and clears node details', async () => {

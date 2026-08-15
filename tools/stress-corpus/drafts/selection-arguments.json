@@ -1,0 +1,384 @@
+{
+  "sources": [
+    {
+      "sourceId": "bacon-essays",
+      "representative": [
+        {
+          "candidateIds": [
+            "bacon-essays:0:7",
+            "bacon-essays:0:8"
+          ],
+          "title": "Truth, Jewels, and Pleasant Lies"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:11:0",
+            "bacon-essays:11:1"
+          ],
+          "title": "Revenge Puts Law Aside"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:26:0"
+          ],
+          "title": "Busyness Often Breeds Envy"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:42:0",
+            "bacon-essays:42:1"
+          ],
+          "title": "Power Serves Three Masters"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:57:2",
+            "bacon-essays:57:3"
+          ],
+          "title": "Hunger Kindles Political Discontent"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:70:0",
+            "bacon-essays:70:1"
+          ],
+          "title": "Language Turns Travel to Experience"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:85:3",
+            "bacon-essays:85:4"
+          ],
+          "title": "Counsel Gives Stability"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:100:0"
+          ],
+          "title": "Breaking Off Provokes Curiosity"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:117:7"
+          ],
+          "title": "Innovation Moves Quietly by Degrees"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:130:10"
+          ],
+          "title": "Friends Correct Our Blind Spots"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:154:2",
+            "bacon-essays:154:3"
+          ],
+          "title": "Colonies Must Not Displace People",
+          "reviewFlags": ["colonialism", "displacement"]
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:168:20",
+            "bacon-essays:168:21"
+          ],
+          "title": "Ambition Among Able Rivals"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:185:0"
+          ],
+          "title": "Youth and Age Misjudge Differently"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:205:0",
+            "bacon-essays:205:1"
+          ],
+          "title": "Studies Serve Three Uses"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:214:1"
+          ],
+          "title": "Injustice Bitter, Delay Sour"
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:235:9"
+          ],
+          "title": "Fame Shapes Every Great Action"
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": [
+            "bacon-essays:121:0"
+          ],
+          "title": "Repetition Commonly Wastes Time",
+          "caseId": "bacon-unusually-short",
+          "rationale": "A complete, self-contained 37-code-point source sentence deliberately produces a very short prefixed body."
+        },
+        {
+          "candidateIds": [
+            "bacon-essays:64:0"
+          ],
+          "title": "Epimetheus Counters Discontentment",
+          "caseId": "bacon-conspicuously-archaic",
+          "rationale": "Exercises the conspicuously archaic word `mought`, classical proper names, and clause-heavy punctuation while remaining a complete sentence."
+        }
+      ]
+    },
+    {
+      "sourceId": "paine-common-sense",
+      "representative": [
+        {
+          "candidateIds": [
+            "paine-common-sense:0:0"
+          ],
+          "title": "Society and Government Diverge"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:1:1"
+          ],
+          "title": "Government Marks Lost Innocence"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:4:2"
+          ],
+          "title": "Natural Seats in Parliament"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:14:0"
+          ],
+          "title": "Contradictory Constitutional Powers"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:26:1"
+          ],
+          "title": "Avarice Frightens Away Wealth"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:29:0"
+          ],
+          "title": "Kingship Predates Israelite Custom",
+          "reviewFlags": ["historical-religious-terminology"],
+          "reviewNote": "The historically othering source term is retained for faithful review and flagged rather than silently rewritten."
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:40:1"
+          ],
+          "title": "Monarchy Fails Historical Scrutiny"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:43:2"
+          ],
+          "title": "England Endures Repeated Conflict"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:54:0",
+            "paine-common-sense:54:1"
+          ],
+          "title": "A Continental Cause of Worth"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:59:0"
+          ],
+          "title": "Prejudice Demands Costly Sacrifice"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:75:0"
+          ],
+          "title": "A Continent Cannot Remain Subject"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:108:0"
+          ],
+          "title": "Unity Creates National Strength"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:111:2"
+          ],
+          "title": "Debt as National Bond"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:117:0"
+          ],
+          "title": "America Can Raise a Fleet"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:122:2"
+          ],
+          "title": "Commerce and Defense Unite"
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:132:1"
+          ],
+          "title": "Expedience Differs From Right"
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": [
+            "paine-common-sense:73:0"
+          ],
+          "title": "Passive Temper Hopes for Peace",
+          "caseId": "paine-embedded-quotation",
+          "rationale": "Exercises a complete quoted appeal embedded within a longer sentence, including nested commas and quotation marks."
+        },
+        {
+          "candidateIds": [
+            "paine-common-sense:88:0"
+          ],
+          "title": "Independence Guards Civil Peace",
+          "caseId": "paine-internal-abbreviation",
+          "rationale": "Exercises the internal abbreviation `i.e.` without allowing its periods to split or truncate the complete sentence.",
+          "reviewFlags": ["historical-orthography"],
+          "reviewNote": "The spelling `independance` is retained from the pinned source edition."
+        }
+      ]
+    },
+    {
+      "sourceId": "wollstonecraft-rights",
+      "representative": [
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:20:0"
+          ],
+          "title": "First Principles Confront Prejudice"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:26:0"
+          ],
+          "title": "Reason Often Defends Prejudice"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:64:1"
+          ],
+          "title": "Virtue Requires Independent Reason"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:137:5"
+          ],
+          "title": "Education Produces Learned Weakness",
+          "reviewFlags": ["historical-sexism"],
+          "reviewNote": "The author is criticizing the gender stereotype present in the excerpt."
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:295:2"
+          ],
+          "title": "Morality Cannot Rest on Falsehood"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:281:0"
+          ],
+          "title": "Refined Pleasing Draws Out Vice"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:441:3"
+          ],
+          "title": "Ideas Flash Like Lightning"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:497:0",
+            "wollstonecraft-rights:497:1"
+          ],
+          "title": "Modesty Softens Every Virtue"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:515:2"
+          ],
+          "title": "Conduct Refutes Malicious Tales"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:540:2"
+          ],
+          "title": "Affection Sweetens Necessary Duty"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:571:3"
+          ],
+          "title": "Power Resists Rational Inquiry",
+          "reviewFlags": ["historical-orthography"],
+          "reviewNote": "The spelling `controul` is retained from the pinned source edition."
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:580:0"
+          ],
+          "title": "Prescription Displaces Reason"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:619:2"
+          ],
+          "title": "Education Must Form Citizens"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:649:1"
+          ],
+          "title": "Virtue Sustains Freedom"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:739:0"
+          ],
+          "title": "Ignorant Virtue Cannot Endure"
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:766:0"
+          ],
+          "title": "Rights Invite Equal Virtue",
+          "reviewFlags": ["gender-subordination", "historical-sexism"],
+          "reviewNote": "The excerpt's historical rhetoric subordinates women while the author argues against that condition."
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:93:1",
+            "wollstonecraft-rights:93:2"
+          ],
+          "title": "Fondness Cannot Replace Respect",
+          "caseId": "wollstonecraft-near-limit",
+          "rationale": "Two adjacent complete sentences total 230 Unicode characters, reaching 248 after the worst-case 18-character prefix."
+        },
+        {
+          "candidateIds": [
+            "wollstonecraft-rights:538:0"
+          ],
+          "title": "Property Wins Unearned Respect",
+          "caseId": "wollstonecraft-colon-semicolon",
+          "rationale": "Exercises a complete, self-contained sentence whose clause structure contains both a semicolon and a colon."
+        }
+      ]
+    }
+  ]
+}

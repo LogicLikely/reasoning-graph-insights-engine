@@ -152,6 +152,9 @@ backend.Tests/bin/
 backend.Tests/obj/
 *.lscache
 
+# Maintainer-only stress-corpus editorial policy
+/tools/stress-corpus/sensitive-content-policy.local.json
+
 # Env
 .env
 .env.*

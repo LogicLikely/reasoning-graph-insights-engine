@@ -22,5 +22,7 @@ public interface IGraphService
         CancellationToken cancellationToken = default);
     Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(string slug, string targetNodeId,
         GraphDto graphContext, CancellationToken cancellationToken = default);
-    Task ResetDatabaseAsync(CancellationToken cancellationToken = default);
+    Task ResetDatabaseAsync(
+        IReadOnlyCollection<string> stressGraphIds,
+        CancellationToken cancellationToken = default);
 }
