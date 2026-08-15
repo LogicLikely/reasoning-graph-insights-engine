@@ -2,6 +2,7 @@ using Backend.Calculation;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Backend.Repositories;
+using Backend.Seeding;
 
 namespace Backend.Services;
 
@@ -28,7 +29,9 @@ public class GraphService : IGraphService
             {
                 Slug = summary.Slug,
                 Title = summary.Title,
-                Description = summary.Description
+                Description = summary.Description,
+                NodeCount = summary.NodeCount,
+                EdgeCount = summary.EdgeCount
             })
             .ToList();
     }
@@ -300,9 +303,12 @@ public class GraphService : IGraphService
         return true;
     }
 
-    public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
+    public async Task ResetDatabaseAsync(
+        IReadOnlyCollection<string> stressGraphIds,
+        CancellationToken cancellationToken = default)
     {
-        await _graphRepository.ResetDatabaseAsync(cancellationToken);
+        var stressGraphs = StressGraphSeedCatalog.Resolve(stressGraphIds);
+        await _graphRepository.ResetDatabaseAsync(stressGraphs, cancellationToken);
     }
 
     private async Task<IReadOnlyDictionary<string, decimal>> RecalculateAndPersistAncestorsAsync(

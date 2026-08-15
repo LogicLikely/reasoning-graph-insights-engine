@@ -136,8 +136,20 @@ describe('GraphOverviewPanel', () => {
         fixtureName="sample-medium"
         dataSource="database"
         graphs={[
-          { slug: 'sample-medium', title: 'Sample Reasoning Graph', description: 'First graph' },
-          { slug: 'flat-earth-large', title: 'Large Flat-Earth Reasoning Graph', description: 'Second graph' },
+          {
+            slug: 'sample-medium',
+            title: 'Sample Reasoning Graph',
+            description: 'First graph',
+            nodeCount: 10,
+            edgeCount: 9,
+          },
+          {
+            slug: 'flat-earth-large',
+            title: 'Large Flat-Earth Reasoning Graph',
+            description: 'Second graph',
+            nodeCount: 1_000,
+            edgeCount: 1_248,
+          },
         ]}
         selectedGraphSlug="sample-medium"
         onGraphChange={onGraphChange}
@@ -146,12 +158,40 @@ describe('GraphOverviewPanel', () => {
 
     const selector = screen.getByRole('combobox', { name: 'Database graph' })
     expect(selector).toHaveValue('sample-medium')
-    expect(screen.getByRole('option', { name: 'Large Flat-Earth Reasoning Graph — flat-earth-large' }))
+    expect(screen.getByRole('option', {
+      name: 'Large Flat-Earth Reasoning Graph — 1,000 nodes, 1,248 edges — flat-earth-large',
+    }))
       .toBeInTheDocument()
 
     fireEvent.change(selector, { target: { value: 'flat-earth-large' } })
 
     expect(onGraphChange).toHaveBeenCalledWith('flat-earth-large')
+  })
+
+  it('disables graph selection while a database reset is pending', () => {
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A database graph description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+        dataSource="database"
+        graphs={[
+          {
+            slug: 'sample-medium',
+            title: 'Sample Reasoning Graph',
+            description: 'First graph',
+            nodeCount: 10,
+            edgeCount: 9,
+          },
+        ]}
+        selectedGraphSlug="sample-medium"
+        isResettingDatabase
+      />,
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Database graph' })).toBeDisabled()
   })
 
   it('shows a disabled empty selector when the database catalog has no graphs', () => {

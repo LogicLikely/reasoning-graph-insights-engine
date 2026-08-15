@@ -11,9 +11,16 @@ namespace backend.Tests.Repositories;
 public sealed class FakeDbConnection : DbConnection
 {
     private readonly List<ConfiguredResult> _configuredResults = [];
+    private string? _commandFailureFragment;
     private ConnectionState _state = ConnectionState.Closed;
 
     public List<ExecutedCommand> ExecutedCommands { get; } = [];
+
+    public int BeginTransactionCount { get; private set; }
+
+    public int CommitCount { get; private set; }
+
+    public int RollbackCount { get; private set; }
 
     public override string? ConnectionString { get; set; } = string.Empty;
 
@@ -32,6 +39,11 @@ public sealed class FakeDbConnection : DbConnection
         _configuredResults.Add(new ConfiguredResult(fragment, rows));
     }
 
+    public void ThrowWhenCommandContains(string fragment)
+    {
+        _commandFailureFragment = fragment;
+    }
+
     public override void ChangeDatabase(string databaseName)
     {
     }
@@ -48,6 +60,7 @@ public sealed class FakeDbConnection : DbConnection
 
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
     {
+        BeginTransactionCount++;
         return new FakeDbTransaction(this, isolationLevel);
     }
 
@@ -69,7 +82,8 @@ public sealed class FakeDbConnection : DbConnection
 
     public sealed record ExecutedCommand(
         string CommandText,
-        Dictionary<string, object?> Parameters);
+        Dictionary<string, object?> Parameters,
+        int CommandTimeout);
 
     private sealed class FakeDbTransaction : DbTransaction
     {
@@ -87,10 +101,12 @@ public sealed class FakeDbConnection : DbConnection
 
         public override void Commit()
         {
+            _connection.CommitCount++;
         }
 
         public override void Rollback()
         {
+            _connection.RollbackCount++;
         }
     }
 
@@ -135,7 +151,16 @@ public sealed class FakeDbConnection : DbConnection
                     CommandText,
                     _parameters.Items.ToDictionary(
                         parameter => parameter.ParameterName,
-                        parameter => parameter.Value)));
+                        parameter => parameter.Value),
+                    CommandTimeout));
+
+            if (_connection._commandFailureFragment is not null &&
+                CommandText.Contains(
+                    _connection._commandFailureFragment,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Configured fake database command failure.");
+            }
 
             return 1;
         }
@@ -161,7 +186,8 @@ public sealed class FakeDbConnection : DbConnection
                     CommandText,
                     _parameters.Items.ToDictionary(
                         parameter => parameter.ParameterName,
-                        parameter => parameter.Value)));
+                        parameter => parameter.Value),
+                    CommandTimeout));
 
             var table = new DataTable();
             var rows = _connection.GetRows(CommandText);

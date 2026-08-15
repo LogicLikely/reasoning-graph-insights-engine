@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <Content Include="data/sql/insights_seed.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="data/sql/insights_stress_seed.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

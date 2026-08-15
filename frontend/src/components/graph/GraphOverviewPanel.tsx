@@ -2,6 +2,12 @@ import type { GraphDataSource } from '../../services/graphService'
 import type { GraphSummary } from '../../services/graphTypes'
 import './GraphOverviewPanel.css'
 
+const graphCountFormatter = new Intl.NumberFormat('en-US')
+
+function formatCatalogOption(graph: GraphSummary) {
+  return `${graph.title} — ${graphCountFormatter.format(graph.nodeCount)} nodes, ${graphCountFormatter.format(graph.edgeCount)} edges — ${graph.slug}`
+}
+
 interface GraphOverviewPanelProps {
   title: string
   description: string
@@ -79,7 +85,7 @@ export function GraphOverviewPanel({
         <label className="graph-overview-panel__graph-select">
           <span>Database graph</span>
           <select
-            disabled={isGraphCatalogLoading || graphs.length === 0}
+            disabled={isGraphCatalogLoading || isResettingDatabase || graphs.length === 0}
             onChange={(event) => onGraphChange?.(event.target.value)}
             value={selectedGraphSlug ?? ''}
           >
@@ -90,7 +96,7 @@ export function GraphOverviewPanel({
             ) : (
               graphs.map((graph) => (
                 <option key={graph.slug} value={graph.slug}>
-                  {graph.title} — {graph.slug}
+                  {formatCatalogOption(graph)}
                 </option>
               ))
             )}

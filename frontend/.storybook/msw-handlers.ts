@@ -8,8 +8,11 @@ export const mswHandlers = {
         slug: sampleGraph.slug,
         title: sampleGraph.title,
         description: sampleGraph.description,
+        nodeCount: sampleGraph.nodes.length,
+        edgeCount: sampleGraph.edges.length,
       },
     ])),
     http.get('/api/graphs/sample-medium', () => HttpResponse.json(sampleGraph)),
+    http.post('/api/graphs/reset', () => new HttpResponse(null, { status: 204 })),
   ],
 }
