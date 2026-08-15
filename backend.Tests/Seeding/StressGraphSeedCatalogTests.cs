@@ -21,27 +21,42 @@ public class StressGraphSeedCatalogTests
                 StressGraphSeedIds.Balanced10K,
                 StressGraphSeedIds.Wide10K,
                 StressGraphSeedIds.Deep10K,
-                StressGraphSeedIds.SharedDiamond10K
+                StressGraphSeedIds.SharedDiamond10K,
+                StressGraphSeedIds.Balanced100K,
+                StressGraphSeedIds.Wide100K,
+                StressGraphSeedIds.Deep100K,
+                StressGraphSeedIds.SharedDiamond100K
             },
             specs.Select(spec => spec.Id).ToArray());
         CollectionAssert.AreEqual(
-            Enumerable.Range(3, 8).ToArray(),
+            Enumerable.Range(3, 12).ToArray(),
             specs.Select(spec => spec.GraphId).ToArray());
         CollectionAssert.AreEqual(
             new[]
             {
                 "balanced", "wide", "deep", "shared-diamond",
+                "balanced", "wide", "deep", "shared-diamond",
                 "balanced", "wide", "deep", "shared-diamond"
             },
             specs.Select(spec => spec.Shape).ToArray());
         CollectionAssert.AreEqual(
-            new[] { 1_000, 1_000, 1_000, 1_000, 10_000, 10_000, 10_000, 10_000 },
+            new[]
+            {
+                1_000, 1_000, 1_000, 1_000,
+                10_000, 10_000, 10_000, 10_000,
+                100_000, 100_000, 100_000, 100_000
+            },
             specs.Select(spec => spec.NodeCount).ToArray());
         CollectionAssert.AreEqual(
-            new[] { 999, 999, 999, 1_994, 9_999, 9_999, 9_999, 19_994 },
+            new[]
+            {
+                999, 999, 999, 1_994,
+                9_999, 9_999, 9_999, 19_994,
+                99_999, 99_999, 99_999, 199_994
+            },
             specs.Select(spec => spec.EdgeCount).ToArray());
         CollectionAssert.AreEqual(
-            new[] { 5, 1, 999, 5, 7, 1, 9_999, 7 },
+            new[] { 5, 1, 999, 5, 7, 1, 9_999, 7, 9, 1, 99_999, 9 },
             specs.Select(spec => spec.MaximumDepth).ToArray());
     }
 
@@ -56,12 +71,20 @@ public class StressGraphSeedCatalogTests
             Assert.AreEqual(100, spec.ObjectionCount);
         }
 
-        foreach (var spec in StressGraphSeedCatalog.All.Skip(4))
+        foreach (var spec in StressGraphSeedCatalog.All.Skip(4).Take(4))
         {
             Assert.AreEqual(1, spec.RootCount);
             Assert.AreEqual(7_000, spec.ClaimCount);
             Assert.AreEqual(1_999, spec.EvidenceCount);
             Assert.AreEqual(1_000, spec.ObjectionCount);
+        }
+
+        foreach (var spec in StressGraphSeedCatalog.All.Skip(8))
+        {
+            Assert.AreEqual(1, spec.RootCount);
+            Assert.AreEqual(70_000, spec.ClaimCount);
+            Assert.AreEqual(19_999, spec.EvidenceCount);
+            Assert.AreEqual(10_000, spec.ObjectionCount);
         }
     }
 

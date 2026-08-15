@@ -39,6 +39,26 @@ export const STRESS_GRAPH_OPTIONS = [
     label: 'Shared-diamond DAG (10,000 nodes)',
     scale: '10K',
   },
+  {
+    id: 'stress-balanced-100k',
+    label: 'Balanced tree (100,000 nodes)',
+    scale: '100K',
+  },
+  {
+    id: 'stress-wide-100k',
+    label: 'Wide star (100,000 nodes)',
+    scale: '100K',
+  },
+  {
+    id: 'stress-deep-100k',
+    label: 'Deep chain (100,000 nodes)',
+    scale: '100K',
+  },
+  {
+    id: 'stress-shared-diamond-100k',
+    label: 'Shared-diamond DAG (100,000 nodes)',
+    scale: '100K',
+  },
 ] as const
 
 export type StressGraphId = (typeof STRESS_GRAPH_OPTIONS)[number]['id']

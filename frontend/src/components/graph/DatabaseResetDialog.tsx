@@ -15,7 +15,7 @@ interface DatabaseResetDialogProps {
   onConfirm: (stressGraphIds: StressGraphId[]) => void
 }
 
-const STRESS_GRAPH_SCALES: readonly StressGraphScale[] = ['1K', '10K']
+const STRESS_GRAPH_SCALES: readonly StressGraphScale[] = ['1K', '10K', '100K']
 const FOCUSABLE_SELECTOR = [
   'button:not(:disabled)',
   'input:not(:disabled)',

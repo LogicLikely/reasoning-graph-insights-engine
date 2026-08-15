@@ -12,6 +12,10 @@ describe('stress graph options', () => {
       'stress-wide-10k',
       'stress-deep-10k',
       'stress-shared-diamond-10k',
+      'stress-balanced-100k',
+      'stress-wide-100k',
+      'stress-deep-100k',
+      'stress-shared-diamond-100k',
     ])
   })
 
@@ -19,7 +23,7 @@ describe('stress graph options', () => {
     STRESS_GRAPH_OPTIONS.forEach(({ id }) => {
       expect(isStressGraphId(id)).toBe(true)
     })
-    expect(isStressGraphId('stress-balanced-100k')).toBe(false)
+    expect(isStressGraphId('stress-balanced-1m')).toBe(false)
     expect(isStressGraphId('sample-medium')).toBe(false)
   })
 })

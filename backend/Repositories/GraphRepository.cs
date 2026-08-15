@@ -484,6 +484,11 @@ public class GraphRepository : IGraphRepository
             "Data",
             "Sql",
             "insights_stress_seed.sql");
+        var stressCorpusPath = Path.Combine(
+            _hostEnvironment.ContentRootPath,
+            "Data",
+            "Seed",
+            "insights_stress_corpus.json");
 
         if (!File.Exists(seedSqlPath))
         {
@@ -498,6 +503,9 @@ public class GraphRepository : IGraphRepository
         var seedSql = await File.ReadAllTextAsync(seedSqlPath, cancellationToken);
         var stressSeedSql = stressGraphs.Count > 0
             ? await File.ReadAllTextAsync(stressSeedSqlPath, cancellationToken)
+            : null;
+        var stressCorpus = stressGraphs.Count > 0
+            ? await StressGraphCorpusLoader.LoadAsync(stressCorpusPath, cancellationToken)
             : null;
 
         using var connection = _dbConnectionFactory.CreateConnection();
@@ -523,7 +531,9 @@ public class GraphRepository : IGraphRepository
                         stressGraph.Title,
                         stressGraph.Description,
                         stressGraph.Shape,
-                        stressGraph.NodeCount
+                        stressGraph.NodeCount,
+                        CorpusJson = stressCorpus!.Json,
+                        CorpusEntryCount = stressCorpus.EntryCount
                     },
                     transaction,
                     commandTimeout: ResetCommandTimeoutSeconds,

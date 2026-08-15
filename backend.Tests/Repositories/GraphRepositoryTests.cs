@@ -11,6 +11,8 @@ namespace backend.Tests.Repositories;
 [TestClass]
 public class GraphRepositoryTests
 {
+    private static readonly Lazy<string> ValidStressCorpusJson = new(CreateValidStressCorpusJson);
+
     [TestMethod]
     public async Task GetSummariesAsync_ReturnsGraphMetadataInDatabaseOrder()
     {
@@ -405,7 +407,7 @@ public class GraphRepositoryTests
             var selected = new[]
             {
                 StressGraphSeedCatalog.All[0],
-                StressGraphSeedCatalog.All[7]
+                StressGraphSeedCatalog.All[11]
             };
 
             await repository.ResetDatabaseAsync(selected, CancellationToken.None);
@@ -416,8 +418,13 @@ public class GraphRepositoryTests
             Assert.AreEqual(StressGraphSeedIds.Balanced1K, connection.ExecutedCommands[1].Parameters["Slug"]);
             Assert.AreEqual("balanced", connection.ExecutedCommands[1].Parameters["Shape"]);
             Assert.AreEqual(1_000, connection.ExecutedCommands[1].Parameters["NodeCount"]);
-            Assert.AreEqual(10, connection.ExecutedCommands[2].Parameters["GraphId"]);
-            Assert.AreEqual(StressGraphSeedIds.SharedDiamond10K, connection.ExecutedCommands[2].Parameters["Slug"]);
+            Assert.AreEqual(10_000, connection.ExecutedCommands[1].Parameters["CorpusEntryCount"]);
+            Assert.AreEqual(ValidStressCorpusJson.Value, connection.ExecutedCommands[1].Parameters["CorpusJson"]);
+            Assert.AreEqual(14, connection.ExecutedCommands[2].Parameters["GraphId"]);
+            Assert.AreEqual(StressGraphSeedIds.SharedDiamond100K, connection.ExecutedCommands[2].Parameters["Slug"]);
+            Assert.AreEqual(100_000, connection.ExecutedCommands[2].Parameters["NodeCount"]);
+            Assert.AreEqual(10_000, connection.ExecutedCommands[2].Parameters["CorpusEntryCount"]);
+            Assert.AreEqual(ValidStressCorpusJson.Value, connection.ExecutedCommands[2].Parameters["CorpusJson"]);
             Assert.IsTrue(connection.ExecutedCommands.All(command => command.CommandTimeout == 300));
             Assert.AreEqual(1, connection.BeginTransactionCount);
             Assert.AreEqual(1, connection.CommitCount);
@@ -432,7 +439,9 @@ public class GraphRepositoryTests
     [TestMethod]
     public async Task ResetDatabaseAsync_BaseOnly_DoesNotRequireStressSeedFile()
     {
-        var seedRoot = CreateSeedRoot(includeStressSeed: false);
+        var seedRoot = CreateSeedRoot(
+            includeStressSeed: false,
+            includeStressCorpus: false);
 
         try
         {
@@ -490,7 +499,9 @@ public class GraphRepositoryTests
     [TestMethod]
     public async Task ResetDatabaseAsync_MissingStressSeed_DoesNotOpenDatabase()
     {
-        var seedRoot = CreateSeedRoot(includeStressSeed: false);
+        var seedRoot = CreateSeedRoot(
+            includeStressSeed: false,
+            includeStressCorpus: true);
 
         try
         {
@@ -508,7 +519,60 @@ public class GraphRepositoryTests
         }
     }
 
-    private static string CreateSeedRoot(bool includeStressSeed)
+    [TestMethod]
+    public async Task ResetDatabaseAsync_MissingStressCorpus_DoesNotOpenDatabase()
+    {
+        var seedRoot = CreateSeedRoot(
+            includeStressSeed: true,
+            includeStressCorpus: false);
+
+        try
+        {
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+
+            var exception = await Assert.ThrowsExceptionAsync<FileNotFoundException>(() =>
+                repository.ResetDatabaseAsync([StressGraphSeedCatalog.All[0]], CancellationToken.None));
+
+            StringAssert.EndsWith(
+                exception.FileName!,
+                Path.Combine("Data", "Seed", "insights_stress_corpus.json"));
+            connectionFactoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_MalformedStressCorpus_DoesNotOpenDatabase()
+    {
+        var seedRoot = CreateSeedRoot(
+            includeStressSeed: true,
+            includeStressCorpus: true,
+            corpusJson: "{ definitely-not-valid-json }");
+
+        try
+        {
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+
+            await Assert.ThrowsExceptionAsync<InvalidDataException>(() =>
+                repository.ResetDatabaseAsync([StressGraphSeedCatalog.All[0]], CancellationToken.None));
+
+            connectionFactoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    private static string CreateSeedRoot(
+        bool includeStressSeed,
+        bool includeStressCorpus = true,
+        string? corpusJson = null)
     {
         var seedRoot = Path.Combine(
             Path.GetTempPath(),
@@ -521,10 +585,39 @@ public class GraphRepositoryTests
         {
             File.WriteAllText(
                 Path.Combine(sqlDirectory, "insights_stress_seed.sql"),
-                "STRESS @GraphId @Slug @Title @Description @Shape @NodeCount");
+                "STRESS @GraphId @Slug @Title @Description @Shape @NodeCount @CorpusJson @CorpusEntryCount");
+        }
+
+        if (includeStressCorpus)
+        {
+            var seedDirectory = Path.Combine(seedRoot, "Data", "Seed");
+            Directory.CreateDirectory(seedDirectory);
+            File.WriteAllText(
+                Path.Combine(seedDirectory, "insights_stress_corpus.json"),
+                corpusJson ?? ValidStressCorpusJson.Value);
         }
 
         return seedRoot;
+    }
+
+    private static string CreateValidStressCorpusJson()
+    {
+        return JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            corpusId = "test-corpus-v1",
+            entryCount = StressGraphCorpusLoader.RequiredEntryCount,
+            entries = Enumerable
+                .Range(0, StressGraphCorpusLoader.RequiredEntryCount)
+                .Select(index => new
+                {
+                    index,
+                    title = $"Distinct Corpus Title {index}",
+                    excerpt = $"Distinct public-domain excerpt number {index}.",
+                    category = "public-domain",
+                    tags = new[] { "corpus", "stress" }
+                })
+        });
     }
 
     private static GraphRepository CreateRepository(

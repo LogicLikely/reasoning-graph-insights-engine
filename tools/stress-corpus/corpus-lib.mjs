@@ -4,6 +4,11 @@ import path from 'node:path'
 
 const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' })
 
+const segmentEndsAbbreviation = (value) =>
+  /(?:\b(?:Mr|Mrs|Ms|Dr|Prof|Rev|St|Jr|Sr|Messrs|Plin|viz)\.|(?:\b[A-HJ-Z]\.){1,4}|\b[A-Z]{2,4}\.)[”"')\]]?$/u.test(
+    value,
+  )
+
 export const countCharacters = (value) => [...value].length
 
 export const sha256 = (value) =>
@@ -141,6 +146,9 @@ export async function loadSourceCandidates(source, sourceDirectory) {
           chars: countCharacters(text),
           words,
           text,
+          precededByAbbreviationBoundary:
+            sentenceIndex > 0 &&
+            segmentEndsAbbreviation(sentences[sentenceIndex - 1]),
         })
       }
     }

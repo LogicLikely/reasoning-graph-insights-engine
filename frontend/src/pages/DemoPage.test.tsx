@@ -433,6 +433,7 @@ describe('DemoPage', () => {
     expect(dialog).toHaveTextContent('The standard example graphs are always installed.')
     expect(within(dialog).getByRole('group', { name: '1K stress graphs' })).toBeInTheDocument()
     expect(within(dialog).getByRole('group', { name: '10K stress graphs' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('group', { name: '100K stress graphs' })).toBeInTheDocument()
 
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Balanced tree \(1,000 nodes\)/ }))
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Deep chain \(10,000 nodes\)/ }))

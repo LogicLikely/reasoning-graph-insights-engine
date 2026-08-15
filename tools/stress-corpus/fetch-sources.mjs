@@ -7,13 +7,23 @@ import { fileURLToPath } from 'node:url'
 import { sha256 } from './corpus-lib.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const manifest = JSON.parse(
-  await readFile(path.join(here, 'corpus-sources.v1.json'), 'utf8'),
-)
 const destination = process.argv[2]
+const manifestFlag = process.argv.indexOf('--manifest')
+if (manifestFlag >= 0 && !process.argv[manifestFlag + 1]) {
+  throw new Error('--manifest requires a path.')
+}
+const manifestPath =
+  manifestFlag >= 0
+    ? path.resolve(process.cwd(), process.argv[manifestFlag + 1])
+    : path.join(here, 'corpus-sources.v1.json')
+const manifest = JSON.parse(
+  await readFile(manifestPath, 'utf8'),
+)
 
 if (!destination) {
-  throw new Error('Usage: node tools/stress-corpus/fetch-sources.mjs DESTINATION')
+  throw new Error(
+    'Usage: node tools/stress-corpus/fetch-sources.mjs DESTINATION [--manifest MANIFEST]',
+  )
 }
 
 await mkdir(destination, { recursive: true })

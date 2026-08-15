@@ -1,6 +1,7 @@
 --
 -- Parameterized deterministic stress-graph generator.
--- Expected Dapper parameters: GraphId, Slug, Title, Description, Shape, NodeCount.
+-- Expected Dapper parameters: GraphId, Slug, Title, Description, Shape,
+-- NodeCount, CorpusJson, CorpusEntryCount.
 -- This script assumes insights_seed.sql has already rebuilt the base schema.
 --
 
@@ -20,30 +21,19 @@ INSERT INTO public.graphs (
     TIMESTAMPTZ '2026-08-15 00:00:00+00'
 );
 
-WITH vocabulary AS (
+WITH corpus AS (
     SELECT
-        ARRAY[
-            'advocate', 'analyst', 'critic', 'historian',
-            'investigator', 'observer', 'scholar', 'witness'
-        ]::text[] AS subjects,
-        ARRAY[
-            'affirms', 'challenges', 'clarifies', 'compares',
-            'concedes', 'questions', 'rebuts', 'supports'
-        ]::text[] AS verbs,
-        ARRAY[
-            'assumption', 'conclusion', 'evidence', 'inference',
-            'premise', 'principle', 'testimony', 'warrant'
-        ]::text[] AS objects,
-        ARRAY[
-            'by analogy', 'from observation', 'in context', 'through definition',
-            'under scrutiny', 'with a counterexample', 'with corroboration', 'with qualification'
-        ]::text[] AS qualifiers,
-        ARRAY[
-            'alpha', 'beta', 'gamma', 'delta',
-            'epsilon', 'zeta', 'eta', 'theta',
-            'iota', 'kappa', 'lambda', 'mu',
-            'nu', 'xi', 'omicron', 'pi'
-        ]::text[] AS markers,
+        (entry.value->>'index')::integer AS corpus_index,
+        entry.value->>'title' AS title,
+        entry.value->>'excerpt' AS excerpt,
+        entry.value->>'category' AS category,
+        ARRAY(
+            SELECT tag.value
+            FROM jsonb_array_elements_text(entry.value->'tags') AS tag(value)
+        )::text[] AS tags
+    FROM jsonb_array_elements((@CorpusJson::jsonb)->'entries') AS entry(value)
+), vocabulary AS (
+    SELECT
         ARRAY[
             'experimental', 'media-analysis', 'observational', 'textual', 'video'
         ]::text[] AS evidence_types
@@ -56,14 +46,15 @@ WITH vocabulary AS (
             WHEN series.node_index % 10 = 2 THEN 'objection'
             ELSE 'claim'
         END AS kind,
-        vocabulary.subjects[1 + ((series.node_index * 3) % 8)] AS subject,
-        vocabulary.verbs[1 + ((series.node_index * 5) % 8)] AS verb,
-        vocabulary.objects[1 + ((series.node_index * 7) % 8)] AS object,
-        vocabulary.qualifiers[1 + ((series.node_index * 11) % 8)] AS qualifier,
-        vocabulary.markers[1 + ((series.node_index * 13) % 16)] AS marker,
+        corpus.title,
+        corpus.excerpt,
+        corpus.category,
+        corpus.tags,
         vocabulary.evidence_types[1 + ((series.node_index / 5) % 5)] AS evidence_type,
         35 + (5 * ((series.node_index / 5) % 7)) AS evidence_score
     FROM generate_series(0, @NodeCount - 1) AS series(node_index)
+    INNER JOIN corpus
+        ON corpus.corpus_index = series.node_index % @CorpusEntryCount
     CROSS JOIN vocabulary
 ), payload AS (
     SELECT
@@ -97,24 +88,15 @@ SELECT
     payload.node_id,
     graph.id,
     payload.kind,
+    payload.title,
     format(
-        '%s %s: %s %s %s',
+        '%s %s — %s',
         initcap(payload.kind),
         lpad(payload.node_index::text, 5, '0'),
-        payload.subject,
-        payload.verb,
-        payload.object
+        payload.excerpt
     ),
-    format(
-        'The %s %s the %s %s. Search marker %s identifies this deterministic rhetoric stress record.',
-        payload.subject,
-        payload.verb,
-        payload.object,
-        payload.qualifier,
-        payload.marker
-    ),
-    payload.object,
-    ARRAY['synthetic', 'stress-v1', 'rhetoric', payload.marker]::text[],
+    payload.category,
+    payload.tags,
     payload.prior_odds,
     payload.prior_odds,
     CASE
@@ -225,11 +207,16 @@ CROSS JOIN LATERAL (
 -- select the path whose accumulated log likelihood is farthest from neutral,
 -- sum those contributions with the node prior, and clamp to the engine range.
 -- The deep-chain case has a single path between any two connected nodes. Its
--- suffix windows compute the same path sums in O(N), avoiding an O(N^2)
--- evidence-to-ancestor recursive expansion at 10,000 nodes.
+-- total-minus-prefix scan computes every descendant suffix in O(N), avoiding
+-- both an O(N^2) evidence expansion and partition-buffering FOLLOWING frames.
 WITH path_positions AS (
     SELECT
         series.node_index,
+        series.node_index > 0
+            AND (
+                series.node_index % 5 = 0
+                OR series.node_index % 10 = 2
+            ) AS is_active,
         sum(
             CASE
                 WHEN series.node_index = 0 THEN 0::double precision
@@ -239,37 +226,50 @@ WITH path_positions AS (
         ) OVER (ORDER BY series.node_index) AS path_to_root
     FROM generate_series(0, @NodeCount - 1) AS series(node_index)
     WHERE @Shape = 'deep'
-), suffix_contributions AS (
+), forward_active_totals AS (
     SELECT
         path_positions.node_index,
+        path_positions.path_to_root,
         COALESCE(
-            sum(path_positions.path_to_root) FILTER (
-                WHERE path_positions.node_index > 0
-                  AND (
-                      path_positions.node_index % 5 = 0
-                      OR path_positions.node_index % 10 = 2
-                  )
-            ) OVER (
-                ORDER BY path_positions.node_index
-                ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING
-            ),
-            0::double precision
-        ) - (
-            COALESCE(
-                count(*) FILTER (
-                    WHERE path_positions.node_index > 0
-                      AND (
-                          path_positions.node_index % 5 = 0
-                          OR path_positions.node_index % 10 = 2
-                      )
-                ) OVER (
+            sum(path_positions.path_to_root)
+                FILTER (WHERE path_positions.is_active) OVER (
                     ORDER BY path_positions.node_index
-                    ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
                 ),
-                0
-            ) * path_positions.path_to_root
-        ) AS total_log_likelihood
+            0::double precision
+        ) AS active_path_through_node,
+        count(*) FILTER (WHERE path_positions.is_active) OVER (
+            ORDER BY path_positions.node_index
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS active_count_through_node
     FROM path_positions
+), active_totals AS MATERIALIZED (
+    -- Reuse the final running values as the totals. The filtered aggregates
+    -- preserve those exact double values while guaranteeing a single-row CTE;
+    -- MATERIALIZED prevents the planner from inlining the final-row lookup and
+    -- rescanning the running window once per suffix row.
+    SELECT
+        max(forward_active_totals.active_path_through_node) FILTER (
+            WHERE forward_active_totals.node_index = @NodeCount - 1
+        ) AS total_active_path,
+        max(forward_active_totals.active_count_through_node) FILTER (
+            WHERE forward_active_totals.node_index = @NodeCount - 1
+        ) AS total_active_count
+    FROM forward_active_totals
+), suffix_contributions AS (
+    SELECT
+        forward_active_totals.node_index,
+        (
+            active_totals.total_active_path -
+            forward_active_totals.active_path_through_node
+        ) - (
+            (
+                active_totals.total_active_count -
+                forward_active_totals.active_count_through_node
+            ) * forward_active_totals.path_to_root
+        ) AS total_log_likelihood
+    FROM forward_active_totals
+    CROSS JOIN active_totals
 )
 UPDATE public.nodes AS node
 SET
@@ -302,7 +302,7 @@ WITH RECURSIVE active_paths AS (
         AND edge.from_node_id = active_node.id
     INNER JOIN public.graphs AS graph ON graph.id = active_node.graph_id
     WHERE graph.slug = @Slug
-      AND @Shape <> 'deep'
+      AND @Shape IN ('balanced', 'wide')
       AND active_node.kind IN ('evidence', 'objection')
 
     UNION ALL
@@ -316,7 +316,7 @@ WITH RECURSIVE active_paths AS (
     INNER JOIN public.edges AS parent_edge
         ON parent_edge.from_node_id = active_paths.ancestor_node_id
        AND parent_edge.graph_id = active_paths.graph_id
-), path_extremes AS (
+), generic_path_extremes AS (
     SELECT
         ancestor_node_id,
         active_node_id,
@@ -324,6 +324,156 @@ WITH RECURSIVE active_paths AS (
         max(path_log_likelihood) AS maximum_path
     FROM active_paths
     GROUP BY ancestor_node_id, active_node_id
+), diamond_frontiers (
+    graph_id,
+    active_node_id,
+    primary_ancestor_index,
+    alternate_ancestor_index,
+    minimum_path,
+    maximum_path
+) AS (
+    -- A shared-diamond node has two sibling parents. Both outgoing edges from
+    -- that node have the same numeric weight, so the min/max path to both
+    -- parents is identical. The two siblings, in turn, share the same next
+    -- parent pair. One min/max frontier per active node and level therefore
+    -- preserves every path extreme without materializing all 2^depth paths.
+    SELECT
+        graph.id,
+        format('n-%s', lpad(series.node_index::text, 5, '0')),
+        direct_parent.primary_ancestor_index,
+        CASE
+            WHEN series.node_index >= 5 THEN
+                direct_group.first_sibling_index + (
+                    (
+                        direct_parent.primary_ancestor_index -
+                        direct_group.first_sibling_index +
+                        1
+                    ) % 4
+                )
+            ELSE NULL::integer
+        END,
+        CASE
+            WHEN series.node_index % 2 = 1
+                THEN ln(1.001::numeric)
+            ELSE ln(0.999::numeric)
+        END,
+        CASE
+            WHEN series.node_index % 2 = 1
+                THEN ln(1.001::numeric)
+            ELSE ln(0.999::numeric)
+        END
+    FROM generate_series(1, @NodeCount - 1) AS series(node_index)
+    CROSS JOIN LATERAL (
+        SELECT (series.node_index - 1) / 4 AS primary_ancestor_index
+    ) AS direct_parent
+    CROSS JOIN LATERAL (
+        SELECT
+            (4 * ((direct_parent.primary_ancestor_index - 1) / 4)) + 1
+                AS first_sibling_index
+    ) AS direct_group
+    CROSS JOIN LATERAL (
+        SELECT id
+        FROM public.graphs
+        WHERE slug = @Slug
+    ) AS graph
+    WHERE @Shape = 'shared-diamond'
+      AND (
+          series.node_index % 5 = 0
+          OR series.node_index % 10 = 2
+      )
+
+    UNION ALL
+
+    SELECT
+        diamond_frontiers.graph_id,
+        diamond_frontiers.active_node_id,
+        next_parent.primary_ancestor_index,
+        CASE
+            WHEN diamond_frontiers.primary_ancestor_index >= 5 THEN
+                next_group.first_sibling_index + (
+                    (
+                        next_parent.primary_ancestor_index -
+                        next_group.first_sibling_index +
+                        1
+                    ) % 4
+                )
+            ELSE NULL::integer
+        END,
+        diamond_frontiers.minimum_path + least(
+            CASE
+                WHEN diamond_frontiers.primary_ancestor_index % 2 = 1
+                    THEN ln(1.001::numeric)
+                ELSE ln(0.999::numeric)
+            END,
+            CASE
+                WHEN diamond_frontiers.alternate_ancestor_index % 2 = 1
+                    THEN ln(1.001::numeric)
+                ELSE ln(0.999::numeric)
+            END
+        ),
+        diamond_frontiers.maximum_path + greatest(
+            CASE
+                WHEN diamond_frontiers.primary_ancestor_index % 2 = 1
+                    THEN ln(1.001::numeric)
+                ELSE ln(0.999::numeric)
+            END,
+            CASE
+                WHEN diamond_frontiers.alternate_ancestor_index % 2 = 1
+                    THEN ln(1.001::numeric)
+                ELSE ln(0.999::numeric)
+            END
+        )
+    FROM diamond_frontiers
+    CROSS JOIN LATERAL (
+        SELECT
+            (diamond_frontiers.primary_ancestor_index - 1) / 4
+                AS primary_ancestor_index
+    ) AS next_parent
+    CROSS JOIN LATERAL (
+        SELECT
+            (4 * ((next_parent.primary_ancestor_index - 1) / 4)) + 1
+                AS first_sibling_index
+    ) AS next_group
+    WHERE diamond_frontiers.primary_ancestor_index > 0
+), diamond_path_extremes AS (
+    SELECT
+        format(
+            'n-%s',
+            lpad(diamond_frontiers.primary_ancestor_index::text, 5, '0')
+        ) AS ancestor_node_id,
+        diamond_frontiers.active_node_id,
+        diamond_frontiers.minimum_path,
+        diamond_frontiers.maximum_path
+    FROM diamond_frontiers
+
+    UNION ALL
+
+    SELECT
+        format(
+            'n-%s',
+            lpad(diamond_frontiers.alternate_ancestor_index::text, 5, '0')
+        ),
+        diamond_frontiers.active_node_id,
+        diamond_frontiers.minimum_path,
+        diamond_frontiers.maximum_path
+    FROM diamond_frontiers
+    WHERE diamond_frontiers.alternate_ancestor_index IS NOT NULL
+), path_extremes AS (
+    SELECT
+        ancestor_node_id,
+        active_node_id,
+        minimum_path,
+        maximum_path
+    FROM generic_path_extremes
+
+    UNION ALL
+
+    SELECT
+        ancestor_node_id,
+        active_node_id,
+        minimum_path,
+        maximum_path
+    FROM diamond_path_extremes
 ), strongest_paths AS (
     SELECT
         ancestor_node_id,

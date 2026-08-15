@@ -8,7 +8,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Accessible database-reset dialog for choosing optional 1K and 10K stress graphs. Standard example graphs are always restored.',
+          'Accessible database-reset dialog for choosing optional 1K, 10K, and 100K stress graphs. Standard example graphs are always restored.',
       },
     },
     layout: 'fullscreen',
@@ -16,7 +16,11 @@ const meta = {
   tags: ['autodocs'],
   args: {
     isOpen: true,
-    initialSelectedStressGraphIds: ['stress-balanced-1k', 'stress-shared-diamond-10k'],
+    initialSelectedStressGraphIds: [
+      'stress-balanced-1k',
+      'stress-shared-diamond-10k',
+      'stress-wide-100k',
+    ],
     onCancel: fn(),
     onConfirm: fn(),
   },

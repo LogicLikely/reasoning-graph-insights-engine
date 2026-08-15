@@ -25,10 +25,14 @@ function ResetDialogHarness({
 }
 
 describe('DatabaseResetDialog', () => {
-  it('groups all eight optional graphs by scale and marks installed graphs', () => {
+  it('groups all twelve optional graphs by scale and marks installed graphs', () => {
     render(
       <DatabaseResetDialog
-        initialSelectedStressGraphIds={['stress-wide-1k', 'stress-deep-10k']}
+        initialSelectedStressGraphIds={[
+          'stress-wide-1k',
+          'stress-deep-10k',
+          'stress-balanced-100k',
+        ]}
         isOpen
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
@@ -38,11 +42,18 @@ describe('DatabaseResetDialog', () => {
     const dialog = screen.getByRole('dialog', { name: 'Reset database' })
     const oneThousandGroup = within(dialog).getByRole('group', { name: '1K stress graphs' })
     const tenThousandGroup = within(dialog).getByRole('group', { name: '10K stress graphs' })
+    const hundredThousandGroup = within(dialog).getByRole('group', {
+      name: '100K stress graphs',
+    })
 
     expect(within(oneThousandGroup).getAllByRole('checkbox')).toHaveLength(4)
     expect(within(tenThousandGroup).getAllByRole('checkbox')).toHaveLength(4)
+    expect(within(hundredThousandGroup).getAllByRole('checkbox')).toHaveLength(4)
     expect(within(dialog).getByRole('checkbox', { name: /Wide star \(1,000 nodes\)/ })).toBeChecked()
     expect(within(dialog).getByRole('checkbox', { name: /Deep chain \(10,000 nodes\)/ })).toBeChecked()
+    expect(
+      within(dialog).getByRole('checkbox', { name: /Balanced tree \(100,000 nodes\)/ }),
+    ).toBeChecked()
     expect(dialog).toHaveTextContent('standard example graphs are always installed')
 
     STRESS_GRAPH_OPTIONS.forEach(({ id }) => {
@@ -68,7 +79,7 @@ describe('DatabaseResetDialog', () => {
     ))).toBe(true)
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Clear 10K' }))
-    expect(within(dialog).getByText('4 of 8 optional graphs selected')).toBeInTheDocument()
+    expect(within(dialog).getByText('8 of 12 optional graphs selected')).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Select 10K' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Reset and rebuild database' }))
 

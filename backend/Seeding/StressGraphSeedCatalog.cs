@@ -10,6 +10,10 @@ public static class StressGraphSeedIds
     public const string Wide10K = "stress-wide-10k";
     public const string Deep10K = "stress-deep-10k";
     public const string SharedDiamond10K = "stress-shared-diamond-10k";
+    public const string Balanced100K = "stress-balanced-100k";
+    public const string Wide100K = "stress-wide-100k";
+    public const string Deep100K = "stress-deep-100k";
+    public const string SharedDiamond100K = "stress-shared-diamond-100k";
 }
 
 public sealed record StressGraphSeedSpec(
@@ -43,7 +47,11 @@ public static class StressGraphSeedCatalog
         Spec(7, StressGraphSeedIds.Balanced10K, "Stress: Balanced Tree (10,000 Nodes)", "balanced", 10_000),
         Spec(8, StressGraphSeedIds.Wide10K, "Stress: Wide Star (10,000 Nodes)", "wide", 10_000),
         Spec(9, StressGraphSeedIds.Deep10K, "Stress: Deep Chain (10,000 Nodes)", "deep", 10_000),
-        Spec(10, StressGraphSeedIds.SharedDiamond10K, "Stress: Shared-Diamond DAG (10,000 Nodes)", "shared-diamond", 10_000)
+        Spec(10, StressGraphSeedIds.SharedDiamond10K, "Stress: Shared-Diamond DAG (10,000 Nodes)", "shared-diamond", 10_000),
+        Spec(11, StressGraphSeedIds.Balanced100K, "Stress: Balanced Tree (100,000 Nodes)", "balanced", 100_000),
+        Spec(12, StressGraphSeedIds.Wide100K, "Stress: Wide Star (100,000 Nodes)", "wide", 100_000),
+        Spec(13, StressGraphSeedIds.Deep100K, "Stress: Deep Chain (100,000 Nodes)", "deep", 100_000),
+        Spec(14, StressGraphSeedIds.SharedDiamond100K, "Stress: Shared-Diamond DAG (100,000 Nodes)", "shared-diamond", 100_000)
     ];
 
     public static IReadOnlyList<StressGraphSeedSpec> Resolve(
@@ -78,7 +86,16 @@ public static class StressGraphSeedCatalog
         {
             "wide" => 1,
             "deep" => nodeCount - 1,
-            _ => nodeCount == 1_000 ? 5 : 7
+            _ => nodeCount switch
+            {
+                1_000 => 5,
+                10_000 => 7,
+                100_000 => 9,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(nodeCount),
+                    nodeCount,
+                    "Unsupported stress graph node count.")
+            }
         };
 
         var evidenceCount = (nodeCount - 1) / 5;
