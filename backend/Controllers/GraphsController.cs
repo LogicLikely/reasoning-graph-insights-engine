@@ -15,6 +15,14 @@ public class GraphsController : ControllerBase
         _graphService = graphService;
     }
 
+    [HttpGet]
+    public async Task<IActionResult> GetSummaries(CancellationToken cancellationToken)
+    {
+        var summaries = await _graphService.GetSummariesAsync(cancellationToken);
+
+        return Ok(summaries);
+    }
+
     [HttpGet("{slug}")]
     public async Task<IActionResult> GetBySlug(
         string slug,

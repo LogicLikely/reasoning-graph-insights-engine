@@ -73,6 +73,24 @@ describe('graphService', () => {
     expect(fixtureSpy).not.toHaveBeenCalled()
   })
 
+  it('loads the ordered graph catalog from the api', async () => {
+    const summaries = [
+      { slug: 'sample-medium', title: 'Sample graph', description: 'First graph' },
+      { slug: 'flat-earth-large', title: 'Large graph', description: null },
+    ]
+    const catalogSpy = vi.fn().mockResolvedValue(summaries)
+
+    vi.doMock('./graphApi', () => ({
+      getGraphBySlugFromApi: vi.fn(),
+      getGraphCatalogFromApi: catalogSpy,
+    }))
+
+    const { getGraphCatalog } = await import('./graphService')
+
+    await expect(getGraphCatalog()).resolves.toEqual(summaries)
+    expect(catalogSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('uses the env var to determine the default data source', async () => {
     vi.stubEnv('VITE_USE_FIXTURE', 'true')
 

@@ -10,6 +10,7 @@ import {
   deleteNode,
   getDefaultGraphDataSource,
   getEvidenceImpactRanking,
+  getGraphCatalog,
   getGraphBySlug,
   getNodeCounterSet,
   resetDatabase,
@@ -17,22 +18,39 @@ import {
   updateNode,
   type GraphDataSource,
 } from '../services/graphService'
+import type { GraphSummary } from '../services/graphTypes'
 import './DemoPage.css'
 
-const DEMO_GRAPH_SLUG = 'sample-medium'
+const FIXTURE_GRAPH_SLUG = 'sample-medium'
 const FIXTURE_MUTATION_MESSAGE = 'This feature is not available in fixture mode.'
 const DB_UNREACHABLE_TITLE = 'Unable to load graph'
 const DB_UNREACHABLE_MESSAGE = 'Unable to load graph data right now.'
+const DB_CATALOG_UNREACHABLE_TITLE = 'Unable to load graph catalog'
+const DB_CATALOG_UNREACHABLE_MESSAGE = 'Unable to load the database graph list right now.'
+const DB_EMPTY_TITLE = 'No database graphs'
+const DB_EMPTY_MESSAGE = 'The database does not contain any graphs yet. Reset the database to restore the seed data.'
 
 export function DemoPage() {
   const [graph, setGraph] = useState<GraphFixture | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [graphError, setGraphError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [reloadKey, setReloadKey] = useState(0)
+  const [graphCatalog, setGraphCatalog] = useState<GraphSummary[]>([])
+  const [graphCatalogError, setGraphCatalogError] = useState<string | null>(null)
+  const [isGraphCatalogLoading, setIsGraphCatalogLoading] = useState(true)
+  const [graphCatalogReloadKey, setGraphCatalogReloadKey] = useState(0)
+  const [graphCatalogVersion, setGraphCatalogVersion] = useState(0)
+  const [selectedDatabaseGraphSlug, setSelectedDatabaseGraphSlug] = useState<string>()
   const [selectedNodeId, setSelectedNodeId] = useState<string>()
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false)
   const [isResettingDatabase, setIsResettingDatabase] = useState(false)
   const [graphDataSource, setGraphDataSource] = useState<GraphDataSource>(() => getDefaultGraphDataSource())
+  const activeGraphSlug = graphDataSource === 'fixture'
+    ? FIXTURE_GRAPH_SLUG
+    : selectedDatabaseGraphSlug
+  const activeCatalogVersion = graphDataSource === 'database' ? graphCatalogVersion : 0
+  const activeGraphCatalogLoading = graphDataSource === 'database' && isGraphCatalogLoading
+  const activeGraphCatalogError = graphDataSource === 'database' ? graphCatalogError : null
 
   const dismissNodeDetails = useCallback(() => {
     setSelectedNodeId(undefined)
@@ -41,13 +59,64 @@ export function DemoPage() {
   useEffect(() => {
     let isActive = true
 
-    async function loadGraph() {
-      setIsLoading(true)
-      setError(null)
+    async function loadGraphCatalog() {
+      setIsGraphCatalogLoading(true)
+      setGraphCatalogError(null)
 
       try {
-        //Grabs nodes from backend
-        const result = await getGraphBySlug(DEMO_GRAPH_SLUG, graphDataSource)
+        const summaries = await getGraphCatalog()
+
+        if (!isActive) {
+          return
+        }
+
+        setGraphCatalog(summaries)
+        setSelectedDatabaseGraphSlug((currentSlug) => (
+          summaries.some((summary) => summary.slug === currentSlug)
+            ? currentSlug
+            : summaries[0]?.slug
+        ))
+        setGraphCatalogVersion((version) => version + 1)
+      } catch {
+        if (isActive) {
+          setGraphCatalogError(DB_CATALOG_UNREACHABLE_MESSAGE)
+        }
+      } finally {
+        if (isActive) {
+          setIsGraphCatalogLoading(false)
+        }
+      }
+    }
+
+    void loadGraphCatalog()
+
+    return () => {
+      isActive = false
+    }
+  }, [graphCatalogReloadKey])
+
+  useEffect(() => {
+    let isActive = true
+
+    if (activeGraphCatalogLoading || activeGraphCatalogError) {
+      return () => {
+        isActive = false
+      }
+    }
+
+    if (!activeGraphSlug) {
+      return () => {
+        isActive = false
+      }
+    }
+    const graphSlug = activeGraphSlug
+
+    async function loadGraph() {
+      setIsLoading(true)
+      setGraphError(null)
+
+      try {
+        const result = await getGraphBySlug(graphSlug, graphDataSource)
 
         if (!isActive) {
           return
@@ -63,7 +132,7 @@ export function DemoPage() {
         }
 
         setGraph(null)
-        setError(DB_UNREACHABLE_MESSAGE)
+        setGraphError(DB_UNREACHABLE_MESSAGE)
       } finally {
         if (isActive) {
           setIsLoading(false)
@@ -76,7 +145,7 @@ export function DemoPage() {
     return () => {
       isActive = false
     }
-  }, [graphDataSource, reloadKey])
+  }, [activeCatalogVersion, activeGraphCatalogError, activeGraphCatalogLoading, activeGraphSlug, graphDataSource, reloadKey])
 
   const handleDeleteNode = useCallback(async (nodeId: string) => {
     const hasInNeighbors = graph?.edges.some((e) => e.to === nodeId)
@@ -94,14 +163,18 @@ export function DemoPage() {
       return
     }
 
+    if (!activeGraphSlug) {
+      return
+    }
+
     try {
-      await deleteNode(DEMO_GRAPH_SLUG, nodeId)
+      await deleteNode(activeGraphSlug, nodeId)
       setReloadKey((prev) => prev + 1)
       setSelectedNodeId(undefined)
     } catch {
-      setError('Failed to delete node from the server.')
+      setGraphError('Failed to delete node from the server.')
     }
-  }, [graph?.edges, graphDataSource])
+  }, [activeGraphSlug, graph?.edges, graphDataSource])
 
   const handleUpdateNode = useCallback(async (nodeId: string, data: Partial<GraphFixtureNode>) => {
     if (graphDataSource === 'fixture') {
@@ -109,26 +182,38 @@ export function DemoPage() {
       return
     }
 
+    if (!activeGraphSlug) {
+      return
+    }
+
     try {
-      await updateNode(DEMO_GRAPH_SLUG, nodeId, data)
+      await updateNode(activeGraphSlug, nodeId, data)
       setReloadKey((prev) => prev + 1)
     } catch {
-      setError('Failed to update node on the server.')
+      setGraphError('Failed to update node on the server.')
     }
-  }, [graphDataSource])
+  }, [activeGraphSlug, graphDataSource])
 
   const handleNodeCounterSet = useCallback(async (nodeId: string) => {
+    if (!activeGraphSlug) {
+      return
+    }
+
     try {
-      const counterNodeIds = await getNodeCounterSet(DEMO_GRAPH_SLUG, nodeId, graphDataSource)
+      const counterNodeIds = await getNodeCounterSet(activeGraphSlug, nodeId, graphDataSource)
       console.log(counterNodeIds)
     } catch {
-      setError('Failed to get the minimal counter set from the server.')
+      setGraphError('Failed to get the minimal counter set from the server.')
     }
-  }, [graphDataSource])
+  }, [activeGraphSlug, graphDataSource])
 
   const handleEvidenceImpactRanking = useCallback(async (nodeId: string) => {
+    if (!activeGraphSlug) {
+      return
+    }
+
     try {
-      const ranking = await getEvidenceImpactRanking(DEMO_GRAPH_SLUG, nodeId, graphDataSource)
+      const ranking = await getEvidenceImpactRanking(activeGraphSlug, nodeId, graphDataSource)
       const isEvidenceNode = (nodeId: string) => graph?.nodes.some((node) =>
         node.id === nodeId && (node.kind === 'evidence' || node.kind === 'objection')
       )
@@ -138,9 +223,9 @@ export function DemoPage() {
         counterEvidence: ranking.counterEvidence.filter((impact) => isEvidenceNode(impact.nodeId)),
       })
     } catch {
-      setError('Failed to get the evidence impact ranking from the server.')
+      setGraphError('Failed to get the evidence impact ranking from the server.')
     }
-  }, [graph?.nodes, graphDataSource])
+  }, [activeGraphSlug, graph?.nodes, graphDataSource])
 
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
@@ -161,14 +246,18 @@ export function DemoPage() {
       bodyText: data.bodyText ?? '',
     } as GraphFixtureNode
 
+    if (!activeGraphSlug) {
+      return
+    }
+
     try {
-      await addNode(DEMO_GRAPH_SLUG, newNode, parentId, edge)
+      await addNode(activeGraphSlug, newNode, parentId, edge)
       setReloadKey((prev) => prev + 1)
       setSelectedNodeId(newNodeId)
     } catch {
-      setError('Failed to add node to the server.')
+      setGraphError('Failed to add node to the server.')
     }
-  }, [graphDataSource])
+  }, [activeGraphSlug, graphDataSource])
 
   const handleUpdateEdge = useCallback(async (
     edgeId: string,
@@ -179,13 +268,17 @@ export function DemoPage() {
       return
     }
 
+    if (!activeGraphSlug) {
+      return
+    }
+
     try {
-      await updateEdge(DEMO_GRAPH_SLUG, edgeId, data)
+      await updateEdge(activeGraphSlug, edgeId, data)
       setReloadKey((prev) => prev + 1)
     } catch {
-      setError('Failed to update edge on the server.')
+      setGraphError('Failed to update edge on the server.')
     }
-  }, [graphDataSource])
+  }, [activeGraphSlug, graphDataSource])
 
   const handleAddParentEdge = useCallback(async (
     edge: { from: string, to: string, kind: 'support' | 'rebut', importanceToParent: number },
@@ -195,13 +288,17 @@ export function DemoPage() {
       return
     }
 
+    if (!activeGraphSlug) {
+      return
+    }
+
     try {
-      await addEdge(DEMO_GRAPH_SLUG, edge)
+      await addEdge(activeGraphSlug, edge)
       setReloadKey((prev) => prev + 1)
     } catch {
-      setError('Failed to add edge on the server.')
+      setGraphError('Failed to add edge on the server.')
     }
-  }, [graphDataSource])
+  }, [activeGraphSlug, graphDataSource])
 
   const handleResetDatabase = useCallback(async () => {
     if (!window.confirm('Are you sure you want to reset the database? This will restore the default seed data.')) {
@@ -209,14 +306,16 @@ export function DemoPage() {
     }
 
     setIsResettingDatabase(true)
-    setError(null)
+    setGraphError(null)
 
     try {
       await resetDatabase()
       setSelectedNodeId(undefined)
-      setReloadKey((prev) => prev + 1)
+      setGraph(null)
+      setIsGraphCatalogLoading(true)
+      setGraphCatalogReloadKey((key) => key + 1)
     } catch {
-      setError('Failed to reset the database.')
+      setGraphError('Failed to reset the database.')
     } finally {
       setIsResettingDatabase(false)
     }
@@ -228,9 +327,23 @@ export function DemoPage() {
     }
 
     setSelectedNodeId(undefined)
-    setError(null)
+    setGraphError(null)
+    setGraph(null)
+    setIsLoading(true)
     setGraphDataSource(nextDataSource)
   }, [graphDataSource])
+
+  const handleGraphChange = useCallback((slug: string) => {
+    if (slug === selectedDatabaseGraphSlug) {
+      return
+    }
+
+    setSelectedNodeId(undefined)
+    setGraphError(null)
+    setGraph(null)
+    setIsLoading(true)
+    setSelectedDatabaseGraphSlug(slug)
+  }, [selectedDatabaseGraphSlug])
 
   const handleGraphNodeSelect = useCallback((node: GraphFixtureNode | null) => {
     setSelectedNodeId(node?.id)
@@ -282,12 +395,45 @@ export function DemoPage() {
   }, [selectedNodeId, isGraphFullscreen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
-  const shouldShowOverviewPanel = graph !== null || error !== null
-  const overviewTitle = graph?.title ?? DB_UNREACHABLE_TITLE
-  const overviewDescription = graph?.description ?? error ?? ''
+  const activeGraphSummary = graphDataSource === 'database'
+    ? graphCatalog.find((summary) => summary.slug === selectedDatabaseGraphSlug)
+    : undefined
+  const isDatabaseCatalogEmpty = graphDataSource === 'database'
+    && !isGraphCatalogLoading
+    && graphCatalogError === null
+    && graphCatalogVersion > 0
+    && graphCatalog.length === 0
+  const currentError = graphDataSource === 'database'
+    ? graphCatalogError ?? graphError
+    : graphError
+  const currentErrorTitle = graphDataSource === 'database' && graphCatalogError
+    ? DB_CATALOG_UNREACHABLE_TITLE
+    : DB_UNREACHABLE_TITLE
+  const isPageLoading = currentError === null
+    && !isDatabaseCatalogEmpty
+    && (isLoading || (graphDataSource === 'database' && isGraphCatalogLoading))
+  const shouldShowOverviewPanel = graph !== null
+    || currentError !== null
+    || isDatabaseCatalogEmpty
+    || (graphDataSource === 'database' && graphCatalog.length > 0)
+  const overviewTitle = graph?.title
+    ?? (currentError ? currentErrorTitle : undefined)
+    ?? (isDatabaseCatalogEmpty ? DB_EMPTY_TITLE : undefined)
+    ?? activeGraphSummary?.title
+    ?? 'Loading graph'
+  const overviewDescription = graph?.description
+    ?? currentError
+    ?? (isDatabaseCatalogEmpty ? DB_EMPTY_MESSAGE : undefined)
+    ?? activeGraphSummary?.description
+    ?? ''
   const overviewNodeCount = graph?.nodes.length ?? 0
   const overviewEdgeCount = graph?.edges.length ?? 0
-  const overviewFixtureName = graph?.slug ?? DB_UNREACHABLE_TITLE
+  const overviewFixtureName = graph?.slug ?? activeGraphSlug ?? overviewTitle
+  const stageTitle = graph?.title
+    ?? (currentError ? currentErrorTitle : undefined)
+    ?? (isDatabaseCatalogEmpty ? DB_EMPTY_TITLE : undefined)
+    ?? activeGraphSummary?.title
+    ?? 'Loading graph demo'
   const detailsSheet = (
     <div
       className={`demo-details-sheet${isGraphFullscreen ? ' demo-details-sheet--sheet-mode' : ''}${selectedNode ? ' demo-details-sheet--open' : ''}`}
@@ -344,25 +490,36 @@ export function DemoPage() {
           data-testid="demo-graph-stage"
         >
           <div className="demo-stage__header">
-            <h2>{graph?.title ?? 'Loading graph demo'}</h2>
+            <h2>{stageTitle}</h2>
           </div>
 
-          {isLoading ? (
+          {isPageLoading ? (
             <div className="demo-state" data-testid="demo-loading-state">
               <h3>Loading graph…</h3>
               <p>Fetching the current reasoning graph and preparing the layout.</p>
             </div>
-          ) : error ? (
+          ) : currentError ? (
             <div className="demo-state demo-state--error" data-testid="demo-error-state">
-              <h3>{DB_UNREACHABLE_TITLE}</h3>
-              <p>{error}</p>
+              <h3>{currentErrorTitle}</h3>
+              <p>{currentError}</p>
               <button
                 className="secondary-link demo-state__button"
-                onClick={() => setReloadKey((value) => value + 1)}
+                onClick={() => {
+                  if (graphDataSource === 'database' && graphCatalogError) {
+                    setGraphCatalogReloadKey((key) => key + 1)
+                  } else {
+                    setReloadKey((value) => value + 1)
+                  }
+                }}
                 type="button"
               >
                 Retry
               </button>
+            </div>
+          ) : isDatabaseCatalogEmpty ? (
+            <div className="demo-state" data-testid="demo-empty-state">
+              <h3>{DB_EMPTY_TITLE}</h3>
+              <p>{DB_EMPTY_MESSAGE}</p>
             </div>
           ) : graph ? (
             <InsightsGraphCanvas
@@ -390,8 +547,12 @@ export function DemoPage() {
               edgeCount={overviewEdgeCount}
               fixtureName={overviewFixtureName}
               dataSource={graphDataSource}
+              graphs={graphCatalog}
+              selectedGraphSlug={selectedDatabaseGraphSlug}
+              isGraphCatalogLoading={isGraphCatalogLoading}
               isResettingDatabase={isResettingDatabase}
               onDataSourceChange={handleGraphDataSourceChange}
+              onGraphChange={handleGraphChange}
               onResetDatabase={handleResetDatabase}
             />
           ) : null}

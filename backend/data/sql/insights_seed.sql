@@ -1,86 +1,24 @@
 --
--- PostgreSQL database dump
+-- Deterministic PostgreSQL rebuild for the reasoning graph insights database.
+-- Contains the original medium sample graph and a large scale example adapted
+-- from graphmap/src/fixtures/dataMin02.ts.
 --
 
--- Dumped from database version 17.4
--- Dumped by pg_dump version 18.2
-
--- Started on 2026-07-05 12:23:04 EDT
-
-SET statement_timeout = 0;
-SET lock_timeout = 0;
-SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
-SET check_function_bodies = false;
-SET xmloption = content;
-SET client_min_messages = warning;
-SET row_security = off;
 
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
---
--- TOC entry 217 (class 1259 OID 18051)
--- Name: edges; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.edges (
-    id text NOT NULL,
-    graph_id integer NOT NULL,
-    from_node_id text NOT NULL,
-    to_node_id text NOT NULL,
-    kind text NOT NULL,
-    importance_to_parent numeric(10,3) NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT ck_edges_importance_to_parent CHECK (((importance_to_parent > 0) AND (importance_to_parent <= 10))),
-    CONSTRAINT ck_edges_kind CHECK ((kind = ANY (ARRAY['support'::text, 'rebut'::text]))),
-    CONSTRAINT ck_edges_not_self CHECK ((from_node_id <> to_node_id))
-);
-
-
-ALTER TABLE public.edges OWNER TO postgres;
-
---
--- TOC entry 218 (class 1259 OID 18061)
--- Name: graphs; Type: TABLE; Schema: public; Owner: postgres
---
+DROP TABLE IF EXISTS public.edges, public.nodes, public.graphs CASCADE;
 
 CREATE TABLE public.graphs (
-    id integer NOT NULL,
+    id integer GENERATED ALWAYS AS IDENTITY,
     slug text NOT NULL,
     title text NOT NULL,
     description text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT graphs_pkey PRIMARY KEY (id),
+    CONSTRAINT graphs_slug_key UNIQUE (slug)
 );
-
-
-ALTER TABLE public.graphs OWNER TO postgres;
-
---
--- TOC entry 219 (class 1259 OID 18068)
--- Name: graphs_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-ALTER TABLE public.graphs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.graphs_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
--- TOC entry 220 (class 1259 OID 18069)
--- Name: nodes; Type: TABLE; Schema: public; Owner: postgres
---
 
 CREATE TABLE public.nodes (
     id text NOT NULL,
@@ -95,248 +33,329 @@ CREATE TABLE public.nodes (
     evidence jsonb,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT ck_nodes_kind CHECK ((kind = ANY (ARRAY['root'::text, 'claim'::text, 'objection'::text, 'evidence'::text]))),
+    CONSTRAINT nodes_pkey PRIMARY KEY (graph_id, id),
+    CONSTRAINT nodes_graph_id_fkey
+        FOREIGN KEY (graph_id) REFERENCES public.graphs(id) ON DELETE CASCADE,
+    CONSTRAINT ck_nodes_kind
+        CHECK (kind = ANY (ARRAY['root'::text, 'claim'::text, 'objection'::text, 'evidence'::text])),
     CONSTRAINT ck_nodes_prior_odds_range CHECK (prior_odds BETWEEN -100 AND 100),
     CONSTRAINT ck_nodes_posterior_odds_range CHECK (posterior_odds BETWEEN -100 AND 100)
 );
 
-
-ALTER TABLE public.nodes OWNER TO postgres;
-
---
--- TOC entry 3636 (class 0 OID 18051)
--- Dependencies: 217
--- Data for Name: edges; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-INSERT INTO public.edges VALUES ('E-C3-P3', 1, 'P3', 'C3', 'support', 1, '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
-INSERT INTO public.edges VALUES ('E-C3-E4', 1, 'E4', 'C3', 'support', 1, '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
-INSERT INTO public.edges VALUES ('E-O1-P1', 1, 'O1', 'P1', 'rebut', 1, '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
-INSERT INTO public.edges VALUES ('E-R-C4', 1, 'C4', 'R1', 'support', 7, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:01:29.131858-04');
-INSERT INTO public.edges VALUES ('E-R-C5', 1, 'C5', 'R1', 'support', 3, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:01:54.039602-04');
-INSERT INTO public.edges VALUES ('E-R-C3', 1, 'C3', 'R1', 'support', 2, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:02:34.463307-04');
-INSERT INTO public.edges VALUES ('E-R-C2', 1, 'C2', 'R1', 'support', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:02:52.478407-04');
-INSERT INTO public.edges VALUES ('E-R-C1', 1, 'C1', 'R1', 'support', 5, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:22.744863-04');
-INSERT INTO public.edges VALUES ('E-C1-E1', 1, 'E1', 'C1', 'support', 3, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:43.314014-04');
-INSERT INTO public.edges VALUES ('E-C1-P1', 1, 'P1', 'C1', 'support', 2, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:59.486207-04');
-INSERT INTO public.edges VALUES ('E-O1-C1', 1, 'O1', 'C1', 'rebut', 10, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:04:16.680376-04');
-INSERT INTO public.edges VALUES ('E-C2-E2', 1, 'E2', 'C2', 'support', 10, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:04:47.567154-04');
-INSERT INTO public.edges VALUES ('E-C2-P2', 1, 'P2', 'C2', 'support', 8, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:05:05.810578-04');
-INSERT INTO public.edges VALUES ('E-O3-P2', 1, 'O3', 'P2', 'rebut', 10, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:06:39.992305-04');
-INSERT INTO public.edges VALUES ('E-C3-E3', 1, 'E3', 'C3', 'support', 3, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:14.505983-04');
-INSERT INTO public.edges VALUES ('E-O4-E3', 1, 'O4', 'E3', 'rebut', 8, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:37.892759-04');
-INSERT INTO public.edges VALUES ('E-O4-E4', 1, 'O4', 'E4', 'rebut', 8, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:37.903067-04');
-INSERT INTO public.edges VALUES ('E-C3-P4', 1, 'P4', 'C3', 'support', 3, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:07.898937-04');
-INSERT INTO public.edges VALUES ('E-O5-P4', 1, 'O5', 'P4', 'rebut', 7, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:45.158857-04');
-INSERT INTO public.edges VALUES ('E-O5-E4', 1, 'O5', 'E4', 'rebut', 7, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:45.159191-04');
-INSERT INTO public.edges VALUES ('E-O9-C1', 1, 'O9', 'C1', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:13.144113-04');
-INSERT INTO public.edges VALUES ('E-O9-C3', 1, 'O9', 'C3', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:13.144171-04');
-INSERT INTO public.edges VALUES ('E-O9-C4', 1, 'O9', 'C4', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:13.15444-04');
-INSERT INTO public.edges VALUES ('E-C4-E5', 1, 'E5', 'C4', 'support', 6, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:45.312111-04');
-INSERT INTO public.edges VALUES ('E-C4-E6', 1, 'E6', 'C4', 'support', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:04.425036-04');
-INSERT INTO public.edges VALUES ('E-C4-P5', 1, 'P5', 'C4', 'support', 7, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:18.391606-04');
-INSERT INTO public.edges VALUES ('E-C4-P6', 1, 'P6', 'C4', 'support', 2, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:53.475264-04');
-INSERT INTO public.edges VALUES ('E-C5-O8', 1, 'O8', 'C5', 'rebut', 8, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:25.938129-04');
-INSERT INTO public.edges VALUES ('E-O2-P5', 1, 'O2', 'P5', 'rebut', 5, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:48.19083-04');
-INSERT INTO public.edges VALUES ('E-O2-P6', 1, 'O2', 'P6', 'rebut', 5, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:48.192292-04');
-INSERT INTO public.edges VALUES ('E-O7-P6', 1, 'O7', 'P6', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:02.593273-04');
-INSERT INTO public.edges VALUES ('E-O7-E6', 1, 'O7', 'E6', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:02.593272-04');
-INSERT INTO public.edges VALUES ('E-O6-P5', 1, 'O6', 'P5', 'rebut', 6, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:30.934387-04');
-INSERT INTO public.edges VALUES ('E-O6-C4', 1, 'O6', 'C4', 'rebut', 6, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:30.939403-04');
-
-
---
--- TOC entry 3637 (class 0 OID 18061)
--- Dependencies: 218
--- Data for Name: graphs; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-INSERT INTO public.graphs OVERRIDING SYSTEM VALUE VALUES (1, 'sample-medium', 'Sample Medium Reasoning Graph', 'Seed graph based on the sample TypeScript dataset.', '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
-
-
---
--- TOC entry 3639 (class 0 OID 18069)
--- Dependencies: 220
--- Data for Name: nodes; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-INSERT INTO public.nodes VALUES ('R1', 1, 'root', 'Earth is flat', 'The Earth is flat.', NULL, '{flat-earth,root}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
-INSERT INTO public.nodes VALUES ('P3', 1, 'claim', 'Airplane windows do not show obvious curve', 'Commercial flights rarely present a visibly curved horizon to passengers.', 'visual-observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
-INSERT INTO public.nodes VALUES ('E4', 1, 'evidence', 'Balloon video clips', 'Selected balloon footage is cited as evidence that curvature is not obvious.', NULL, '{}', 0, 0, '{"type": "video", "score": 0.5}', '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
-INSERT INTO public.nodes VALUES ('C4', 1, 'claim', 'Long-distance visibility seems too great', 'Distant objects are visible farther away than expected on a globe.', 'distance-claims', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:01:29.123906-04');
-INSERT INTO public.nodes VALUES ('C5', 1, 'claim', 'Mainstream institutions coordinate the narrative', 'Agencies and institutions reinforce a globe narrative that should be questioned.', 'meta-claim', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:01:54.030317-04');
-INSERT INTO public.nodes VALUES ('C3', 1, 'claim', 'No obvious curvature from altitude', 'Images from balloons and planes do not show obvious curvature.', 'visual-observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:02:34.463307-04');
-INSERT INTO public.nodes VALUES ('C2', 1, 'claim', 'Water finds level', 'Water seeks its level and should not conform to a sphere.', 'physical-intuition', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:02:52.478407-04');
-INSERT INTO public.nodes VALUES ('C1', 1, 'claim', 'The horizon looks flat', 'The horizon appears flat to everyday observation.', 'observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:22.744861-04');
-INSERT INTO public.nodes VALUES ('E1', 1, 'evidence', 'Photographs from beaches', 'Collections of beach and ocean photographs are cited as visual support.', NULL, '{}', 0, 0, '{"type": "observational", "score": 50.0, "rationale": "Visual examples are easy to gather but hard to interpret precisely."}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:43.314014-04');
-INSERT INTO public.nodes VALUES ('P1', 1, 'claim', 'Beach and ocean horizons appear straight', 'At sea level, the horizon usually appears flat and level.', 'observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:59.477542-04');
-INSERT INTO public.nodes VALUES ('O1', 1, 'objection', 'Human perception is a poor curvature detector', 'At normal scales, human vision is not a reliable way to detect Earth''s curvature.', 'visual-limit', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:04:16.680417-04');
-INSERT INTO public.nodes VALUES ('E2', 1, 'evidence', 'Canal observations', 'Flat-earth arguments often cite calm water surfaces and canal observations.', NULL, '{}', 0, 0, '{"type": "observational", "score": 50.0}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:04:47.567307-04');
-INSERT INTO public.nodes VALUES ('P2', 1, 'claim', 'Canals and lakes look level', 'Large bodies of water appear level over long distances.', 'observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:05:05.810595-04');
-INSERT INTO public.nodes VALUES ('O3', 1, 'objection', 'Water level locally does not imply global flatness', 'A surface can be locally level while still conforming to a sphere.', 'geometry', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:06:39.992308-04');
-INSERT INTO public.nodes VALUES ('E3', 1, 'evidence', 'Passenger flight photos', 'Passenger photos and videos from aircraft are used as support.', NULL, '{}', 0, 0, '{"type": "video", "score": 50.0}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:14.506006-04');
-INSERT INTO public.nodes VALUES ('O4', 1, 'objection', 'Camera lenses can distort curvature', 'Lens choice, framing, and post-processing can affect whether curvature appears visible.', 'imaging', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:37.892403-04');
-INSERT INTO public.nodes VALUES ('P4', 1, 'claim', 'Balloon footage can look flat', 'Some high-altitude footage appears to show a flat horizon.', 'visual-observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:07.898273-04');
-INSERT INTO public.nodes VALUES ('O5', 1, 'objection', 'Balloon footage is not a controlled measurement', 'Anecdotal video clips are weaker than calibrated measurement.', 'methodology', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:45.158589-04');
-INSERT INTO public.nodes VALUES ('O9', 1, 'objection', 'Multiple support branches rely on the same observational weakness', 'Several flat-earth arguments share the same limitations of casual observation.', 'cross-cutting', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:13.143537-04');
-INSERT INTO public.nodes VALUES ('E5', 1, 'evidence', 'Long-distance photo examples', 'Photos of distant buildings and mountains are used to argue visibility is too great.', NULL, '{}', 0, 0, '{"type": "observational", "score": 50.0}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:45.311653-04');
-INSERT INTO public.nodes VALUES ('E6', 1, 'evidence', 'Amateur measurement experiments', 'Laser tests, zoom tests, and line-of-sight measurements are cited in support.', NULL, '{}', 0, 0, '{"type": "experimental", "score": 50.0}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:04.425045-04');
-INSERT INTO public.nodes VALUES ('P5', 1, 'claim', 'Distant skylines remain visible', 'Some city skylines or mountains appear visible from surprising distances.', 'distance-claims', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:18.391606-04');
-INSERT INTO public.nodes VALUES ('P6', 1, 'claim', 'Laser and line-of-sight tests look level', 'Some amateur tests report level measurements over water.', 'measurement', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:53.474823-04');
-INSERT INTO public.nodes VALUES ('O8', 1, 'objection', 'Institutional agreement is not by itself evidence of conspiracy', 'Broad agreement can reflect converging evidence rather than coordinated deception.', 'meta-claim', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:25.937605-04');
-INSERT INTO public.nodes VALUES ('O2', 1, 'objection', 'Atmospheric refraction affects visibility', 'Refraction can make distant objects appear higher or more visible than expected.', 'optics', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:48.190903-04');
-INSERT INTO public.nodes VALUES ('O7', 1, 'objection', 'Amateur tests often lack controls', 'DIY experiments frequently omit calibration, repeatability, and environmental controls.', 'methodology', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:02.593103-04');
-INSERT INTO public.nodes VALUES ('O6', 1, 'objection', 'Distance claims depend on elevation and hidden-height math', 'Visibility calculations depend on observer height, object height, and atmospheric conditions.', 'geometry', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:30.934642-04');
-
-
---
--- TOC entry 3645 (class 0 OID 0)
--- Dependencies: 219
--- Name: graphs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('public.graphs_id_seq', 1, true);
-
-
---
--- TOC entry 3472 (class 2606 OID 18081)
--- Name: edges edges_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_pkey PRIMARY KEY (id);
-
-
---
--- TOC entry 3478 (class 2606 OID 18083)
--- Name: graphs graphs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.graphs
-    ADD CONSTRAINT graphs_pkey PRIMARY KEY (id);
-
-
---
--- TOC entry 3480 (class 2606 OID 18085)
--- Name: graphs graphs_slug_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.graphs
-    ADD CONSTRAINT graphs_slug_key UNIQUE (slug);
-
-
---
--- TOC entry 3486 (class 2606 OID 18087)
--- Name: nodes nodes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.nodes
-    ADD CONSTRAINT nodes_pkey PRIMARY KEY (id);
-
-
---
--- TOC entry 3473 (class 1259 OID 18088)
--- Name: ix_edges_from_node_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX ix_edges_from_node_id ON public.edges USING btree (from_node_id);
-
-
---
--- TOC entry 3474 (class 1259 OID 18089)
--- Name: ix_edges_graph_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX ix_edges_graph_id ON public.edges USING btree (graph_id);
-
-
---
--- TOC entry 3475 (class 1259 OID 18090)
--- Name: ix_edges_kind; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX ix_edges_kind ON public.edges USING btree (kind);
-
-
---
--- TOC entry 3476 (class 1259 OID 18091)
--- Name: ix_edges_to_node_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX ix_edges_to_node_id ON public.edges USING btree (to_node_id);
-
-
---
--- TOC entry 3481 (class 1259 OID 18092)
--- Name: ix_nodes_category; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX ix_nodes_category ON public.nodes USING btree (category);
-
-
---
--- TOC entry 3482 (class 1259 OID 18093)
--- Name: ix_nodes_evidence_gin; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX ix_nodes_evidence_gin ON public.nodes USING gin (evidence);
-
-
---
--- TOC entry 3483 (class 1259 OID 18094)
--- Name: ix_nodes_graph_id; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX ix_nodes_graph_id ON public.nodes USING btree (graph_id);
-
-
---
--- TOC entry 3484 (class 1259 OID 18095)
--- Name: ix_nodes_kind; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX ix_nodes_kind ON public.nodes USING btree (kind);
-
-
---
--- TOC entry 3487 (class 2606 OID 18096)
--- Name: edges edges_from_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_from_node_id_fkey FOREIGN KEY (from_node_id) REFERENCES public.nodes(id) ON DELETE CASCADE;
-
-
---
--- TOC entry 3488 (class 2606 OID 18101)
--- Name: edges edges_graph_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_graph_id_fkey FOREIGN KEY (graph_id) REFERENCES public.graphs(id) ON DELETE CASCADE;
-
-
---
--- TOC entry 3489 (class 2606 OID 18106)
--- Name: edges edges_to_node_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_to_node_id_fkey FOREIGN KEY (to_node_id) REFERENCES public.nodes(id) ON DELETE CASCADE;
-
-
---
--- TOC entry 3490 (class 2606 OID 18111)
--- Name: nodes nodes_graph_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.nodes
-    ADD CONSTRAINT nodes_graph_id_fkey FOREIGN KEY (graph_id) REFERENCES public.graphs(id) ON DELETE CASCADE;
-
-
--- Completed on 2026-07-05 12:23:04 EDT
-
---
--- PostgreSQL database dump complete
---
-
+CREATE TABLE public.edges (
+    id text NOT NULL,
+    graph_id integer NOT NULL,
+    from_node_id text NOT NULL,
+    to_node_id text NOT NULL,
+    kind text NOT NULL,
+    importance_to_parent numeric(10,3) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT edges_pkey PRIMARY KEY (graph_id, id),
+    CONSTRAINT edges_graph_id_fkey
+        FOREIGN KEY (graph_id) REFERENCES public.graphs(id) ON DELETE CASCADE,
+    CONSTRAINT edges_from_node_id_fkey
+        FOREIGN KEY (graph_id, from_node_id)
+        REFERENCES public.nodes(graph_id, id) ON DELETE CASCADE,
+    CONSTRAINT edges_to_node_id_fkey
+        FOREIGN KEY (graph_id, to_node_id)
+        REFERENCES public.nodes(graph_id, id) ON DELETE CASCADE,
+    CONSTRAINT ck_edges_importance_to_parent
+        CHECK (importance_to_parent > 0 AND importance_to_parent <= 10),
+    CONSTRAINT ck_edges_kind
+        CHECK (kind = ANY (ARRAY['support'::text, 'rebut'::text])),
+    CONSTRAINT ck_edges_not_self CHECK (from_node_id <> to_node_id)
+);
+
+-- Graph 1 remains the first/default database graph.
+INSERT INTO public.graphs (id, slug, title, description, created_at, updated_at) OVERRIDING SYSTEM VALUE VALUES (1, 'sample-medium', 'Sample Medium Reasoning Graph', 'Seed graph based on the sample TypeScript dataset.', '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
+
+-- The large graph is database-only and is intended for scale/layout testing.
+INSERT INTO public.graphs (id, slug, title, description, created_at, updated_at) OVERRIDING SYSTEM VALUE VALUES
+    (2, 'flat-earth-large', 'Large Flat-Earth Reasoning Graph', 'Scale example adapted from graphmap/src/fixtures/dataMin02.ts.', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00');
+
+-- Original sample-medium nodes.
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('R1', 1, 'root', 'Earth is flat', 'The Earth is flat.', NULL, '{flat-earth,root}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('P3', 1, 'claim', 'Airplane windows do not show obvious curve', 'Commercial flights rarely present a visibly curved horizon to passengers.', 'visual-observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('E4', 1, 'evidence', 'Balloon video clips', 'Selected balloon footage is cited as evidence that curvature is not obvious.', NULL, '{}', 0, 0, '{"type": "video", "score": 0.5}', '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('C4', 1, 'claim', 'Long-distance visibility seems too great', 'Distant objects are visible farther away than expected on a globe.', 'distance-claims', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:01:29.123906-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('C5', 1, 'claim', 'Mainstream institutions coordinate the narrative', 'Agencies and institutions reinforce a globe narrative that should be questioned.', 'meta-claim', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:01:54.030317-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('C3', 1, 'claim', 'No obvious curvature from altitude', 'Images from balloons and planes do not show obvious curvature.', 'visual-observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:02:34.463307-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('C2', 1, 'claim', 'Water finds level', 'Water seeks its level and should not conform to a sphere.', 'physical-intuition', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:02:52.478407-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('C1', 1, 'claim', 'The horizon looks flat', 'The horizon appears flat to everyday observation.', 'observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:22.744861-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('E1', 1, 'evidence', 'Photographs from beaches', 'Collections of beach and ocean photographs are cited as visual support.', NULL, '{}', 0, 0, '{"type": "observational", "score": 50.0, "rationale": "Visual examples are easy to gather but hard to interpret precisely."}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:43.314014-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('P1', 1, 'claim', 'Beach and ocean horizons appear straight', 'At sea level, the horizon usually appears flat and level.', 'observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:59.477542-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O1', 1, 'objection', 'Human perception is a poor curvature detector', 'At normal scales, human vision is not a reliable way to detect Earth''s curvature.', 'visual-limit', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:04:16.680417-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('E2', 1, 'evidence', 'Canal observations', 'Flat-earth arguments often cite calm water surfaces and canal observations.', NULL, '{}', 0, 0, '{"type": "observational", "score": 50.0}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:04:47.567307-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('P2', 1, 'claim', 'Canals and lakes look level', 'Large bodies of water appear level over long distances.', 'observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:05:05.810595-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O3', 1, 'objection', 'Water level locally does not imply global flatness', 'A surface can be locally level while still conforming to a sphere.', 'geometry', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:06:39.992308-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('E3', 1, 'evidence', 'Passenger flight photos', 'Passenger photos and videos from aircraft are used as support.', NULL, '{}', 0, 0, '{"type": "video", "score": 50.0}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:14.506006-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O4', 1, 'objection', 'Camera lenses can distort curvature', 'Lens choice, framing, and post-processing can affect whether curvature appears visible.', 'imaging', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:37.892403-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('P4', 1, 'claim', 'Balloon footage can look flat', 'Some high-altitude footage appears to show a flat horizon.', 'visual-observation', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:07.898273-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O5', 1, 'objection', 'Balloon footage is not a controlled measurement', 'Anecdotal video clips are weaker than calibrated measurement.', 'methodology', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:45.158589-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O9', 1, 'objection', 'Multiple support branches rely on the same observational weakness', 'Several flat-earth arguments share the same limitations of casual observation.', 'cross-cutting', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:13.143537-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('E5', 1, 'evidence', 'Long-distance photo examples', 'Photos of distant buildings and mountains are used to argue visibility is too great.', NULL, '{}', 0, 0, '{"type": "observational", "score": 50.0}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:45.311653-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('E6', 1, 'evidence', 'Amateur measurement experiments', 'Laser tests, zoom tests, and line-of-sight measurements are cited in support.', NULL, '{}', 0, 0, '{"type": "experimental", "score": 50.0}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:04.425045-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('P5', 1, 'claim', 'Distant skylines remain visible', 'Some city skylines or mountains appear visible from surprising distances.', 'distance-claims', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:18.391606-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('P6', 1, 'claim', 'Laser and line-of-sight tests look level', 'Some amateur tests report level measurements over water.', 'measurement', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:53.474823-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O8', 1, 'objection', 'Institutional agreement is not by itself evidence of conspiracy', 'Broad agreement can reflect converging evidence rather than coordinated deception.', 'meta-claim', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:25.937605-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O2', 1, 'objection', 'Atmospheric refraction affects visibility', 'Refraction can make distant objects appear higher or more visible than expected.', 'optics', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:48.190903-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O7', 1, 'objection', 'Amateur tests often lack controls', 'DIY experiments frequently omit calibration, repeatability, and environmental controls.', 'methodology', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:02.593103-04');
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES ('O6', 1, 'objection', 'Distance claims depend on elevation and hidden-height math', 'Visibility calculations depend on observer height, object height, and atmospheric conditions.', 'geometry', '{}', 0, 0, '{}', '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:30.934642-04');
+
+-- Converted flat-earth-large nodes (96 total).
+INSERT INTO public.nodes (id, graph_id, kind, title, body_text, category, tags, prior_odds, posterior_odds, evidence, created_at, updated_at) VALUES
+    ('the-earth-is-flat', 2, 'root', 'The Earth is Flat', 'The Earth is Flat', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('bodies-of-water-are-level', 2, 'claim', 'Bodies of water are level', 'Large bodies of water, such as lakes and oceans, maintain a flat surface and show no visible or measurable curvature, contradicting the expected curvature on a spherical Earth.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('level-lakes-and-water-surfaces', 2, 'claim', 'Level lakes and water surfaces', 'Lakes and other large bodies of standing water remain perfectly level from end to end. If the Earth were a globe, there would be a noticeable curve across long distances — yet no such curvature is ever observed.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('horizon-rises-to-eye-level', 2, 'evidence', 'Horizon rises to eye-level', 'High-altitude observations consistently show that the horizon rises to eye level, no matter how high you go. This proves the Earth is flat, because on a globe the horizon would drop significantly as altitude increases.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"High-altitude observations consistently show that the horizon rises to eye level, no matter how high you go. This proves the Earth is flat, because on a globe the horizon would drop significantly as altitude increases.\n\n**Note:** Source: https://flatearth.ws/water-level"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('distant-ships-remain-visible', 2, 'claim', 'Distant ships remain visible', 'Ships that should be hidden by the curve of the Earth are often visible from shore at distances far beyond what globe geometry predicts. This proves the water is flat and not curved away from the observer.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('nikon-zoom-reveals-ship', 2, 'evidence', 'Nikon zoom reveals ship', 'Using a powerful Nikon zoom camera, ships that appear to have disappeared over the horizon can be brought back into full view. This shows that they were never hidden by Earth''s curvature — only lost to perspective.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Using a powerful Nikon zoom camera, ships that appear to have disappeared over the horizon can be brought back into full view. This shows that they were never hidden by Earth''s curvature — only lost to perspective.\n\n**Note:** Source: https://www.youtube.com/watch?v=rVXz9O7CZ74"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('standing-water-experiments', 2, 'claim', 'Standing water experiments', 'Carefully conducted experiments involving still water over long distances — such as canals or aqueducts — have shown no curvature. These tests prove that water maintains a level surface, not a curved one.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('rowbotham-canal-test', 2, 'evidence', 'Rowbotham canal test', 'In the Bedford Level experiment, Samuel Rowbotham observed a six-mile stretch of canal through a telescope placed at water level. He saw no curvature — demonstrating that water remains perfectly flat.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"In the Bedford Level experiment, Samuel Rowbotham observed a six-mile stretch of canal through a telescope placed at water level. He saw no curvature — demonstrating that water remains perfectly flat.\n\n**Note:** Source: https://archive.org/details/earthnotaglobe00rowb/page/n9/mode/2up"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('trust-your-senses', 2, 'claim', 'Trust your senses', 'Our direct, personal experiences of the world tell us that the Earth is flat, stationary, and motionless. These firsthand observations are more reliable than complex models, government data, or doctored space photos.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('flat-horizon-at-altitude', 2, 'claim', 'Flat horizon at altitude', 'No matter how high you go — in planes, balloons, or rockets — the horizon always appears flat. This matches what we observe with our eyes and proves we are on a level surface, not a curved one.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('crow777-balloon-footage', 2, 'evidence', 'Crow777 balloon footage', 'Balloon camera footage reaching over 100,000 feet shows an unbroken flat horizon in all directions. This visual evidence confirms what we see with our own eyes — that Earth is not curved.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Balloon camera footage reaching over 100,000 feet shows an unbroken flat horizon in all directions. This visual evidence confirms what we see with our own eyes — that Earth is not curved.\n\n**Note:** Source: https://www.youtube.com/watch?v=fB1d5C3bK0k"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-feeling-of-earths-motion', 2, 'claim', 'No feeling of Earth''s motion', 'We are told the Earth spins at 1,000 mph and orbits the sun at 67,000 mph, yet we feel nothing. There is no wind, no vibration, no indication of this motion — proving the Earth is stationary.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('stillness-proves-no-motion', 2, 'evidence', 'Stillness proves no motion', 'The complete lack of any perceived motion — even over a lifetime — shows that the Earth is not spinning, rotating, or hurtling through space. If it were, we would feel or observe something.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"The complete lack of any perceived motion — even over a lifetime — shows that the Earth is not spinning, rotating, or hurtling through space. If it were, we would feel or observe something.\n\n**Note:** Source: https://flatearth.ws/no-sensation"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('ancient-flat-earth-beliefs', 2, 'claim', 'Ancient flat Earth beliefs', 'Ancient civilizations across the world described the Earth as flat and motionless. These cultures relied on direct observation, untainted by modern propaganda or space narratives.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('ancient-flat-earth-texts', 2, 'evidence', 'Ancient flat Earth texts', 'From the Babylonians to early Hebrews, ancient texts and cosmologies described a flat Earth enclosed by the sky. These accounts reflect what people naturally observed in their world.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"From the Babylonians to early Hebrews, ancient texts and cosmologies described a flat Earth enclosed by the sky. These accounts reflect what people naturally observed in their world.\n\n**Note:** Source: https://www.britannica.com/topic/flat-Earth-theory"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-observable-curvature', 2, 'claim', 'No observable curvature', 'Despite traveling or viewing across great distances, no curvature is ever observed. This directly contradicts what we should see on a spherical Earth.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('distant-skyline-visibility', 2, 'claim', 'Distant skyline visibility', 'Distant cities and skylines are often visible from across large bodies of water where they should be hidden by Earth''s curvature. Their visibility proves the Earth’s surface is not curving away.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('skiba-p900-skyline-footage', 2, 'evidence', 'Skiba P900 skyline footage', 'Using a Nikon P900, Rob Skiba filmed the Chicago skyline from over 50 miles away across Lake Michigan. Most of the skyline is clearly visible when it should be hidden behind the curve.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Using a Nikon P900, Rob Skiba filmed the Chicago skyline from over 50 miles away across Lake Michigan. Most of the skyline is clearly visible when it should be hidden behind the curve.\n\n**Note:** Source: https://www.youtube.com/watch?v=3r2mEOD9jYU"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('ditrh-oil-rig-video', 2, 'evidence', 'DITRH oil rig video', 'Oil rigs have been photographed from over 30 miles away off the Gulf Coast, with their full structures visible. These distances contradict globe curvature calculations.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Oil rigs have been photographed from over 30 miles away off the Gulf Coast, with their full structures visible. These distances contradict globe curvature calculations.\n\n**Note:** Source: https://www.youtube.com/watch?v=zhI5KfO_YzQ"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('flat-water-surface-bedford', 2, 'claim', 'Flat water surface (Bedford)', 'The Bedford Level experiment showed no curvature over a 6-mile canal stretch. This proves that water maintains a flat surface and does not curve with the Earth.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('rowbotham-bedford-experiment', 2, 'evidence', 'Rowbotham Bedford experiment', 'Rowbotham observed a distant object through a telescope placed just above water level and saw no curvature over six miles. This was published in *Zetetic Astronomy: Earth Not a Globe*.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"Rowbotham observed a distant object through a telescope placed just above water level and saw no curvature over six miles. This was published in *Zetetic Astronomy: Earth Not a Globe*.\n\n**Note:** Source: https://archive.org/details/earthnotaglobe00rowb/page/n9/mode/2up"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('flat-horizon-in-high-footage', 2, 'claim', 'Flat horizon in high footage', 'Footage from high-altitude balloons and rockets consistently shows a flat horizon in all directions, even above 100,000 feet. This directly contradicts the expected curvature of a globe.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('crow777-balloon-footage-2', 2, 'evidence', 'Crow777 balloon footage', 'Footage from a high-altitude balloon launched by Crow777 shows an uninterrupted, flat horizon at altitudes above 100,000 feet. No curvature is visible.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Footage from a high-altitude balloon launched by Crow777 shows an uninterrupted, flat horizon at altitudes above 100,000 feet. No curvature is visible.\n\n**Note:** Source: https://www.youtube.com/watch?v=fB1d5C3bK0k"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('jaronism-rocket-footage', 2, 'evidence', 'Jaronism rocket footage', 'Footage from an amateur rocket launch shows a flat horizon from extreme altitude, with no visible curvature even in panoramic view.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Footage from an amateur rocket launch shows a flat horizon from extreme altitude, with no visible curvature even in panoramic view.\n\n**Note:** Source: https://www.youtube.com/watch?v=5qMJGybHdu0"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('telescope-restores-ships', 2, 'claim', 'Telescope restores ships', 'Ships that appear to disappear over the curve of the Earth can be brought back into full view by zooming in with a telescope or high-powered camera. This proves they were never hidden by curvature — just too far to see with the naked eye.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('zoom-refutes-over-curve', 2, 'evidence', 'Zoom refutes "over curve"', 'By using a strong zoom lens or telescope, observers have demonstrated that boats which “vanished” over the horizon can be brought back into view. This challenges the idea that they were hidden behind curvature.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"By using a strong zoom lens or telescope, observers have demonstrated that boats which “vanished” over the horizon can be brought back into view. This challenges the idea that they were hidden behind curvature.\n\n**Note:** Source: https://www.youtube.com/watch?v=rVXz9O7CZ74"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('horizon-always-at-eye-level', 2, 'claim', 'Horizon always at eye level', 'No matter how high one ascends — in planes, balloons, or rockets — the horizon always appears to rise to eye level. If Earth were a globe, the horizon would drop lower with increased altitude.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('pilots-see-level-horizon', 2, 'claim', 'Pilots see level horizon', 'Pilots consistently report that the horizon appears flat and at eye level throughout flight, even at high altitudes. This contradicts the expected drop of the horizon on a curved Earth.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('flat-earth-pilot-claims', 2, 'evidence', 'Flat Earth pilot claims', 'Commercial and military pilots have stated in interviews that they never see a curved horizon and never have to tilt the nose of the aircraft downward to follow Earth’s curve.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Commercial and military pilots have stated in interviews that they never see a curved horizon and never have to tilt the nose of the aircraft downward to follow Earth’s curve.\n\n**Note:** Source: https://www.youtube.com/watch?v=82p-DYgGFjI"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('balloon-footage-shows-level', 2, 'claim', 'Balloon footage shows level', 'High-altitude balloon footage shows that the horizon stays flat and level, even at altitudes above 100,000 feet. This is consistent with a flat Earth.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('horizon-stays-level', 2, 'evidence', 'Horizon stays level', 'Footage from ascending balloon cameras shows the horizon maintaining a straight, flat line throughout the climb — never curving or dropping as altitude increases.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Footage from ascending balloon cameras shows the horizon maintaining a straight, flat line throughout the climb — never curving or dropping as altitude increases.\n\n**Note:** Source: https://www.youtube.com/watch?v=34DHvFCk_M4"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('planes-dont-pitch-for-curve', 2, 'claim', 'Planes don’t pitch for curve', 'Planes maintain level flight without constantly adjusting the nose downward to compensate for curvature. If Earth were a globe, a downward pitch would be required to stay on course.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('flat-flight-flat-earth', 2, 'evidence', 'Flat flight = flat Earth', 'Aircraft travel long distances at consistent altitudes without adjusting for Earth’s curvature. Flat Earth proponents say this shows the Earth is not curved.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Aircraft travel long distances at consistent altitudes without adjusting for Earth’s curvature. Flat Earth proponents say this shows the Earth is not curved.\n\n**Note:** Source: https://flatearth.ws/aircraft-pitch-down"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('skydivers-see-eye-level-line', 2, 'claim', 'Skydivers see eye-level line', 'Skydivers consistently observe that the horizon remains at eye level throughout freefall. Even from extreme altitudes, they do not see the horizon drop.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('eye-level-in-freefall', 2, 'evidence', 'Eye-level in freefall', 'Helmet-cam footage from skydivers shows the horizon consistently at eye level, with no drop as they descend — reinforcing claims of a flat plane.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Helmet-cam footage from skydivers shows the horizon consistently at eye level, with no drop as they descend — reinforcing claims of a flat plane.\n\n**Note:** Source: https://flatearth.ws/skydiving"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-horizon-drop-at-35k-ft', 2, 'claim', 'No horizon drop at 35k ft', 'At typical cruising altitudes (e.g. 35,000 feet), no measurable drop in the horizon is observed. On a globe, a several-degree dip should be detectable.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('horizon-dip-never-seen', 2, 'evidence', 'Horizon dip never seen', 'Flat Earth proponents argue that repeated measurements and footage from cruising altitude fail to show the 3° drop expected on a globe.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Flat Earth proponents argue that repeated measurements and footage from cruising altitude fail to show the 3° drop expected on a globe.\n\n**Note:** Source: https://www.youtube.com/watch?v=VjPnhKs6M6o"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('airplane-paths-fit-flat-map', 2, 'claim', 'Airplane paths fit flat map', 'Some long-distance flights make more sense when plotted on a flat Earth map than on a globe. Detours, layovers, and odd emergency landings are easier to explain using a flat map, suggesting the flat Earth model reflects real geography.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('southern-flights-go-north', 2, 'claim', 'Southern flights go north', 'Flights between Southern Hemisphere locations often include long layovers in the Northern Hemisphere. This doesn''t make sense on a globe but matches a flat Earth layout.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('flat-map-explains-route', 2, 'evidence', 'Flat map explains route', 'Routes that look curved or illogical on a globe appear as straight lines on the azimuthal equidistant flat Earth map — confirming the flat model’s accuracy.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Routes that look curved or illogical on a globe appear as straight lines on the azimuthal equidistant flat Earth map — confirming the flat model’s accuracy.\n\n**Note:** Source: https://www.youtube.com/watch?v=O-Mc7f8kczM"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-south-polar-flights-exist', 2, 'claim', 'No south polar flights exist', 'There are no direct commercial flights across the southern oceans, such as from South America to Australia. This suggests the distances are far greater than the globe model claims.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-direct-south-flights', 2, 'evidence', 'No direct south flights', 'The absence of direct flights across the Southern Hemisphere is presented as evidence that the continents are not positioned as shown on a globe.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"The absence of direct flights across the Southern Hemisphere is presented as evidence that the continents are not positioned as shown on a globe.\n\n**Note:** Source: https://flatearth.ws/no-nonstop-south"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('flat-map-fits-real-routes', 2, 'claim', 'Flat map fits real routes', 'Many commercial flight routes make more sense when overlaid on the flat Earth azimuthal equidistant (AE) map. This includes major cross-continental flights.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('un-map-supports-flat-view', 2, 'evidence', 'UN map supports flat view', 'The UN flag and AE projection align with how flat Earthers represent the world. Flight paths follow more natural paths on this model.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"The UN flag and AE projection align with how flat Earthers represent the world. Flight paths follow more natural paths on this model.\n\n**Note:** Source: https://en.wikipedia.org/wiki/Azimuthal_equidistant_projection"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('odd-emergency-landings', 2, 'claim', 'Odd emergency landings', 'In-flight emergencies sometimes lead to landings in locations that make no sense on a globe — but align perfectly on a flat Earth map.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('landings-fit-flat-model', 2, 'evidence', 'Landings fit flat model', 'Planes in distress have diverted to airports that are far off course on a globe but directly aligned on a flat map, confirming flat Earth distances.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Planes in distress have diverted to airports that are far off course on a globe but directly aligned on a flat map, confirming flat Earth distances.\n\n**Note:** Source: https://flatearth101.com/flat-earth-flight-routes/"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('fuel-use-matches-flat-map', 2, 'claim', 'Fuel use matches flat map', 'The fuel consumption and travel times of some long-haul flights seem more consistent with flat Earth distances than those predicted by globe calculations.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('jet-fuel-math-supports-fe', 2, 'evidence', 'Jet fuel math supports FE', 'Flat Earth proponents claim that if the globe distances were correct, many flights would run out of fuel or arrive too early. The flat model explains actual times better.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Flat Earth proponents claim that if the globe distances were correct, many flights would run out of fuel or arrive too early. The flat model explains actual times better.\n\n**Note:** Source: https://flatearth.ws/fuel-load"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('space-imagery-is-unreliable', 2, 'claim', 'Space imagery is unreliable', 'Images and videos presented as proof of a globe Earth — especially from NASA and other space agencies — are heavily manipulated, inconsistent, or outright fabricated. These issues cast doubt on the entire globe narrative.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('nasa-fakes-earth-images', 2, 'claim', 'NASA fakes Earth images', 'NASA’s images of Earth are composites or CGI. They openly admit that many “photos” are stitched together from satellite data. This proves they aren''t showing actual photographs of a globe.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('nasa-image-confessions', 2, 'evidence', 'NASA image confessions', 'NASA designers like Robert Simmon have admitted that many iconic Earth images, such as the "Blue Marble," are computer-generated composites.', NULL, '{}'::text[], -0.84729786038720356, -0.84729786038720356, '{"type":"media-analysis","score":30,"rationale":"NASA designers like Robert Simmon have admitted that many iconic Earth images, such as the \"Blue Marble,\" are computer-generated composites.\n\n**Note:** Source: https://www.nasa.gov/image-feature/the-blue-marble"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('inconsistent-globe-photos', 2, 'claim', 'Inconsistent globe photos', 'Photos of Earth from space show varying continent sizes, cloud patterns, and even colors. If they were real photos, Earth’s appearance should be consistent.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('size-mismatch-photos', 2, 'evidence', 'Size mismatch photos', 'Comparisons of Earth images from NASA over the years show continents appearing at different scales. This inconsistency suggests the images are fabricated.', NULL, '{}'::text[], -0.84729786038720356, -0.84729786038720356, '{"type":"media-analysis","score":30,"rationale":"Comparisons of Earth images from NASA over the years show continents appearing at different scales. This inconsistency suggests the images are fabricated.\n\n**Note:** Source: https://flatearth.ws/earth-size"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('iss-footage-contains-errors', 2, 'claim', 'ISS footage contains errors', 'Footage from the International Space Station contains anomalies like harnesses, bubbles, or green-screen glitches — all signs that it’s staged.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('iss-glitch-videos', 2, 'evidence', 'ISS glitch videos', 'Slow-motion reviews of ISS footage reveal strange artifacts like harnesses, air bubbles, and disappearing props — suggesting studio fakery.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Slow-motion reviews of ISS footage reveal strange artifacts like harnesses, air bubbles, and disappearing props — suggesting studio fakery.\n\n**Note:** Source: https://www.youtube.com/watch?v=r3S0wu4Zbfk"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-real-photos-of-earth', 2, 'claim', 'No real photos of Earth', 'Despite decades of space travel, there are almost no genuine photos of the full Earth from space — only composites or artistic renderings.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('rare-globe-shots', 2, 'evidence', 'Rare globe shots', 'Flat Earth sources claim that photos of the entire Earth are suspiciously rare and often acknowledged to be non-photographic composites.', NULL, '{}'::text[], -0.84729786038720356, -0.84729786038720356, '{"type":"media-analysis","score":30,"rationale":"Flat Earth sources claim that photos of the entire Earth are suspiciously rare and often acknowledged to be non-photographic composites.\n\n**Note:** Source: https://flatearth.ws/earth-photograph"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-live-earth-view-exists', 2, 'claim', 'No live Earth view exists', 'There is no continuous, unbroken live video feed showing the full spinning Earth from space. This absence is suspicious given modern tech.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-full-live-earth-feed', 2, 'evidence', 'No full live Earth feed', 'Despite 24/7 satellite surveillance and space missions, there is no continuous live video feed showing the entire Earth spinning in real time — only short clips or partial views.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Despite 24/7 satellite surveillance and space missions, there is no continuous live video feed showing the entire Earth spinning in real time — only short clips or partial views.\n\n**Note:** Source: https://flatearth.ws/live-feed"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('conflicting-agency-claims', 2, 'claim', 'Conflicting agency claims', 'Space agencies give conflicting accounts about whether Earth is visible from the Moon. These contradictions cast doubt on the validity of all space imagery.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('moon-view-contradictions', 2, 'evidence', 'Moon view contradictions', 'Some space agency officials claim the Earth is visible from the Moon, while others say it''s not. These contradictions undermine the credibility of official space narratives.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Some space agency officials claim the Earth is visible from the Moon, while others say it''s not. These contradictions undermine the credibility of official space narratives.\n\n**Note:** Source: https://flatearth.ws/viewing-earth-from-moon"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('antarctica-is-off-limits', 2, 'claim', 'Antarctica is off-limits', 'Access to Antarctica is highly restricted, with severe travel limitations enforced by international treaties. Flat Earthers claim this prevents independent verification of the continent''s true nature — possibly concealing the edge of the world.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('travel-is-restricted', 2, 'claim', 'Travel is restricted', 'Ordinary people can''t freely travel across Antarctica. Permits are required, access is limited, and independent exploration is nearly impossible.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('tour-limits-exist', 2, 'evidence', 'Tour limits exist', 'Most visitors only see the coast via guided cruises. They cannot explore deep inland or navigate the full continent on their own.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Most visitors only see the coast via guided cruises. They cannot explore deep inland or navigate the full continent on their own.\n\n**Note:** Source: https://flatearth.ws/antarctic-tour"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('antarctic-treaty-blocks-access', 2, 'claim', 'Antarctic Treaty blocks access', 'The Antarctic Treaty forbids any independent exploration or activity without government approval. Flat Earthers claim this treaty was created to prevent people from discovering the truth.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('treaty-restricts-travel', 2, 'evidence', 'Treaty restricts travel', 'The Antarctic Treaty mandates that all activities be pre-approved and monitored. Independent, unsupervised exploration is not allowed.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"The Antarctic Treaty mandates that all activities be pre-approved and monitored. Independent, unsupervised exploration is not allowed.\n\n**Note:** Source: https://www.ats.aq/e/ats.htm"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('military-patrols-exist', 2, 'claim', 'Military patrols exist', 'Flat Earthers claim military forces guard the Antarctic perimeter and intercept unauthorized expeditions. This is said to prevent people from reaching the ice wall.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('patrol-rumors', 2, 'evidence', 'Patrol rumors', 'Claims exist that unauthorized boats or flights have been intercepted by military patrols when approaching the Antarctic boundary.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Claims exist that unauthorized boats or flights have been intercepted by military patrols when approaching the Antarctic boundary.\n\n**Note:** Common on conspiracy blogs and flat Earth documentaries."}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('nasa-is-deceptive', 2, 'claim', 'NASA is deceptive', 'NASA’s control over space exploration and imagery gives them unique power to shape the globe Earth narrative. Flat Earthers argue that NASA actively deceives the public through staged footage, CGI, and unverifiable claims.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('astronauts-caught-faking', 2, 'claim', 'Astronauts caught faking', 'Astronauts have been caught using harnesses, green screens, and props — exposing spacewalks and ISS footage as staged.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('iss-blooper-footage', 2, 'evidence', 'ISS blooper footage', 'Footage shows astronauts grabbing invisible wires, slipping on harnesses, and reacting to objects that don’t exist — all signs of studio fakery.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Footage shows astronauts grabbing invisible wires, slipping on harnesses, and reacting to objects that don’t exist — all signs of studio fakery.\n\n**Note:** Source: https://www.youtube.com/watch?v=r3S0wu4Zbfk"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('nasa-logo-symbolism', 2, 'claim', 'NASA logo symbolism', 'NASA’s “swoosh” resembles a serpent’s tongue and that the acronym hides occult meaning, suggesting secretive intent.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('nasa-logo-analyzed', 2, 'evidence', 'NASA logo analyzed', 'Videos dissect the NASA logo, interpreting the red vector and letter styling as encoded messages revealing the agency’s agenda.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"video","score":40,"rationale":"Videos dissect the NASA logo, interpreting the red vector and letter styling as encoded messages revealing the agency’s agenda.\n\n**Note:** Source: https://www.youtube.com/watch?v=aUgoN0rWu1o"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('recycled-props-and-actors', 2, 'claim', 'Recycled props and actors', 'The same studio props appear in different missions, and even actors are reused across decades, suggesting staged productions.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('duplicate-gear-claims', 2, 'evidence', 'Duplicate gear claims', 'Screenshots show matching equipment and backgrounds used in “different” space missions. This is presented as evidence of reused sets.', NULL, '{}'::text[], -0.84729786038720356, -0.84729786038720356, '{"type":"media-analysis","score":30,"rationale":"Screenshots show matching equipment and backgrounds used in “different” space missions. This is presented as evidence of reused sets.\n\n**Note:** Source: https://flatearth.ws/recycled"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-sensation-of-movement', 2, 'claim', 'No sensation of movement', 'If Earth were rotating at 1,000 mph and orbiting the Sun at 67,000 mph, we should feel that motion. The complete lack of physical sensation contradicts the heliocentric model and supports a stationary, flat Earth.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-feeling-of-earth-spin', 2, 'claim', 'No feeling of Earth spin', 'We are told the Earth spins over 1,000 mph at the equator, yet we feel absolutely nothing. If such motion existed, it should produce noticeable physical effects.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-spin-sensation', 2, 'evidence', 'No spin sensation', 'We can feel the motion of a car or a rollercoaster, yet we feel nothing on Earth despite its supposed high-speed spin. This contradicts lived experience.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"We can feel the motion of a car or a rollercoaster, yet we feel nothing on Earth despite its supposed high-speed spin. This contradicts lived experience.\n\n**Note:** Source: https://flatearth.ws/no-sensation"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-feeling-of-orbit-speed', 2, 'claim', 'No feeling of orbit speed', 'The Earth allegedly travels around the Sun at 67,000 mph, yet we feel no change in speed, direction, or acceleration. Such extreme motion should be detectable.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('undetectable-orbit', 2, 'evidence', 'Undetectable orbit', 'Flat Earth sources argue that no physical sensation, experiment, or observation proves Earth''s orbit — undermining the heliocentric model.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"Flat Earth sources argue that no physical sensation, experiment, or observation proves Earth''s orbit — undermining the heliocentric model.\n\n**Note:** Source: https://flatearth.ws/earth-orbit-speed"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('coriolis-inconsistencies', 2, 'claim', 'Coriolis inconsistencies', 'The Coriolis effect is said to influence weather and artillery, yet it is not applied consistently in aviation or long-range projectile calculations. This suggests Earth is not rotating.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('coriolis-contradiction', 2, 'evidence', 'Coriolis contradiction', 'Pilots are not adjusting for Earth rotation during long flights, proof that the Coriolis effect is fabricated or misunderstood.', NULL, '{}'::text[], -0.40546510810816427, -0.40546510810816427, '{"type":"observational","score":40,"rationale":"Pilots are not adjusting for Earth rotation during long flights, proof that the Coriolis effect is fabricated or misunderstood.\n\n**Note:** Source: https://flatearth.ws/coriolis"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('ancient-flat-earth-beliefs-2', 2, 'claim', 'Ancient flat Earth beliefs', 'Ancient civilizations across the world described the Earth as flat — not as a globe. These enduring cosmologies point to a long-standing understanding that aligns with flat Earth, not modern heliocentrism.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('babylonian-earth-model', 2, 'claim', 'Babylonian Earth model', 'Babylonian cosmology described the Earth as a flat disk beneath a solid sky dome. This model persisted for centuries and contradicts modern globe teachings.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('babylonian-model', 2, 'evidence', 'Babylonian model', 'Babylonian texts and diagrams depict a flat Earth covered by a dome-like firmament, with celestial bodies moving in fixed paths overhead.', NULL, '{}'::text[], -0.61903920840622351, -0.61903920840622351, '{"type":"textual","score":35,"rationale":"Babylonian texts and diagrams depict a flat Earth covered by a dome-like firmament, with celestial bodies moving in fixed paths overhead.\n\n**Note:** Source: https://www.worldhistory.org/Flat_Earth_Model/"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('hebrew-firmament-texts', 2, 'claim', 'Hebrew firmament texts', 'Biblical cosmology describes a firm, domed sky separating the waters above from the Earth below, with the Sun and Moon moving within this firmament.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('genesis-firmament', 2, 'evidence', 'Genesis firmament', 'Genesis 1:6–8 describes a firmament created to divide the waters and hold the stars, consistent with a flat Earth worldview.', NULL, '{}'::text[], -0.61903920840622351, -0.61903920840622351, '{"type":"textual","score":35,"rationale":"Genesis 1:6–8 describes a firmament created to divide the waters and hold the stars, consistent with a flat Earth worldview.\n\n**Note:** Source: https://biblehub.com/genesis/1-6.htm"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('egyptian-earth-model', 2, 'claim', 'Egyptian Earth model', 'Ancient Egyptian cosmology depicted the Earth as flat with the goddess Nut arching overhead, forming the sky. The Sun traveled across her body during the day and underneath at night.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('nut-sky-goddess', 2, 'evidence', 'Nut sky goddess', 'Egyptian artwork shows Nut’s arched body spanning over a flat landscape — representing the dome of the heavens over a flat Earth.', NULL, '{}'::text[], -0.61903920840622351, -0.61903920840622351, '{"type":"textual","score":35,"rationale":"Egyptian artwork shows Nut’s arched body spanning over a flat landscape — representing the dome of the heavens over a flat Earth.\n\n**Note:** Source: https://www.worldhistory.org/Nut/"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('failed-motion-experiments', 2, 'claim', 'Failed motion experiments', 'For centuries, scientists have tried to detect Earth''s motion through space using precise instruments and experiments — and failed. These null results support the conclusion that Earth is stationary.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('michelsonmorley-test', 2, 'claim', 'Michelson–Morley test', 'The Michelson–Morley experiment attempted to detect Earth''s motion through the "aether" by measuring shifts in light speed — but found no variation. This is proof the Earth is not moving.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('no-ether-drift-found', 2, 'evidence', 'No ether drift found', 'Despite high precision, the Michelson–Morley results showed no shift in interference patterns, confirming Earth’s lack of motion.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"Despite high precision, the Michelson–Morley results showed no shift in interference patterns, confirming Earth’s lack of motion.\n\n**Note:** Source: https://www.britannica.com/science/Michelson-Morley-experiment"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('airys-test', 2, 'claim', 'Airy’s test', 'In an attempt to measure Earth’s motion via stellar aberration, George Airy found no difference in starlight behavior whether water-filled or air-filled telescopes were used. The result implies Earth does not move.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('aberration-test', 2, 'evidence', 'Aberration test', 'The unchanged angle of starlight in Airy’s experiment proved that Earth wasn’t moving relative to the stars.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"The unchanged angle of starlight in Airy’s experiment proved that Earth wasn’t moving relative to the stars.\n\n**Note:** Source: https://flatearth.ws/airys-failure"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('sagnac-proves-flat-earth', 2, 'claim', 'Sagnac proves flat Earth', 'The Sagnac effect shows light speed varies depending on rotation — but instead of proving Earth’s motion, it aligns better with a fixed Earth and rotating celestial system.', NULL, '{}'::text[], 0, 0, NULL, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('sagnac-used-for-gps', 2, 'evidence', 'Sagnac used for GPS', 'Modern systems like GPS account for the Sagnac effect without requiring Earth to move — evidence that supports a fixed Earth model.', NULL, '{}'::text[], -0.20067069546215124, -0.20067069546215124, '{"type":"experimental","score":45,"rationale":"Modern systems like GPS account for the Sagnac effect without requiring Earth to move — evidence that supports a fixed Earth model.\n\n**Note:** Source: https://flatearth.ws/sagnac"}'::jsonb, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00');
+
+-- Original sample-medium edges.
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C3-P3', 1, 'P3', 'C3', 'support', 1, '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C3-E4', 1, 'E4', 'C3', 'support', 1, '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O1-P1', 1, 'O1', 'P1', 'rebut', 1, '2026-04-13 11:42:53.694065-04', '2026-04-13 11:42:53.694065-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-R-C4', 1, 'C4', 'R1', 'support', 7, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:01:29.131858-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-R-C5', 1, 'C5', 'R1', 'support', 3, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:01:54.039602-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-R-C3', 1, 'C3', 'R1', 'support', 2, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:02:34.463307-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-R-C2', 1, 'C2', 'R1', 'support', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:02:52.478407-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-R-C1', 1, 'C1', 'R1', 'support', 5, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:22.744863-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C1-E1', 1, 'E1', 'C1', 'support', 3, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:43.314014-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C1-P1', 1, 'P1', 'C1', 'support', 2, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:03:59.486207-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O1-C1', 1, 'O1', 'C1', 'rebut', 10, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:04:16.680376-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C2-E2', 1, 'E2', 'C2', 'support', 10, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:04:47.567154-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C2-P2', 1, 'P2', 'C2', 'support', 8, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:05:05.810578-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O3-P2', 1, 'O3', 'P2', 'rebut', 10, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:06:39.992305-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C3-E3', 1, 'E3', 'C3', 'support', 3, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:14.505983-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O4-E3', 1, 'O4', 'E3', 'rebut', 8, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:37.892759-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O4-E4', 1, 'O4', 'E4', 'rebut', 8, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:07:37.903067-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C3-P4', 1, 'P4', 'C3', 'support', 3, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:07.898937-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O5-P4', 1, 'O5', 'P4', 'rebut', 7, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:45.158857-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O5-E4', 1, 'O5', 'E4', 'rebut', 7, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:08:45.159191-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O9-C1', 1, 'O9', 'C1', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:13.144113-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O9-C3', 1, 'O9', 'C3', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:13.144171-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O9-C4', 1, 'O9', 'C4', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:13.15444-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C4-E5', 1, 'E5', 'C4', 'support', 6, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:09:45.312111-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C4-E6', 1, 'E6', 'C4', 'support', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:04.425036-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C4-P5', 1, 'P5', 'C4', 'support', 7, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:18.391606-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C4-P6', 1, 'P6', 'C4', 'support', 2, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:10:53.475264-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-C5-O8', 1, 'O8', 'C5', 'rebut', 8, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:25.938129-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O2-P5', 1, 'O2', 'P5', 'rebut', 5, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:48.19083-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O2-P6', 1, 'O2', 'P6', 'rebut', 5, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:11:48.192292-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O7-P6', 1, 'O7', 'P6', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:02.593273-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O7-E6', 1, 'O7', 'E6', 'rebut', 9, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:02.593272-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O6-P5', 1, 'O6', 'P5', 'rebut', 6, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:30.934387-04');
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES ('E-O6-C4', 1, 'O6', 'C4', 'rebut', 6, '2026-04-13 11:42:53.694065-04', '2026-07-05 12:12:30.939403-04');
+
+-- Converted flat-earth-large edges (95 total). Source parent-to-child edges are
+-- reversed here because this schema stores supporting child-to-parent edges.
+INSERT INTO public.edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent, created_at, updated_at) VALUES
+    ('e-the-earth-is-flat-bodies-of-water-are-level', 2, 'bodies-of-water-are-level', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-bodies-of-water-are-level-level-lakes-and-water-surfaces', 2, 'level-lakes-and-water-surfaces', 'bodies-of-water-are-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-level-lakes-and-water-surfaces-horizon-rises-to-eye-level', 2, 'horizon-rises-to-eye-level', 'level-lakes-and-water-surfaces', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-bodies-of-water-are-level-distant-ships-remain-visible', 2, 'distant-ships-remain-visible', 'bodies-of-water-are-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-distant-ships-remain-visible-nikon-zoom-reveals-ship', 2, 'nikon-zoom-reveals-ship', 'distant-ships-remain-visible', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-bodies-of-water-are-level-standing-water-experiments', 2, 'standing-water-experiments', 'bodies-of-water-are-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-standing-water-experiments-rowbotham-canal-test', 2, 'rowbotham-canal-test', 'standing-water-experiments', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-trust-your-senses', 2, 'trust-your-senses', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-trust-your-senses-flat-horizon-at-altitude', 2, 'flat-horizon-at-altitude', 'trust-your-senses', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-flat-horizon-at-altitude-crow777-balloon-footage', 2, 'crow777-balloon-footage', 'flat-horizon-at-altitude', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-trust-your-senses-no-feeling-of-earths-motion', 2, 'no-feeling-of-earths-motion', 'trust-your-senses', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-feeling-of-earths-motion-stillness-proves-no-motion', 2, 'stillness-proves-no-motion', 'no-feeling-of-earths-motion', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-trust-your-senses-ancient-flat-earth-beliefs', 2, 'ancient-flat-earth-beliefs', 'trust-your-senses', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-ancient-flat-earth-beliefs-ancient-flat-earth-texts', 2, 'ancient-flat-earth-texts', 'ancient-flat-earth-beliefs', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-no-observable-curvature', 2, 'no-observable-curvature', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-observable-curvature-distant-skyline-visibility', 2, 'distant-skyline-visibility', 'no-observable-curvature', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-distant-skyline-visibility-skiba-p900-skyline-footage', 2, 'skiba-p900-skyline-footage', 'distant-skyline-visibility', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-distant-skyline-visibility-ditrh-oil-rig-video', 2, 'ditrh-oil-rig-video', 'distant-skyline-visibility', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-observable-curvature-flat-water-surface-bedford', 2, 'flat-water-surface-bedford', 'no-observable-curvature', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-flat-water-surface-bedford-rowbotham-bedford-experiment', 2, 'rowbotham-bedford-experiment', 'flat-water-surface-bedford', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-observable-curvature-flat-horizon-in-high-footage', 2, 'flat-horizon-in-high-footage', 'no-observable-curvature', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-flat-horizon-in-high-footage-crow777-balloon-footage-2', 2, 'crow777-balloon-footage-2', 'flat-horizon-in-high-footage', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-flat-horizon-in-high-footage-jaronism-rocket-footage', 2, 'jaronism-rocket-footage', 'flat-horizon-in-high-footage', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-observable-curvature-telescope-restores-ships', 2, 'telescope-restores-ships', 'no-observable-curvature', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-telescope-restores-ships-zoom-refutes-over-curve', 2, 'zoom-refutes-over-curve', 'telescope-restores-ships', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-horizon-always-at-eye-level', 2, 'horizon-always-at-eye-level', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-horizon-always-at-eye-level-pilots-see-level-horizon', 2, 'pilots-see-level-horizon', 'horizon-always-at-eye-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-pilots-see-level-horizon-flat-earth-pilot-claims', 2, 'flat-earth-pilot-claims', 'pilots-see-level-horizon', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-horizon-always-at-eye-level-balloon-footage-shows-level', 2, 'balloon-footage-shows-level', 'horizon-always-at-eye-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-balloon-footage-shows-level-horizon-stays-level', 2, 'horizon-stays-level', 'balloon-footage-shows-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-horizon-always-at-eye-level-planes-dont-pitch-for-curve', 2, 'planes-dont-pitch-for-curve', 'horizon-always-at-eye-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-planes-dont-pitch-for-curve-flat-flight-flat-earth', 2, 'flat-flight-flat-earth', 'planes-dont-pitch-for-curve', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-horizon-always-at-eye-level-skydivers-see-eye-level-line', 2, 'skydivers-see-eye-level-line', 'horizon-always-at-eye-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-skydivers-see-eye-level-line-eye-level-in-freefall', 2, 'eye-level-in-freefall', 'skydivers-see-eye-level-line', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-horizon-always-at-eye-level-no-horizon-drop-at-35k-ft', 2, 'no-horizon-drop-at-35k-ft', 'horizon-always-at-eye-level', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-horizon-drop-at-35k-ft-horizon-dip-never-seen', 2, 'horizon-dip-never-seen', 'no-horizon-drop-at-35k-ft', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-airplane-paths-fit-flat-map', 2, 'airplane-paths-fit-flat-map', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-airplane-paths-fit-flat-map-southern-flights-go-north', 2, 'southern-flights-go-north', 'airplane-paths-fit-flat-map', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-southern-flights-go-north-flat-map-explains-route', 2, 'flat-map-explains-route', 'southern-flights-go-north', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-airplane-paths-fit-flat-map-no-south-polar-flights-exist', 2, 'no-south-polar-flights-exist', 'airplane-paths-fit-flat-map', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-south-polar-flights-exist-no-direct-south-flights', 2, 'no-direct-south-flights', 'no-south-polar-flights-exist', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-airplane-paths-fit-flat-map-flat-map-fits-real-routes', 2, 'flat-map-fits-real-routes', 'airplane-paths-fit-flat-map', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-flat-map-fits-real-routes-un-map-supports-flat-view', 2, 'un-map-supports-flat-view', 'flat-map-fits-real-routes', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-airplane-paths-fit-flat-map-odd-emergency-landings', 2, 'odd-emergency-landings', 'airplane-paths-fit-flat-map', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-odd-emergency-landings-landings-fit-flat-model', 2, 'landings-fit-flat-model', 'odd-emergency-landings', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-airplane-paths-fit-flat-map-fuel-use-matches-flat-map', 2, 'fuel-use-matches-flat-map', 'airplane-paths-fit-flat-map', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-fuel-use-matches-flat-map-jet-fuel-math-supports-fe', 2, 'jet-fuel-math-supports-fe', 'fuel-use-matches-flat-map', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-space-imagery-is-unreliable', 2, 'space-imagery-is-unreliable', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-space-imagery-is-unreliable-nasa-fakes-earth-images', 2, 'nasa-fakes-earth-images', 'space-imagery-is-unreliable', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-nasa-fakes-earth-images-nasa-image-confessions', 2, 'nasa-image-confessions', 'nasa-fakes-earth-images', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-space-imagery-is-unreliable-inconsistent-globe-photos', 2, 'inconsistent-globe-photos', 'space-imagery-is-unreliable', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-inconsistent-globe-photos-size-mismatch-photos', 2, 'size-mismatch-photos', 'inconsistent-globe-photos', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-space-imagery-is-unreliable-iss-footage-contains-errors', 2, 'iss-footage-contains-errors', 'space-imagery-is-unreliable', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-iss-footage-contains-errors-iss-glitch-videos', 2, 'iss-glitch-videos', 'iss-footage-contains-errors', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-space-imagery-is-unreliable-no-real-photos-of-earth', 2, 'no-real-photos-of-earth', 'space-imagery-is-unreliable', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-real-photos-of-earth-rare-globe-shots', 2, 'rare-globe-shots', 'no-real-photos-of-earth', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-space-imagery-is-unreliable-no-live-earth-view-exists', 2, 'no-live-earth-view-exists', 'space-imagery-is-unreliable', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-live-earth-view-exists-no-full-live-earth-feed', 2, 'no-full-live-earth-feed', 'no-live-earth-view-exists', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-space-imagery-is-unreliable-conflicting-agency-claims', 2, 'conflicting-agency-claims', 'space-imagery-is-unreliable', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-conflicting-agency-claims-moon-view-contradictions', 2, 'moon-view-contradictions', 'conflicting-agency-claims', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-antarctica-is-off-limits', 2, 'antarctica-is-off-limits', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-antarctica-is-off-limits-travel-is-restricted', 2, 'travel-is-restricted', 'antarctica-is-off-limits', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-travel-is-restricted-tour-limits-exist', 2, 'tour-limits-exist', 'travel-is-restricted', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-antarctica-is-off-limits-antarctic-treaty-blocks-access', 2, 'antarctic-treaty-blocks-access', 'antarctica-is-off-limits', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-antarctic-treaty-blocks-access-treaty-restricts-travel', 2, 'treaty-restricts-travel', 'antarctic-treaty-blocks-access', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-antarctica-is-off-limits-military-patrols-exist', 2, 'military-patrols-exist', 'antarctica-is-off-limits', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-military-patrols-exist-patrol-rumors', 2, 'patrol-rumors', 'military-patrols-exist', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-nasa-is-deceptive', 2, 'nasa-is-deceptive', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-nasa-is-deceptive-astronauts-caught-faking', 2, 'astronauts-caught-faking', 'nasa-is-deceptive', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-astronauts-caught-faking-iss-blooper-footage', 2, 'iss-blooper-footage', 'astronauts-caught-faking', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-nasa-is-deceptive-nasa-logo-symbolism', 2, 'nasa-logo-symbolism', 'nasa-is-deceptive', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-nasa-logo-symbolism-nasa-logo-analyzed', 2, 'nasa-logo-analyzed', 'nasa-logo-symbolism', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-nasa-is-deceptive-recycled-props-and-actors', 2, 'recycled-props-and-actors', 'nasa-is-deceptive', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-recycled-props-and-actors-duplicate-gear-claims', 2, 'duplicate-gear-claims', 'recycled-props-and-actors', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-no-sensation-of-movement', 2, 'no-sensation-of-movement', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-sensation-of-movement-no-feeling-of-earth-spin', 2, 'no-feeling-of-earth-spin', 'no-sensation-of-movement', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-feeling-of-earth-spin-no-spin-sensation', 2, 'no-spin-sensation', 'no-feeling-of-earth-spin', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-sensation-of-movement-no-feeling-of-orbit-speed', 2, 'no-feeling-of-orbit-speed', 'no-sensation-of-movement', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-feeling-of-orbit-speed-undetectable-orbit', 2, 'undetectable-orbit', 'no-feeling-of-orbit-speed', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-no-sensation-of-movement-coriolis-inconsistencies', 2, 'coriolis-inconsistencies', 'no-sensation-of-movement', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-coriolis-inconsistencies-coriolis-contradiction', 2, 'coriolis-contradiction', 'coriolis-inconsistencies', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-ancient-flat-earth-beliefs-2', 2, 'ancient-flat-earth-beliefs-2', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-ancient-flat-earth-beliefs-2-babylonian-earth-model', 2, 'babylonian-earth-model', 'ancient-flat-earth-beliefs-2', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-babylonian-earth-model-babylonian-model', 2, 'babylonian-model', 'babylonian-earth-model', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-ancient-flat-earth-beliefs-2-hebrew-firmament-texts', 2, 'hebrew-firmament-texts', 'ancient-flat-earth-beliefs-2', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-hebrew-firmament-texts-genesis-firmament', 2, 'genesis-firmament', 'hebrew-firmament-texts', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-ancient-flat-earth-beliefs-2-egyptian-earth-model', 2, 'egyptian-earth-model', 'ancient-flat-earth-beliefs-2', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-egyptian-earth-model-nut-sky-goddess', 2, 'nut-sky-goddess', 'egyptian-earth-model', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-the-earth-is-flat-failed-motion-experiments', 2, 'failed-motion-experiments', 'the-earth-is-flat', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-failed-motion-experiments-michelsonmorley-test', 2, 'michelsonmorley-test', 'failed-motion-experiments', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-michelsonmorley-test-no-ether-drift-found', 2, 'no-ether-drift-found', 'michelsonmorley-test', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-failed-motion-experiments-airys-test', 2, 'airys-test', 'failed-motion-experiments', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-airys-test-aberration-test', 2, 'aberration-test', 'airys-test', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-failed-motion-experiments-sagnac-proves-flat-earth', 2, 'sagnac-proves-flat-earth', 'failed-motion-experiments', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00'),
+    ('e-sagnac-proves-flat-earth-sagnac-used-for-gps', 2, 'sagnac-used-for-gps', 'sagnac-proves-flat-earth', 'support', 1, TIMESTAMPTZ '2025-10-04 22:14:32.738720+00', TIMESTAMPTZ '2025-10-04 22:14:32.738720+00');
+
+CREATE INDEX ix_edges_from_node_id
+    ON public.edges USING btree (graph_id, from_node_id);
+CREATE INDEX ix_edges_graph_id
+    ON public.edges USING btree (graph_id);
+CREATE INDEX ix_edges_kind
+    ON public.edges USING btree (kind);
+CREATE INDEX ix_edges_to_node_id
+    ON public.edges USING btree (graph_id, to_node_id);
+CREATE INDEX ix_nodes_category
+    ON public.nodes USING btree (category);
+CREATE INDEX ix_nodes_evidence_gin
+    ON public.nodes USING gin (evidence);
+CREATE INDEX ix_nodes_graph_id
+    ON public.nodes USING btree (graph_id);
+CREATE INDEX ix_nodes_kind
+    ON public.nodes USING btree (kind);
+
+SELECT pg_catalog.setval(
+    pg_catalog.pg_get_serial_sequence('public.graphs', 'id'),
+    (SELECT MAX(id) FROM public.graphs),
+    true
+);

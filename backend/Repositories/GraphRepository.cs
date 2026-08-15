@@ -20,6 +20,13 @@ public class GraphRepository : IGraphRepository
         WHERE slug = @Slug;
         """;
 
+    private const string GraphSummariesSql = """
+        SELECT
+            slug, title, description
+        FROM graphs
+        ORDER BY id;
+        """;
+
     private const string NodesSql = """
         SELECT 
             id,
@@ -61,6 +68,18 @@ public class GraphRepository : IGraphRepository
     {
         _dbConnectionFactory = dbConnectionFactory;
         _hostEnvironment = hostEnvironment;
+    }
+
+    public async Task<IReadOnlyList<GraphSummary>> GetSummariesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        var command = new CommandDefinition(
+            GraphSummariesSql,
+            cancellationToken: cancellationToken);
+
+        return (await connection.QueryAsync<GraphSummary>(command)).ToList();
     }
 
     public async Task<Graph?> GetBySlugAsync(

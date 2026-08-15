@@ -10,6 +10,55 @@ namespace backend.Tests.Controllers;
 public class GraphsControllerTests
 {
     [TestMethod]
+    public async Task GetSummaries_ReturnsOkWithCatalog()
+    {
+        IReadOnlyList<GraphSummaryDto> summaries =
+        [
+            new()
+            {
+                Slug = "sample-medium",
+                Title = "Sample Medium Reasoning Graph",
+                Description = "Seed graph"
+            },
+            new()
+            {
+                Slug = "flat-earth-large",
+                Title = "Large Flat-Earth Reasoning Graph"
+            }
+        ];
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.GetSummariesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summaries);
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.GetSummaries(CancellationToken.None);
+
+        var okResult = result as OkObjectResult;
+        Assert.IsNotNull(okResult);
+        Assert.AreSame(summaries, okResult.Value);
+    }
+
+    [TestMethod]
+    public async Task GetSummaries_ReturnsOkWithEmptyList_WhenNoGraphsExist()
+    {
+        IReadOnlyList<GraphSummaryDto> summaries = Array.Empty<GraphSummaryDto>();
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.GetSummariesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summaries);
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.GetSummaries(CancellationToken.None);
+
+        var okResult = result as OkObjectResult;
+        Assert.IsNotNull(okResult);
+        var payload = okResult.Value as IReadOnlyList<GraphSummaryDto>;
+        Assert.IsNotNull(payload);
+        Assert.AreEqual(0, payload.Count);
+    }
+
+    [TestMethod]
     public async Task GetBySlug_ReturnsOk_WhenGraphExists()
     {
         // arrange
