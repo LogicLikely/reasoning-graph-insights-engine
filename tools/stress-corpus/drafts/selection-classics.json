@@ -1,0 +1,341 @@
+{
+  "sources": [
+    {
+      "sourceId": "aristotle-politics",
+      "representative": [
+        {
+          "candidateIds": ["aristotle-politics:41:2"],
+          "title": "Every Hypothesis Must Be Possible"
+        },
+        {
+          "candidateIds": ["aristotle-politics:8:1"],
+          "title": "Political Rule Among Equals"
+        },
+        {
+          "candidateIds": ["aristotle-politics:14:5"],
+          "title": "Each Art Serves Its End"
+        },
+        {
+          "candidateIds": ["aristotle-politics:34:1"],
+          "title": "Education Unifies the People"
+        },
+        {
+          "candidateIds": ["aristotle-politics:59:9"],
+          "title": "When Laws Should Be Altered"
+        },
+        {
+          "candidateIds": ["aristotle-politics:82:0"],
+          "title": "What Makes a City"
+        },
+        {
+          "candidateIds": ["aristotle-politics:83:4"],
+          "title": "Citizens Share Public Authority"
+        },
+        {
+          "candidateIds": ["aristotle-politics:93:3"],
+          "title": "Learning Command and Obedience"
+        },
+        {
+          "candidateIds": ["aristotle-politics:104:0"],
+          "title": "How Governments Become Corrupt"
+        },
+        {
+          "candidateIds": ["aristotle-politics:110:13"],
+          "title": "Law Above Human Passion"
+        },
+        {
+          "candidateIds": ["aristotle-politics:119:2"],
+          "title": "Justice Precedes Every Virtue"
+        },
+        {
+          "candidateIds": ["aristotle-politics:135:0"],
+          "title": "Good Rulers or Good Laws"
+        },
+        {
+          "candidateIds": ["aristotle-politics:171:2"],
+          "title": "The Rich, Poor, and Middle"
+        },
+        {
+          "candidateIds": ["aristotle-politics:194:0"],
+          "title": "Sources of Political Revolution"
+        },
+        {
+          "candidateIds": ["aristotle-politics:224:1"],
+          "title": "War Serves a Further End"
+        },
+        {
+          "candidateIds": ["aristotle-politics:243:5"],
+          "title": "Education Requires Public Law"
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": ["aristotle-politics:17:1", "aristotle-politics:17:2"],
+          "title": "Usury Breeds Money From Money",
+          "caseId": "aristotle-archaic-wording",
+          "rationale": "Two adjacent sentences preserve the archaic inferential opening 'Whence' while explicitly naming usury before the pronoun."
+        },
+        {
+          "candidateIds": ["aristotle-politics:207:14"],
+          "title": "Bad Purposes Suit Bad People",
+          "caseId": "aristotle-quotation",
+          "rationale": "A complete sentence embeds a short quoted proverb and tests quotation punctuation without relying on a sentence fragment."
+        }
+      ]
+    },
+    {
+      "sourceId": "plato-apology",
+      "representative": [
+        {
+          "candidateIds": ["plato-apology:3:3"],
+          "title": "Defense Under Law and God"
+        },
+        {
+          "candidateIds": ["plato-apology:5:0"],
+          "title": "Paid Teaching Charge Is False"
+        },
+        {
+          "candidateIds": ["plato-apology:6:5"],
+          "title": "Reputation Born of Human Wisdom"
+        },
+        {
+          "candidateIds": ["plato-apology:8:3"],
+          "title": "Wanderings Test the Oracle"
+        },
+        {
+          "candidateIds": ["plato-apology:8:4", "plato-apology:8:5"],
+          "title": "Testing Wisdom Among Poets"
+        },
+        {
+          "candidateIds": ["plato-apology:11:3"],
+          "title": "Concealing Nothing Before Athens"
+        },
+        {
+          "candidateIds": ["plato-apology:13:0", "plato-apology:13:1"],
+          "title": "Questioning Meletus About Youth"
+        },
+        {
+          "candidateIds": ["plato-apology:31:7"],
+          "title": "One Corrupter Among Many Improvers"
+        },
+        {
+          "candidateIds": ["plato-apology:36:0"],
+          "title": "Was Youth Corruption Intentional?"
+        },
+        {
+          "candidateIds": ["plato-apology:49:6"],
+          "title": "Belief in Spiritual Agencies"
+        },
+        {
+          "candidateIds": ["plato-apology:56:9"],
+          "title": "Virtue Gives Rise to Wealth"
+        },
+        {
+          "candidateIds": ["plato-apology:58:2"],
+          "title": "The Gadfly Awakens Athens"
+        },
+        {
+          "candidateIds": ["plato-apology:59:6"],
+          "title": "Politics Would Have Killed Him"
+        },
+        {
+          "candidateIds": ["plato-apology:64:0"],
+          "title": "Judges Must Be Convinced"
+        },
+        {
+          "candidateIds": ["plato-apology:69:10"],
+          "title": "Unrighteousness Outruns Death"
+        },
+        {
+          "candidateIds": ["plato-apology:73:0"],
+          "title": "No Evil Befalls the Good"
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": ["plato-apology:55:4"],
+          "title": "Did Achilles Fear Death",
+          "caseId": "plato-question",
+          "rationale": "A compact standalone rhetorical question tests terminal question punctuation."
+        },
+        {
+          "candidateIds": ["plato-apology:5:10", "plato-apology:5:11"],
+          "title": "Evenus Charges a Moderate Fee",
+          "caseId": "plato-dialogue-quoted-ending",
+          "rationale": "A complete quoted reply with an internal semicolon is followed by a complete reflective sentence, exercising dialogue punctuation without fragments."
+        }
+      ]
+    },
+    {
+      "sourceId": "epictetus-encheiridion",
+      "representative": [
+        {
+          "candidateIds": ["epictetus-encheiridion:1:0"],
+          "title": "What Lies Within Our Power"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:2:2"],
+          "title": "Test Every Harsh Appearance"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:6:1"],
+          "title": "Opinions Create Our Distress"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:9:0"],
+          "title": "Wish Events as They Are"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:12:0"],
+          "title": "Loss Becomes Restoration"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:13:5"],
+          "title": "Tranquillity Has Its Price"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:15:5"],
+          "title": "Freedom Rejects External Dependence",
+          "reviewFlags": ["slavery-as-metaphor"],
+          "reviewNote": "The source uses slavery metaphorically; the flag distinguishes that rhetoric from excerpts about historical enslavement."
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:18:1"],
+          "title": "Play Well the Assigned Part"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:20:0"],
+          "title": "Choose Only Winnable Contests"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:21:1"],
+          "title": "Irritation Begins With Opinion"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:27:1"],
+          "title": "Judge Loss by Another's Cup"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:30:22"],
+          "title": "Choose Philosophy or Common Life"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:34:0"],
+          "title": "Choose a Consistent Character"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:47:1"],
+          "title": "Pleasure and Its Aftermath"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:59:4"],
+          "title": "Undigested Learning Spills Out"
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:63:10"],
+          "title": "Live as a Future Socrates"
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": ["epictetus-encheiridion:1:1"],
+          "title": "Choices Within Human Power",
+          "caseId": "epictetus-parenthetical-glosses",
+          "rationale": "Three parenthetical Greek transliterations and a semicolon exercise dense inline punctuation.",
+          "reviewFlags": ["editorial-transliteration-notation"],
+          "reviewNote": "The `[Greek: ...]` markers come from Project Gutenberg's plain-text transcription and are retained here deliberately for review."
+        },
+        {
+          "candidateIds": ["epictetus-encheiridion:13:2"],
+          "title": "Begin With Little Things",
+          "caseId": "epictetus-short-body",
+          "rationale": "The complete, self-contained excerpt is only thirty characters, deliberately producing a very short final body."
+        }
+      ]
+    },
+    {
+      "sourceId": "machiavelli-prince",
+      "representative": [
+        {
+          "candidateIds": ["machiavelli-prince:1:0"],
+          "title": "States Divide Into Two Forms"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:9:1"],
+          "title": "Conquest Requires Native Goodwill"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:35:3"],
+          "title": "Seizure Harder Than Possession"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:45:2"],
+          "title": "Least Fortune Builds Strongest Rule"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:49:2"],
+          "title": "Armed Prophets Outlast the Unarmed"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:71:5"],
+          "title": "Benefits Cannot Erase Old Injuries"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:76:1"],
+          "title": "Empire Won Without Glory",
+          "reviewFlags": ["historical-violence"]
+        },
+        {
+          "candidateIds": ["machiavelli-prince:87:0"],
+          "title": "People Ask Not to Be Oppressed"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:105:0"],
+          "title": "Princes Choose Their Forces"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:120:1"],
+          "title": "Auxiliaries Ensnare Their Employer"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:135:1"],
+          "title": "Power Must Rest on Strength"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:142:0"],
+          "title": "Necessity Permits Princely Wrong"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:155:0"],
+          "title": "Whether Love Outweighs Fear"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:160:6"],
+          "title": "Fox Finds Snares, Lion Frightens"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:208:5"],
+          "title": "Neutrality Usually Ends in Ruin"
+        },
+        {
+          "candidateIds": ["machiavelli-prince:224:3"],
+          "title": "Wise Princes Generate Good Counsel"
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": ["machiavelli-prince:98:1"],
+          "title": "Potentates Fear Two Threats",
+          "caseId": "machiavelli-semicolon-heavy",
+          "rationale": "A complete sentence divides two parallel political anxieties with a colon and semicolon, avoiding the translator footnote selected in the first draft."
+        },
+        {
+          "candidateIds": ["machiavelli-prince:233:0"],
+          "title": "Fortune Changes Overnight",
+          "caseId": "machiavelli-hyphenated-wording",
+          "rationale": "The sentence contains the paired archaic forms 'to-day' and 'to-morrow' while remaining semantically complete."
+        }
+      ]
+    }
+  ]
+}

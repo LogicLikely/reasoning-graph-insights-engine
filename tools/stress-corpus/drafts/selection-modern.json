@@ -1,0 +1,307 @@
+{
+  "sources": [
+    {
+      "sourceId": "thoreau-civil-disobedience",
+      "representative": [
+        {
+          "candidateIds": ["thoreau-civil-disobedience:0:2"],
+          "title": "Government as Mere Expedient"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:3:2"],
+          "title": "Conscience Beyond Majority Rule"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:8:2"],
+          "title": "Complicity in Slave Government",
+          "reviewFlags": ["enslavement"]
+        },
+        {
+          "candidateIds": [
+            "thoreau-civil-disobedience:10:3",
+            "thoreau-civil-disobedience:10:4"
+          ],
+          "title": "Justice Beyond Convenience"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:13:9"],
+          "title": "Patrons and Possessors of Virtue"
+        },
+        {
+          "candidateIds": [
+            "thoreau-civil-disobedience:14:5",
+            "thoreau-civil-disobedience:14:6"
+          ],
+          "title": "Voting Without Moral Action"
+        },
+        {
+          "candidateIds": [
+            "thoreau-civil-disobedience:16:1",
+            "thoreau-civil-disobedience:16:2"
+          ],
+          "title": "Climb Down From Shoulders"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:18:3"],
+          "title": "Principled Action Changes Relations"
+        },
+        {
+          "candidateIds": [
+            "thoreau-civil-disobedience:21:2",
+            "thoreau-civil-disobedience:21:3"
+          ],
+          "title": "Counterfriction Against the Machine"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:23:2"],
+          "title": "A Majority of One"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:25:0"],
+          "title": "Prison as the Just Place"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:26:4"],
+          "title": "Money Weakens Virtue"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:29:8"],
+          "title": "Meditations Beyond Prison Walls"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:39:2"],
+          "title": "Refusing Allegiance to the State"
+        },
+        {
+          "candidateIds": [
+            "thoreau-civil-disobedience:47:11",
+            "thoreau-civil-disobedience:47:12"
+          ],
+          "title": "Truth Versus Legal Consistency"
+        },
+        {
+          "candidateIds": ["thoreau-civil-disobedience:50:2"],
+          "title": "Democracy Toward Individual Respect"
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": [
+            "thoreau-civil-disobedience:5:0",
+            "thoreau-civil-disobedience:5:1"
+          ],
+          "title": "People Serve the State as Machines",
+          "caseId": "thoreau-internal-abbreviation",
+          "rationale": "The second sentence contains the internal '&c.' abbreviation, while the first supplies its subject so the pair remains self-contained."
+        },
+        {
+          "candidateIds": [
+            "thoreau-civil-disobedience:25:9",
+            "thoreau-civil-disobedience:25:10"
+          ],
+          "combineAsOneSentence": true,
+          "title": "The Officer Must Resign",
+          "caseId": "thoreau-quotation",
+          "rationale": "A quoted question creates a false sentence boundary inside one complete grammatical sentence, so the adjacent tokenizer segments are deliberately rejoined."
+        }
+      ]
+    },
+    {
+      "sourceId": "mill-on-liberty",
+      "representative": [
+        {
+          "candidateIds": ["mill-on-liberty:2:8"],
+          "title": "Liberty Means Limits on Power"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:6:7"],
+          "title": "Custom Mistaken for Nature"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:9:1"],
+          "title": "Harm Limits Collective Power"
+        },
+        {
+          "candidateIds": [
+            "mill-on-liberty:19:3",
+            "mill-on-liberty:19:4"
+          ],
+          "title": "Silencing Presumes Infallibility"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:33:0"],
+          "title": "Truth Does Not Always Triumph"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:23:7"],
+          "title": "Argument Must Confront Error"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:68:6"],
+          "title": "Liberty Stops at Public Nuisance"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:71:0"],
+          "title": "World-Chosen Lives Imitate Apes"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:78:10"],
+          "title": "Freedom Sustains Genius"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:80:23"],
+          "title": "Eccentricity Resists Social Tyranny"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:85:4"],
+          "title": "Plural Paths Sustain Progress"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:92:1"],
+          "title": "Individual and Social Domains"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:104:13"],
+          "title": "Public Power Cannot Govern Taste"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:116:0"],
+          "title": "Private Acts Owe Society Nothing"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:125:11"],
+          "title": "Freedom Cannot Abolish Itself"
+        },
+        {
+          "candidateIds": ["mill-on-liberty:134:0"],
+          "title": "Government Power Grows Too Easily"
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": [
+            "mill-on-liberty:21:1",
+            "mill-on-liberty:21:2"
+          ],
+          "title": "Fallible Authority Forbids Error",
+          "caseId": "mill-near-limit",
+          "rationale": "Two complete adjacent sentences total 232 Unicode characters, reaching exactly 250 after the eventual 18-character prefix."
+        },
+        {
+          "candidateIds": [
+            "mill-on-liberty:84:10",
+            "mill-on-liberty:84:11"
+          ],
+          "title": "When Progress Loses Individuality",
+          "caseId": "mill-mixed-terminal-punctuation",
+          "rationale": "An adjacent rhetorical question ending in '?' is followed by a declarative sentence ending in '.'."
+        }
+      ]
+    },
+    {
+      "sourceId": "douglass-narrative",
+      "representative": [
+        {
+          "candidateIds": [
+            "douglass-narrative:0:0",
+            "douglass-narrative:0:1"
+          ],
+          "title": "Birth Without an Official Record"
+        },
+        {
+          "candidateIds": ["douglass-narrative:2:3"],
+          "title": "Separated Before Knowing His Mother",
+          "reviewFlags": ["enslavement", "family-separation"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:7:25"],
+          "title": "The Blood-Stained Gate of Slavery",
+          "reviewFlags": ["enslavement", "violence"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:17:1"],
+          "title": "Songs Holding Joy and Sorrow",
+          "reviewFlags": ["enslavement", "historical-terminology"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:26:2"],
+          "title": "Criticism Brings Forced Sale",
+          "reviewFlags": ["enslavement"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:33:0"],
+          "title": "Killing Went Legally Unpunished",
+          "reviewFlags": ["enslavement", "historical-racial-terminology", "violence"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:39:2"],
+          "title": "Almost Naked Through Every Winter",
+          "reviewFlags": ["enslaved-child-deprivation", "enslavement"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:48:2"],
+          "title": "Baltimore Opened the Gateway"
+        },
+        {
+          "candidateIds": ["douglass-narrative:52:21"],
+          "title": "Learning to Read Without a Teacher"
+        },
+        {
+          "candidateIds": ["douglass-narrative:57:5"],
+          "title": "Trading Bread for Knowledge"
+        },
+        {
+          "candidateIds": ["douglass-narrative:63:1"],
+          "title": "People Valued Beside Livestock",
+          "reviewFlags": ["dehumanization", "enslavement"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:74:32"],
+          "title": "Religion Sanctioned Greater Cruelty",
+          "reviewFlags": ["enslavement", "historically-charged-wording", "religious-abuse"]
+        },
+        {
+          "candidateIds": [
+            "douglass-narrative:83:8",
+            "douglass-narrative:83:9"
+          ],
+          "title": "Broken in Body and Spirit",
+          "reviewFlags": ["enslavement", "psychological-abuse"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:88:4"],
+          "title": "A Slave Reclaims His Manhood",
+          "reviewFlags": ["enslavement"]
+        },
+        {
+          "candidateIds": ["douglass-narrative:103:17"],
+          "title": "Literacy Lets One Find Freedom"
+        },
+        {
+          "candidateIds": ["douglass-narrative:150:2"],
+          "title": "Joy in Anti-Slavery Work",
+          "reviewFlags": ["enslavement"]
+        }
+      ],
+      "edgeCases": [
+        {
+          "candidateIds": [
+            "douglass-narrative:79:0",
+            "douglass-narrative:79:1"
+          ],
+          "combineAsOneSentence": true,
+          "title": "Arrival on January First",
+          "caseId": "douglass-numeral-date",
+          "rationale": "The adjacent candidates reconstruct a sentence containing the ordinal numeral and full date '1st of January, 1833' after an honorific split."
+        },
+        {
+          "candidateIds": ["douglass-narrative:98:11"],
+          "title": "Any Gesture Becomes an Offense",
+          "caseId": "douglass-comma-em-dash",
+          "rationale": "Two dense comma-separated lists are interrupted by repeated comma-and-em-dash constructions without breaking the sentence.",
+          "reviewFlags": ["corporal-violence", "enslavement"]
+        }
+      ]
+    }
+  ]
+}
