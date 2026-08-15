@@ -13,6 +13,8 @@ const getNodeCounterSetMock = vi.fn()
 const updateEdgeMock = vi.fn()
 const updateNodeMock = vi.fn()
 const getEvidenceImpactRankingMock = vi.fn()
+const getLeastRobustNodeMock = vi.fn()
+const getNodeRobustnessRankingMock = vi.fn()
 
 const graphCatalog = [
   {
@@ -70,6 +72,8 @@ vi.mock('../services/graphService', () => ({
   deleteNode: (...args: unknown[]) => deleteNodeMock(...args),
   getDefaultGraphDataSource: () => 'database',
   getEvidenceImpactRanking: (...args: unknown[]) => getEvidenceImpactRankingMock(...args),
+  getLeastRobustNode: (...args: unknown[]) => getLeastRobustNodeMock(...args),
+  getNodeRobustnessRanking: (...args: unknown[]) => getNodeRobustnessRankingMock(...args),
   getGraphCatalog: () => getGraphCatalogMock(),
   getGraphBySlug: (slug: string, dataSource: string) => getGraphBySlugMock(slug, dataSource),
   getNodeCounterSet: (...args: unknown[]) => getNodeCounterSetMock(...args),
@@ -117,6 +121,8 @@ describe('DemoPage', () => {
     updateEdgeMock.mockReset()
     updateNodeMock.mockReset()
     getEvidenceImpactRankingMock.mockReset()
+    getLeastRobustNodeMock.mockReset()
+    getNodeRobustnessRankingMock.mockReset()
   })
 
   afterEach(() => {
@@ -144,6 +150,49 @@ describe('DemoPage', () => {
     expect(
       screen.getByRole('heading', { level: 2, name: sampleGraph.title }),
     ).toBeInTheDocument()
+  })
+
+  it('prints the least robust node when r is pressed', async () => {
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    getLeastRobustNodeMock.mockResolvedValue({
+      nodeId: 'C1',
+      nodeTitle: 'Least robust claim',
+      robustness: 0.75,
+    })
+
+    render(<DemoPage />)
+    await screen.findByTestId('insights-graph-canvas')
+
+    fireEvent.keyDown(window, { key: 'r' })
+
+    await waitFor(() => {
+      expect(getLeastRobustNodeMock).toHaveBeenCalledWith('sample-medium', 'database')
+      expect(consoleLog).toHaveBeenCalledWith('Least robust claim: 0.75')
+    })
+  })
+
+  it('prints node IDs and robustness scores in ascending order when j is pressed', async () => {
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const ranking = [
+      { nodeId: 'C1', nodeTitle: 'First', robustness: 0.25 },
+      { nodeId: 'E1', nodeTitle: 'Second', robustness: 0.75 },
+    ]
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    getNodeRobustnessRankingMock.mockResolvedValue(ranking)
+
+    render(<DemoPage />)
+    await screen.findByTestId('insights-graph-canvas')
+
+    fireEvent.keyDown(window, { key: 'j' })
+
+    await waitFor(() => {
+      expect(getNodeRobustnessRankingMock).toHaveBeenCalledWith('sample-medium', 'database')
+      expect(consoleLog).toHaveBeenCalledWith([
+        { nodeId: 'C1', robustness: 0.25 },
+        { nodeId: 'E1', robustness: 0.75 },
+      ])
+    })
   })
 
   it('selects a database graph and uses its slug for mutations', async () => {

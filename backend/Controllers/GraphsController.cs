@@ -100,6 +100,32 @@ public class GraphsController : ControllerBase
         return Ok(ranking);
     }
 
+    [HttpPost("{slug}/least-robust-node")]
+    public async Task<IActionResult> GetLeastRobustNode(
+        string slug,
+        [FromBody] GraphDto? graphContext,
+        CancellationToken cancellationToken)
+    {
+        var result = graphContext is null
+            ? await _graphService.GetLeastRobustNodeAsync(slug, cancellationToken)
+            : await _graphService.GetLeastRobustNodeAsync(slug, graphContext, cancellationToken);
+
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpPost("{slug}/node-robustness-ranking")]
+    public async Task<IActionResult> GetNodeRobustnessRanking(
+        string slug,
+        [FromBody] GraphDto? graphContext,
+        CancellationToken cancellationToken)
+    {
+        var result = graphContext is null
+            ? await _graphService.GetNodeRobustnessRankingAsync(slug, cancellationToken)
+            : await _graphService.GetNodeRobustnessRankingAsync(slug, graphContext, cancellationToken);
+
+        return result is null ? NotFound() : Ok(result);
+    }
+
     [HttpDelete("{slug}/nodes/{nodeId}")]
     public async Task<IActionResult> DeleteNode(
         string slug,

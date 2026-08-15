@@ -13,6 +13,8 @@ import {
   getEvidenceImpactRanking,
   getGraphCatalog,
   getGraphBySlug,
+  getLeastRobustNode,
+  getNodeRobustnessRanking,
   getNodeCounterSet,
   resetDatabase,
   updateEdge,
@@ -240,6 +242,32 @@ export function DemoPage() {
     }
   }, [activeGraphSlug, graph?.nodes, graphDataSource])
 
+  const handleLeastRobustNode = useCallback(async () => {
+    if (!activeGraphSlug) {
+      return
+    }
+
+    try {
+      const result = await getLeastRobustNode(activeGraphSlug, graphDataSource)
+      console.log(`${result.nodeTitle}: ${result.robustness}`)
+    } catch {
+      setGraphError('Failed to get the least robust node from the server.')
+    }
+  }, [activeGraphSlug, graphDataSource])
+
+  const handleNodeRobustnessRanking = useCallback(async () => {
+    if (!activeGraphSlug) {
+      return
+    }
+
+    try {
+      const ranking = await getNodeRobustnessRanking(activeGraphSlug, graphDataSource)
+      console.log(ranking.map(({ nodeId, robustness }) => ({ nodeId, robustness })))
+    } catch {
+      setGraphError('Failed to get the node robustness ranking from the server.')
+    }
+  }, [activeGraphSlug, graphDataSource])
+
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
     data: Partial<GraphFixtureNode> = {},
@@ -416,12 +444,18 @@ export function DemoPage() {
           void handleEvidenceImpactRanking(selectedNodeId)
         }
       }
+      else if (event.key.toLowerCase() === 'r') {
+        void handleLeastRobustNode()
+      }
+      else if (event.key.toLowerCase() === 'j') {
+        void handleNodeRobustnessRanking()
+      }
 
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphFullscreen, isResetDialogOpen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking])
+  }, [selectedNodeId, isGraphFullscreen, isResetDialogOpen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking, handleLeastRobustNode, handleNodeRobustnessRanking])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const activeGraphSummary = graphDataSource === 'database'
