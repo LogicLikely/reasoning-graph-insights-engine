@@ -1,6 +1,7 @@
 using Backend.Data;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
+using Backend.Seeding;
 using Dapper;
 using System.Text.Json;
 
@@ -18,6 +19,27 @@ public class GraphRepository : IGraphRepository
             id, slug, title, description
         FROM graphs
         WHERE slug = @Slug;
+        """;
+
+    private const string GraphSummariesSql = """
+        SELECT
+            graph.slug,
+            graph.title,
+            graph.description,
+            COALESCE(node_counts.node_count, 0)::integer AS "NodeCount",
+            COALESCE(edge_counts.edge_count, 0)::integer AS "EdgeCount"
+        FROM graphs AS graph
+        LEFT JOIN (
+            SELECT graph_id, count(*) AS node_count
+            FROM nodes
+            GROUP BY graph_id
+        ) AS node_counts ON node_counts.graph_id = graph.id
+        LEFT JOIN (
+            SELECT graph_id, count(*) AS edge_count
+            FROM edges
+            GROUP BY graph_id
+        ) AS edge_counts ON edge_counts.graph_id = graph.id
+        ORDER BY graph.id;
         """;
 
     private const string NodesSql = """
@@ -48,9 +70,7 @@ public class GraphRepository : IGraphRepository
         ORDER BY id;
         """;
 
-    private const string ResetDatabaseSql = """
-        DROP TABLE IF EXISTS public.edges, public.nodes, public.graphs CASCADE;
-        """;
+    private const int ResetCommandTimeoutSeconds = 300;
 
     private readonly DbConnectionFactory _dbConnectionFactory;
     private readonly IHostEnvironment _hostEnvironment;
@@ -61,6 +81,18 @@ public class GraphRepository : IGraphRepository
     {
         _dbConnectionFactory = dbConnectionFactory;
         _hostEnvironment = hostEnvironment;
+    }
+
+    public async Task<IReadOnlyList<GraphSummary>> GetSummariesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var connection = _dbConnectionFactory.CreateConnection();
+
+        var command = new CommandDefinition(
+            GraphSummariesSql,
+            cancellationToken: cancellationToken);
+
+        return (await connection.QueryAsync<GraphSummary>(command)).ToList();
     }
 
     public async Task<Graph?> GetBySlugAsync(
@@ -438,20 +470,43 @@ public class GraphRepository : IGraphRepository
             cancellationToken: cancellationToken));
     }
 
-    public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
+    public async Task ResetDatabaseAsync(
+        IReadOnlyList<StressGraphSeedSpec> stressGraphs,
+        CancellationToken cancellationToken = default)
     {
         var seedSqlPath = Path.Combine(
             _hostEnvironment.ContentRootPath,
             "Data",
             "Sql",
             "insights_seed.sql");
+        var stressSeedSqlPath = Path.Combine(
+            _hostEnvironment.ContentRootPath,
+            "Data",
+            "Sql",
+            "insights_stress_seed.sql");
+        var stressCorpusPath = Path.Combine(
+            _hostEnvironment.ContentRootPath,
+            "Data",
+            "Seed",
+            "insights_stress_corpus.json");
 
         if (!File.Exists(seedSqlPath))
         {
             throw new FileNotFoundException("Database seed SQL file was not found.", seedSqlPath);
         }
 
+        if (stressGraphs.Count > 0 && !File.Exists(stressSeedSqlPath))
+        {
+            throw new FileNotFoundException("Database stress seed SQL file was not found.", stressSeedSqlPath);
+        }
+
         var seedSql = await File.ReadAllTextAsync(seedSqlPath, cancellationToken);
+        var stressSeedSql = stressGraphs.Count > 0
+            ? await File.ReadAllTextAsync(stressSeedSqlPath, cancellationToken)
+            : null;
+        var stressCorpus = stressGraphs.Count > 0
+            ? await StressGraphCorpusLoader.LoadAsync(stressCorpusPath, cancellationToken)
+            : null;
 
         using var connection = _dbConnectionFactory.CreateConnection();
         connection.Open();
@@ -460,15 +515,32 @@ public class GraphRepository : IGraphRepository
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                ResetDatabaseSql,
-                transaction: transaction,
-                cancellationToken: cancellationToken));
-
-            await connection.ExecuteAsync(new CommandDefinition(
                 seedSql,
                 transaction: transaction,
+                commandTimeout: ResetCommandTimeoutSeconds,
                 cancellationToken: cancellationToken));
 
+            foreach (var stressGraph in stressGraphs)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    stressSeedSql!,
+                    new
+                    {
+                        stressGraph.GraphId,
+                        stressGraph.Slug,
+                        stressGraph.Title,
+                        stressGraph.Description,
+                        stressGraph.Shape,
+                        stressGraph.NodeCount,
+                        CorpusJson = stressCorpus!.Json,
+                        CorpusEntryCount = stressCorpus.EntryCount
+                    },
+                    transaction,
+                    commandTimeout: ResetCommandTimeoutSeconds,
+                    cancellationToken: cancellationToken));
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
             transaction.Commit();
         }
         catch

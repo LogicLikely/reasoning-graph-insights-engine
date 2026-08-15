@@ -2,6 +2,7 @@ using Backend.Calculation;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Backend.Repositories;
+using Backend.Seeding;
 using Backend.Services;
 using Moq;
 
@@ -10,6 +11,123 @@ namespace backend.Tests.Services;
 [TestClass]
 public class GraphServiceTests
 {
+    [TestMethod]
+    public async Task GetSummariesAsync_MapsSummariesWithoutChangingOrder()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        repositoryMock
+            .Setup(repository => repository.GetSummariesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+                new List<GraphSummary>
+                {
+                    new()
+                    {
+                        Slug = "sample-medium",
+                        Title = "Sample Medium Reasoning Graph",
+                        Description = "Seed graph",
+                        NodeCount = 18,
+                        EdgeCount = 17
+                    },
+                    new()
+                    {
+                        Slug = "flat-earth-large",
+                        Title = "Large Flat-Earth Reasoning Graph",
+                        NodeCount = 105,
+                        EdgeCount = 112
+                    }
+                });
+
+        var service = CreateService(repositoryMock.Object);
+
+        var result = await service.GetSummariesAsync(CancellationToken.None);
+
+        Assert.AreEqual(2, result.Count);
+        Assert.AreEqual("sample-medium", result[0].Slug);
+        Assert.AreEqual("Sample Medium Reasoning Graph", result[0].Title);
+        Assert.AreEqual("Seed graph", result[0].Description);
+        Assert.AreEqual(18, result[0].NodeCount);
+        Assert.AreEqual(17, result[0].EdgeCount);
+        Assert.AreEqual("flat-earth-large", result[1].Slug);
+        Assert.AreEqual("Large Flat-Earth Reasoning Graph", result[1].Title);
+        Assert.IsNull(result[1].Description);
+        Assert.AreEqual(105, result[1].NodeCount);
+        Assert.AreEqual(112, result[1].EdgeCount);
+    }
+
+    [TestMethod]
+    public async Task GetSummariesAsync_ReturnsEmptyList_WhenRepositoryIsEmpty()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        repositoryMock
+            .Setup(repository => repository.GetSummariesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<GraphSummary>());
+
+        var service = CreateService(repositoryMock.Object);
+
+        var result = await service.GetSummariesAsync(CancellationToken.None);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(0, result.Count);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_DeduplicatesAndUsesCanonicalCatalogOrder()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var service = CreateService(repositoryMock.Object);
+
+        await service.ResetDatabaseAsync(
+            [
+                StressGraphSeedIds.SharedDiamond10K,
+                StressGraphSeedIds.Balanced1K,
+                StressGraphSeedIds.SharedDiamond10K,
+                StressGraphSeedIds.Deep1K
+            ],
+            CancellationToken.None);
+
+        repositoryMock.Verify(repository => repository.ResetDatabaseAsync(
+            It.Is<IReadOnlyList<StressGraphSeedSpec>>(specs =>
+                specs.Select(spec => spec.Id).SequenceEqual(new[]
+                {
+                    StressGraphSeedIds.Balanced1K,
+                    StressGraphSeedIds.Deep1K,
+                    StressGraphSeedIds.SharedDiamond10K
+                })),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_RejectsMixedUnknownSelectionBeforeRepositoryCall()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var service = CreateService(repositoryMock.Object);
+
+        var exception = await Assert.ThrowsExceptionAsync<InvalidStressGraphSeedSelectionException>(() =>
+            service.ResetDatabaseAsync(
+                [StressGraphSeedIds.Balanced1K, "stress-unknown"],
+                CancellationToken.None));
+
+        CollectionAssert.AreEqual(
+            new[] { "stress-unknown" },
+            exception.UnknownIds.ToArray());
+        repositoryMock.Verify(repository => repository.ResetDatabaseAsync(
+            It.IsAny<IReadOnlyList<StressGraphSeedSpec>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_EmptySelectionInstallsOnlyBaseSeed()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var service = CreateService(repositoryMock.Object);
+
+        await service.ResetDatabaseAsync([], CancellationToken.None);
+
+        repositoryMock.Verify(repository => repository.ResetDatabaseAsync(
+            It.Is<IReadOnlyList<StressGraphSeedSpec>>(specs => specs.Count == 0),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [TestMethod]
     public async Task GetBySlugAsync_ReturnsNull_WhenRepositoryReturnsNull()
     {

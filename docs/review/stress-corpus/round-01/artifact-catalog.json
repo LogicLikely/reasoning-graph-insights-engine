@@ -1,0 +1,582 @@
+{
+  "schema_version": 1,
+  "portable_base": "repository-root",
+  "generated_at": "2026-08-15T13:37:13Z",
+  "artifacts": [
+    {
+      "id": "stress-corpus-source-manifest-v1",
+      "goal_id": "LL-673",
+      "round": 1,
+      "order": 1,
+      "caption": "Pinned public-domain source manifest",
+      "roles": [
+        "portable-review",
+        "reproducibility-source"
+      ],
+      "source_acceptance": "candidate",
+      "placement_acceptance": "not-applicable",
+      "acceptance_history": [
+        {
+          "dimension": "source_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "Cataloged for round-01 review without inferring source approval."
+        }
+      ],
+      "storage_root": "portable",
+      "path": "tools/stress-corpus/corpus-sources.v1.json",
+      "sha256": "c972c720885790f4268153ccb8dcff663be855f07591c93d6f1ca6e148ba5a40",
+      "bytes": 5677,
+      "format": "json",
+      "provenance": {
+        "source": "Project Gutenberg edition metadata and verified UTF-8 source hashes",
+        "tool": "manual manifest curation",
+        "call": "LL-673 round-01 source inventory",
+        "inputs": [],
+        "transformation": "Pinned ten public-domain editions, retrieval facts, canonical catalog links, source content-window boundaries, and exact source hashes."
+      },
+      "parent_ids": [],
+      "dependencies": [
+        "tools/stress-corpus/fetch-sources.mjs",
+        "tools/stress-corpus/list-candidates.mjs",
+        "tools/stress-corpus/build-preview.mjs",
+        "tools/stress-corpus/README.md"
+      ],
+      "disposition": {
+        "status": "retained-reproducibility-source",
+        "timestamp": "2026-08-15T13:31:02Z",
+        "location": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/corpus-sources.v1.json"
+        }
+      },
+      "recovery": {
+        "prior": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/corpus-sources.v1.json"
+        },
+        "verified_destination": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/corpus-sources.v1.json",
+          "sha256": "c972c720885790f4268153ccb8dcff663be855f07591c93d6f1ca6e148ba5a40"
+        },
+        "restoration_action": "Cataloged in place; restore the LL-673 repository copy at this path and verify the recorded SHA-256 before reuse."
+      }
+    },
+    {
+      "id": "stress-corpus-selection-classics-r01",
+      "goal_id": "LL-673",
+      "round": 1,
+      "order": 2,
+      "caption": "Classical works selection draft",
+      "roles": [
+        "portable-review",
+        "active-staging",
+        "reproducibility-source"
+      ],
+      "source_acceptance": "candidate",
+      "placement_acceptance": "candidate",
+      "acceptance_history": [
+        {
+          "dimension": "source_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The curated excerpts remain candidates pending review."
+        },
+        {
+          "dimension": "placement_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "No runtime placement is authorized by inclusion in this review batch."
+        }
+      ],
+      "storage_root": "portable",
+      "path": "tools/stress-corpus/drafts/selection-classics.json",
+      "sha256": "48643fc763c63d169bd23f22876653c6f71f0515e51b8e5049852037bdf74401",
+      "bytes": 11657,
+      "format": "json",
+      "provenance": {
+        "source": "Candidate sentences extracted from four pinned classical works",
+        "tool": "Codex-assisted editorial curation",
+        "call": "LL-673 round-01 classical selection pass",
+        "inputs": [
+          "tools/stress-corpus/corpus-sources.v1.json",
+          "tools/stress-corpus/corpus-lib.mjs",
+          "tools/stress-corpus/list-candidates.mjs"
+        ],
+        "transformation": "Selected sixteen representative excerpts and two deliberate edge cases per source with semantic constrained titles."
+      },
+      "parent_ids": [
+        "stress-corpus-source-manifest-v1"
+      ],
+      "dependencies": [
+        "tools/stress-corpus/build-preview.mjs"
+      ],
+      "disposition": {
+        "status": "active-staging",
+        "timestamp": "2026-08-15T13:31:02Z",
+        "location": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-classics.json"
+        }
+      },
+      "recovery": {
+        "prior": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-classics.json"
+        },
+        "verified_destination": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-classics.json",
+          "sha256": "48643fc763c63d169bd23f22876653c6f71f0515e51b8e5049852037bdf74401"
+        },
+        "restoration_action": "Cataloged in place; restore the LL-673 repository copy at this path and verify the recorded SHA-256 before regeneration."
+      }
+    },
+    {
+      "id": "stress-corpus-selection-arguments-r01",
+      "goal_id": "LL-673",
+      "round": 1,
+      "order": 3,
+      "caption": "Political arguments selection draft",
+      "roles": [
+        "portable-review",
+        "active-staging",
+        "reproducibility-source"
+      ],
+      "source_acceptance": "candidate",
+      "placement_acceptance": "candidate",
+      "acceptance_history": [
+        {
+          "dimension": "source_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The curated excerpts remain candidates pending review."
+        },
+        {
+          "dimension": "placement_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "No runtime placement is authorized by inclusion in this review batch."
+        }
+      ],
+      "storage_root": "portable",
+      "path": "tools/stress-corpus/drafts/selection-arguments.json",
+      "sha256": "947753f140d08abce1722505b7a60bb1fb044bca8564426a30d9fde87bf5bbf7",
+      "bytes": 11035,
+      "format": "json",
+      "provenance": {
+        "source": "Candidate sentences extracted from three pinned political works",
+        "tool": "Codex-assisted editorial curation",
+        "call": "LL-673 round-01 political-arguments selection pass",
+        "inputs": [
+          "tools/stress-corpus/corpus-sources.v1.json",
+          "tools/stress-corpus/corpus-lib.mjs",
+          "tools/stress-corpus/list-candidates.mjs"
+        ],
+        "transformation": "Selected sixteen representative excerpts and two deliberate edge cases per source with semantic constrained titles."
+      },
+      "parent_ids": [
+        "stress-corpus-source-manifest-v1"
+      ],
+      "dependencies": [
+        "tools/stress-corpus/build-preview.mjs"
+      ],
+      "disposition": {
+        "status": "active-staging",
+        "timestamp": "2026-08-15T13:31:02Z",
+        "location": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-arguments.json"
+        }
+      },
+      "recovery": {
+        "prior": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-arguments.json"
+        },
+        "verified_destination": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-arguments.json",
+          "sha256": "947753f140d08abce1722505b7a60bb1fb044bca8564426a30d9fde87bf5bbf7"
+        },
+        "restoration_action": "Cataloged in place; restore the LL-673 repository copy at this path and verify the recorded SHA-256 before regeneration."
+      }
+    },
+    {
+      "id": "stress-corpus-selection-modern-r01",
+      "goal_id": "LL-673",
+      "round": 1,
+      "order": 4,
+      "caption": "Modern liberty selection draft",
+      "roles": [
+        "portable-review",
+        "active-staging",
+        "reproducibility-source"
+      ],
+      "source_acceptance": "candidate",
+      "placement_acceptance": "candidate",
+      "acceptance_history": [
+        {
+          "dimension": "source_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The curated excerpts remain candidates pending review."
+        },
+        {
+          "dimension": "placement_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "No runtime placement is authorized by inclusion in this review batch."
+        }
+      ],
+      "storage_root": "portable",
+      "path": "tools/stress-corpus/drafts/selection-modern.json",
+      "sha256": "8ca307d7f8fc1246ea6bb78877a8caa7838c133776a8b0e66a869680b0c887bc",
+      "bytes": 10305,
+      "format": "json",
+      "provenance": {
+        "source": "Candidate sentences extracted from three pinned modern works",
+        "tool": "Codex-assisted editorial curation",
+        "call": "LL-673 round-01 modern selection pass",
+        "inputs": [
+          "tools/stress-corpus/corpus-sources.v1.json",
+          "tools/stress-corpus/corpus-lib.mjs",
+          "tools/stress-corpus/list-candidates.mjs"
+        ],
+        "transformation": "Selected sixteen representative excerpts and two deliberate edge cases per source with semantic constrained titles."
+      },
+      "parent_ids": [
+        "stress-corpus-source-manifest-v1"
+      ],
+      "dependencies": [
+        "tools/stress-corpus/build-preview.mjs"
+      ],
+      "disposition": {
+        "status": "active-staging",
+        "timestamp": "2026-08-15T13:31:02Z",
+        "location": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-modern.json"
+        }
+      },
+      "recovery": {
+        "prior": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-modern.json"
+        },
+        "verified_destination": {
+          "storage_root": "portable",
+          "path": "tools/stress-corpus/drafts/selection-modern.json",
+          "sha256": "8ca307d7f8fc1246ea6bb78877a8caa7838c133776a8b0e66a869680b0c887bc"
+        },
+        "restoration_action": "Cataloged in place; restore the LL-673 repository copy at this path and verify the recorded SHA-256 before regeneration."
+      }
+    },
+    {
+      "id": "stress-corpus-preview-r01-data",
+      "goal_id": "LL-673",
+      "round": 1,
+      "order": 5,
+      "caption": "Structured 180-entry corpus preview",
+      "roles": [
+        "portable-review",
+        "active-staging"
+      ],
+      "source_acceptance": "candidate",
+      "placement_acceptance": "candidate",
+      "acceptance_history": [
+        {
+          "dimension": "source_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The assembled excerpts remain candidates pending review."
+        },
+        {
+          "dimension": "placement_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The preview explicitly remains disconnected from runtime stress graphs."
+        }
+      ],
+      "storage_root": "portable",
+      "path": "docs/review/stress-corpus/round-01/corpus-preview.json",
+      "sha256": "a7a1c29dd5863e0b600c0726153d7e44fb95010b5c775dd448744e634d39b4c9",
+      "bytes": 368487,
+      "format": "json",
+      "provenance": {
+        "source": "Pinned source manifest and three round-01 selection drafts",
+        "tool": "tools/stress-corpus/build-preview.mjs",
+        "call": "Documented LL-673 round-01 preview regeneration",
+        "inputs": [
+          "tools/stress-corpus/corpus-sources.v1.json",
+          "tools/stress-corpus/corpus-lib.mjs",
+          "tools/stress-corpus/drafts/selection-classics.json",
+          "tools/stress-corpus/drafts/selection-arguments.json",
+          "tools/stress-corpus/drafts/selection-modern.json"
+        ],
+        "transformation": "Interleaved 160 representative and 20 edge-case selections, retained explicit source-normalization documentation, recorded each excerpt's enclosing source-block bounds as sourceBlockLineStart and sourceBlockLineEnd, measured constraints, and emitted structured candidate review data."
+      },
+      "parent_ids": [
+        "stress-corpus-source-manifest-v1",
+        "stress-corpus-selection-classics-r01",
+        "stress-corpus-selection-arguments-r01",
+        "stress-corpus-selection-modern-r01"
+      ],
+      "dependencies": [
+        "tools/stress-corpus/validate-preview.mjs",
+        "tools/stress-corpus/README.md"
+      ],
+      "disposition": {
+        "status": "active-staging",
+        "timestamp": "2026-08-15T13:31:02Z",
+        "location": {
+          "storage_root": "portable",
+          "path": "docs/review/stress-corpus/round-01/corpus-preview.json"
+        }
+      },
+      "recovery": {
+        "prior": {
+          "storage_root": "portable",
+          "path": "docs/review/stress-corpus/round-01/corpus-preview.json"
+        },
+        "verified_destination": {
+          "storage_root": "portable",
+          "path": "docs/review/stress-corpus/round-01/corpus-preview.json",
+          "sha256": "a7a1c29dd5863e0b600c0726153d7e44fb95010b5c775dd448744e634d39b4c9"
+        },
+        "restoration_action": "Regenerate from the four parent artifacts with tools/stress-corpus/build-preview.mjs and source bytes verified by the manifest; require this SHA-256 before restoring the recorded version."
+      }
+    },
+    {
+      "id": "stress-corpus-preview-r01-markdown",
+      "goal_id": "LL-673",
+      "round": 1,
+      "order": 6,
+      "caption": "Human-readable 180-entry corpus preview",
+      "roles": [
+        "portable-review",
+        "active-staging"
+      ],
+      "source_acceptance": "candidate",
+      "placement_acceptance": "candidate",
+      "acceptance_history": [
+        {
+          "dimension": "source_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The assembled excerpts remain candidates pending review."
+        },
+        {
+          "dimension": "placement_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The document is portable review evidence, not runtime authorization."
+        }
+      ],
+      "storage_root": "portable",
+      "path": "docs/review/stress-corpus/round-01/corpus-preview.md",
+      "sha256": "f1a87daa964ccc8d3ff558550371721cd4740460ad6218cb53fe4857f79353df",
+      "bytes": 133516,
+      "format": "markdown",
+      "provenance": {
+        "source": "Pinned source manifest and three round-01 selection drafts",
+        "tool": "tools/stress-corpus/build-preview.mjs",
+        "call": "Documented LL-673 round-01 preview regeneration",
+        "inputs": [
+          "tools/stress-corpus/corpus-sources.v1.json",
+          "tools/stress-corpus/corpus-lib.mjs",
+          "tools/stress-corpus/drafts/selection-classics.json",
+          "tools/stress-corpus/drafts/selection-arguments.json",
+          "tools/stress-corpus/drafts/selection-modern.json"
+        ],
+        "transformation": "Rendered the structured candidate corpus as a source-linked Markdown review document with measurements, edge-case rationales, normalization notes, and enclosing source-block line ranges rather than sentence-exact line claims."
+      },
+      "parent_ids": [
+        "stress-corpus-source-manifest-v1",
+        "stress-corpus-selection-classics-r01",
+        "stress-corpus-selection-arguments-r01",
+        "stress-corpus-selection-modern-r01"
+      ],
+      "dependencies": [
+        "tools/stress-corpus/README.md"
+      ],
+      "disposition": {
+        "status": "active-staging",
+        "timestamp": "2026-08-15T13:31:02Z",
+        "location": {
+          "storage_root": "portable",
+          "path": "docs/review/stress-corpus/round-01/corpus-preview.md"
+        }
+      },
+      "recovery": {
+        "prior": {
+          "storage_root": "portable",
+          "path": "docs/review/stress-corpus/round-01/corpus-preview.md"
+        },
+        "verified_destination": {
+          "storage_root": "portable",
+          "path": "docs/review/stress-corpus/round-01/corpus-preview.md",
+          "sha256": "f1a87daa964ccc8d3ff558550371721cd4740460ad6218cb53fe4857f79353df"
+        },
+        "restoration_action": "Regenerate from the four parent artifacts with tools/stress-corpus/build-preview.mjs and source bytes verified by the manifest; require this SHA-256 before restoring the recorded version."
+      }
+    },
+    {
+      "id": "stress-corpus-preview-r01-typescript-fixture",
+      "goal_id": "LL-673",
+      "round": 1,
+      "order": 7,
+      "caption": "Generated Storybook corpus fixture",
+      "roles": [
+        "portable-review",
+        "active-staging"
+      ],
+      "source_acceptance": "candidate",
+      "placement_acceptance": "candidate",
+      "acceptance_history": [
+        {
+          "dimension": "source_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The generated fixture carries the candidate corpus wording unchanged."
+        },
+        {
+          "dimension": "placement_acceptance",
+          "previous": "not-applicable",
+          "new": "candidate",
+          "timestamp": "2026-08-15T13:31:02Z",
+          "authority": "Codex curation under LL-673",
+          "note": "The fixture is approved only for candidate review, not product runtime use."
+        }
+      ],
+      "storage_root": "portable",
+      "path": "frontend/src/fixtures/review/insightsNodeTitleCorpus.ts",
+      "sha256": "72fdd52040affb9e5a1f630a6a63b8f0ff03d557dc4a83041a843ba90bcc75df",
+      "bytes": 68313,
+      "format": "typescript",
+      "provenance": {
+        "source": "Pinned source manifest and three round-01 selection drafts",
+        "tool": "tools/stress-corpus/build-preview.mjs",
+        "call": "Documented LL-673 round-01 preview regeneration",
+        "inputs": [
+          "tools/stress-corpus/corpus-sources.v1.json",
+          "tools/stress-corpus/corpus-lib.mjs",
+          "tools/stress-corpus/drafts/selection-classics.json",
+          "tools/stress-corpus/drafts/selection-arguments.json",
+          "tools/stress-corpus/drafts/selection-modern.json"
+        ],
+        "transformation": "Projected each generated preview entry into a typed, review-only frontend fixture for production-renderer inspection; detailed source-block provenance remains in the structured and Markdown review artifacts."
+      },
+      "parent_ids": [
+        "stress-corpus-source-manifest-v1",
+        "stress-corpus-selection-classics-r01",
+        "stress-corpus-selection-arguments-r01",
+        "stress-corpus-selection-modern-r01"
+      ],
+      "dependencies": [
+        "frontend/src/components/graph/InsightsGraphTitleCorpus.stories.tsx",
+        "frontend/src/fixtures/review/insightsNodeTitleCorpus.test.ts"
+      ],
+      "disposition": {
+        "status": "active-staging",
+        "timestamp": "2026-08-15T13:31:02Z",
+        "location": {
+          "storage_root": "portable",
+          "path": "frontend/src/fixtures/review/insightsNodeTitleCorpus.ts"
+        }
+      },
+      "recovery": {
+        "prior": {
+          "storage_root": "portable",
+          "path": "frontend/src/fixtures/review/insightsNodeTitleCorpus.ts"
+        },
+        "verified_destination": {
+          "storage_root": "portable",
+          "path": "frontend/src/fixtures/review/insightsNodeTitleCorpus.ts",
+          "sha256": "72fdd52040affb9e5a1f630a6a63b8f0ff03d557dc4a83041a843ba90bcc75df"
+        },
+        "restoration_action": "Regenerate from the four parent artifacts with tools/stress-corpus/build-preview.mjs and source bytes verified by the manifest; require this SHA-256 before restoring the recorded version."
+      }
+    },
+    {
+      "id": "stress-corpus-preview-r01-storybook",
+      "goal_id": "LL-673",
+      "round": 1,
+      "order": 8,
+      "caption": "Production-width Storybook title grid",
+      "roles": [
+        "portable-review",
+        "active-staging"
+      ],
+      "source_acceptance": "not-applicable",
+      "placement_acceptance": "not-applicable",
+      "acceptance_history": [],
+      "storage_root": "portable",
+      "path": "frontend/src/components/graph/InsightsGraphTitleCorpus.stories.tsx",
+      "sha256": "65a43ecca71fab177bde5099edf8296463a6a0bdbc9cac65806382cbaebccb6a",
+      "bytes": 4758,
+      "format": "tsx",
+      "provenance": {
+        "source": "Generated corpus fixture and the production Insights node presentation",
+        "tool": "manual TypeScript and Storybook authoring",
+        "call": "LL-673 round-01 visual-review surface",
+        "inputs": [
+          "frontend/src/fixtures/review/insightsNodeTitleCorpus.ts",
+          "frontend/src/components/graph/insightsGraphPresentation.tsx",
+          "frontend/src/components/graph/InsightsGraphCanvas.css",
+          "frontend/src/components/graph/InsightsGraphTitleCorpus.css"
+        ],
+        "transformation": "Rendered all 180 titles through the production node renderer at fixed production dimensions, including the narrow parent-title width."
+      },
+      "parent_ids": [
+        "stress-corpus-preview-r01-typescript-fixture"
+      ],
+      "dependencies": [],
+      "disposition": {
+        "status": "active-review-surface",
+        "timestamp": "2026-08-15T13:31:02Z",
+        "location": {
+          "storage_root": "portable",
+          "path": "frontend/src/components/graph/InsightsGraphTitleCorpus.stories.tsx"
+        }
+      },
+      "recovery": {
+        "prior": {
+          "storage_root": "portable",
+          "path": "frontend/src/components/graph/InsightsGraphTitleCorpus.stories.tsx"
+        },
+        "verified_destination": {
+          "storage_root": "portable",
+          "path": "frontend/src/components/graph/InsightsGraphTitleCorpus.stories.tsx",
+          "sha256": "65a43ecca71fab177bde5099edf8296463a6a0bdbc9cac65806382cbaebccb6a"
+        },
+        "restoration_action": "Cataloged in place; restore the LL-673 repository copy at this path and verify the recorded SHA-256 before reopening visual review."
+      }
+    }
+  ]
+}

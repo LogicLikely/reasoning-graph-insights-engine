@@ -123,4 +123,91 @@ describe('GraphOverviewPanel', () => {
 
     expect(onDataSourceChange).toHaveBeenCalledWith('fixture')
   })
+
+  it('lists database graphs by title and slug and reports selection changes', () => {
+    const onGraphChange = vi.fn()
+
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A database graph description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+        dataSource="database"
+        graphs={[
+          {
+            slug: 'sample-medium',
+            title: 'Sample Reasoning Graph',
+            description: 'First graph',
+            nodeCount: 10,
+            edgeCount: 9,
+          },
+          {
+            slug: 'flat-earth-large',
+            title: 'Large Flat-Earth Reasoning Graph',
+            description: 'Second graph',
+            nodeCount: 1_000,
+            edgeCount: 1_248,
+          },
+        ]}
+        selectedGraphSlug="sample-medium"
+        onGraphChange={onGraphChange}
+      />,
+    )
+
+    const selector = screen.getByRole('combobox', { name: 'Database graph' })
+    expect(selector).toHaveValue('sample-medium')
+    expect(screen.getByRole('option', {
+      name: 'Large Flat-Earth Reasoning Graph — 1,000 nodes, 1,248 edges — flat-earth-large',
+    }))
+      .toBeInTheDocument()
+
+    fireEvent.change(selector, { target: { value: 'flat-earth-large' } })
+
+    expect(onGraphChange).toHaveBeenCalledWith('flat-earth-large')
+  })
+
+  it('disables graph selection while a database reset is pending', () => {
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A database graph description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+        dataSource="database"
+        graphs={[
+          {
+            slug: 'sample-medium',
+            title: 'Sample Reasoning Graph',
+            description: 'First graph',
+            nodeCount: 10,
+            edgeCount: 9,
+          },
+        ]}
+        selectedGraphSlug="sample-medium"
+        isResettingDatabase
+      />,
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Database graph' })).toBeDisabled()
+  })
+
+  it('shows a disabled empty selector when the database catalog has no graphs', () => {
+    render(
+      <GraphOverviewPanel
+        title="No database graphs"
+        description="The database is empty."
+        nodeCount={0}
+        edgeCount={0}
+        fixtureName="No database graphs"
+        dataSource="database"
+        graphs={[]}
+      />,
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Database graph' })).toBeDisabled()
+    expect(screen.getByRole('option', { name: 'No graphs available' })).toBeInTheDocument()
+  })
 })

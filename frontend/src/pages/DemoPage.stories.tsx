@@ -1,20 +1,32 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { expect, mocked, userEvent } from 'storybook/test'
 import { sampleGraph } from '../fixtures/sampleGraph'
-import { getGraphBySlug } from '../services/graphService'
+import { getGraphBySlug, getGraphCatalog, resetDatabase } from '../services/graphService'
 import { DemoPage } from './DemoPage'
 
 const meta = {
   component: DemoPage,
   beforeEach: async () => {
+    mocked(getGraphCatalog).mockReset()
+    mocked(getGraphCatalog).mockResolvedValue([
+      {
+        slug: sampleGraph.slug,
+        title: sampleGraph.title,
+        description: sampleGraph.description,
+        nodeCount: sampleGraph.nodes.length,
+        edgeCount: sampleGraph.edges.length,
+      },
+    ])
     mocked(getGraphBySlug).mockReset()
     mocked(getGraphBySlug).mockResolvedValue(sampleGraph)
+    mocked(resetDatabase).mockReset()
+    mocked(resetDatabase).mockResolvedValue(undefined)
   },
   parameters: {
     docs: {
       description: {
         component:
-          'Storybook coverage for the demo page. These stories keep fixture-backed graph data enabled while mocking the graph service per story to demonstrate the success, loading, and retry states that users can encounter.',
+          'Storybook coverage for the GraphMap-backed demo page. These stories keep fixture-backed graph data enabled while mocking the graph service per story to demonstrate the success, loading, and retry states that users can encounter.',
       },
     },
   },
@@ -39,6 +51,7 @@ export const Default: Story = {
     await expect(
       await canvas.findByRole('heading', { level: 2, name: /Sample Reasoning Graph/i })
     ).toBeVisible()
+    await expect(await canvas.findByTestId('insights-graph-canvas')).toBeVisible()
   },
 }
 
@@ -85,6 +98,6 @@ export const RetryFlow: Story = {
     await expect(
       await canvas.findByRole('heading', { level: 2, name: /Sample Reasoning Graph/i })
     ).toBeVisible()
-    await expect(await canvas.findByTestId('graph-canvas')).toBeVisible()
+    await expect(await canvas.findByTestId('insights-graph-canvas')).toBeVisible()
   },
 }

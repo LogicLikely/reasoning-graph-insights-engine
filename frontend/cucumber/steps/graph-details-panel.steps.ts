@@ -99,6 +99,72 @@ Then('I should see the graph workspace title', async function (this: StorybookWo
   ).toBeVisible()
 })
 
+Then('I should see the compact graph canvas', async function (this: StorybookWorld) {
+  await expect(this.storyPage.getByTestId('insights-graph-canvas')).toBeVisible()
+})
+
+When('I expand the compact graph to the viewport', async function (this: StorybookWorld) {
+  await this.storyPage.getByRole('button', { name: 'Expand graph to viewport' }).click()
+})
+
+Then('the compact graph should fill the viewport', async function (this: StorybookWorld) {
+  const viewport = this.storyPage.viewportSize()
+  const graphMapRoot = this.storyPage.getByTestId('graphmap-root')
+  await expect(graphMapRoot).toHaveAttribute('data-fullscreen', 'true')
+  const compactCanvas = await graphMapRoot.boundingBox()
+
+  expect(viewport).not.toBeNull()
+  expect(compactCanvas).not.toBeNull()
+  expect(Math.abs((compactCanvas?.width ?? 0) - (viewport?.width ?? 0))).toBeLessThanOrEqual(2)
+  expect(Math.abs((compactCanvas?.height ?? 0) - (viewport?.height ?? 0))).toBeLessThanOrEqual(2)
+})
+
+When('I restore the compact graph size', async function (this: StorybookWorld) {
+  await this.storyPage.getByRole('button', { name: 'Restore graph size' }).click()
+})
+
+When('I expand all compact graph branches', async function (this: StorybookWorld) {
+  await this.storyPage.getByRole('button', { name: 'Expand all' }).click()
+})
+
+Then('compact support and rebut edges should retain different colors', async function (this: StorybookWorld) {
+  const supportEdge = this.storyPage
+    .locator('.insights-graphmap-edge--support .react-flow__edge-path')
+    .first()
+  const rebutEdge = this.storyPage
+    .locator('.insights-graphmap-edge--rebut .react-flow__edge-path')
+    .first()
+  await expect(supportEdge).toHaveCount(1)
+  await expect(rebutEdge).toHaveCount(1)
+
+  const supportStroke = await supportEdge.evaluate((element) => getComputedStyle(element).stroke)
+  const rebutStroke = await rebutEdge.evaluate((element) => getComputedStyle(element).stroke)
+
+  expect(supportStroke).not.toBe('none')
+  expect(rebutStroke).not.toBe('none')
+  expect(supportStroke).not.toBe(rebutStroke)
+})
+
+Then('compact counterarguments should retain their tint', async function (this: StorybookWorld) {
+  const claimCard = this.storyPage.locator(
+    '.insights-graphmap-node--claim .insights-graphmap-card',
+  ).first()
+  const objectionCard = this.storyPage.locator(
+    '.insights-graphmap-node--objection .insights-graphmap-card',
+  ).first()
+  await expect(claimCard).toBeVisible()
+  await expect(objectionCard).toBeVisible()
+
+  const claimBackground = await claimCard.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  )
+  const objectionBackground = await objectionCard.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  )
+
+  expect(objectionBackground).not.toBe(claimBackground)
+})
+
 Then('I should see that the graph is loading', async function (this: StorybookWorld) {
   await expect(
     this.storyPage.getByRole('heading', { level: 2, name: 'Loading graph demo' }),
@@ -110,7 +176,7 @@ Then('I should be able to continue into the graph workspace', async function (th
   await expect(
     this.storyPage.getByRole('heading', { level: 2, name: 'Sample Reasoning Graph' }),
   ).toBeVisible()
-  await expect(this.storyPage.getByTestId('graph-canvas')).toBeVisible()
+  await expect(this.storyPage.getByTestId('insights-graph-canvas')).toBeVisible()
 })
 
 Then('I should see the graph summary counts', async function (this: StorybookWorld) {

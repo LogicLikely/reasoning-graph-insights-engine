@@ -1,10 +1,12 @@
 using Backend.Models.Domain;
 using Backend.Models.Dto;
+using Backend.Seeding;
 
 namespace Backend.Repositories;
 
 public interface IGraphRepository
 {
+    Task<IReadOnlyList<GraphSummary>> GetSummariesAsync(CancellationToken cancellationToken = default);
     Task<Graph?> GetBySlugAsync(string slug, CancellationToken cancellationToken = default);
     Task<bool> DeleteNodeAsync(string slug, string nodeId, CancellationToken cancellationToken = default);
     Task<bool> AddNodeAsync(string slug, GraphNodeDto node, string? parentID = null,
@@ -18,5 +20,7 @@ public interface IGraphRepository
         int graphId,
         IReadOnlyDictionary<string, decimal> posteriorOddsByNodeId,
         CancellationToken cancellationToken = default);
-    Task ResetDatabaseAsync(CancellationToken cancellationToken = default);
+    Task ResetDatabaseAsync(
+        IReadOnlyList<StressGraphSeedSpec> stressGraphs,
+        CancellationToken cancellationToken = default);
 }

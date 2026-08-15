@@ -89,6 +89,30 @@
   color: var(--color-surface);
 }
 
+.graph-overview-panel__graph-select {
+  display: grid;
+  gap: 0.45rem;
+  color: var(--color-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.graph-overview-panel__graph-select select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: rgba(253, 253, 248, 0.8);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.graph-overview-panel__graph-select select:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .graph-overview-panel__reset-button {
   width: 100%;
   min-height: 2.75rem;

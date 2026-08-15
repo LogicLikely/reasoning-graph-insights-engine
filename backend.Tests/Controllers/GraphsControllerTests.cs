@@ -1,7 +1,9 @@
 using Backend.Controllers;
 using Backend.Models.Dto;
 using Backend.Services;
+using Backend.Seeding;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Moq;
 
 namespace backend.Tests.Controllers;
@@ -9,6 +11,122 @@ namespace backend.Tests.Controllers;
 [TestClass]
 public class GraphsControllerTests
 {
+    [TestMethod]
+    public async Task GetSummaries_ReturnsOkWithCatalog()
+    {
+        IReadOnlyList<GraphSummaryDto> summaries =
+        [
+            new()
+            {
+                Slug = "sample-medium",
+                Title = "Sample Medium Reasoning Graph",
+                Description = "Seed graph"
+            },
+            new()
+            {
+                Slug = "flat-earth-large",
+                Title = "Large Flat-Earth Reasoning Graph"
+            }
+        ];
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.GetSummariesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summaries);
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.GetSummaries(CancellationToken.None);
+
+        var okResult = result as OkObjectResult;
+        Assert.IsNotNull(okResult);
+        Assert.AreSame(summaries, okResult.Value);
+    }
+
+    [TestMethod]
+    public async Task GetSummaries_ReturnsOkWithEmptyList_WhenNoGraphsExist()
+    {
+        IReadOnlyList<GraphSummaryDto> summaries = Array.Empty<GraphSummaryDto>();
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.GetSummariesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(summaries);
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.GetSummaries(CancellationToken.None);
+
+        var okResult = result as OkObjectResult;
+        Assert.IsNotNull(okResult);
+        var payload = okResult.Value as IReadOnlyList<GraphSummaryDto>;
+        Assert.IsNotNull(payload);
+        Assert.AreEqual(0, payload.Count);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabase_NoBody_RequestsBaseSeedOnly()
+    {
+        var serviceMock = new Mock<IGraphService>();
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.ResetDatabase(null, CancellationToken.None);
+
+        Assert.IsInstanceOfType<NoContentResult>(result);
+        serviceMock.Verify(service => service.ResetDatabaseAsync(
+            It.Is<IReadOnlyCollection<string>>(ids => ids.Count == 0),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabase_PassesSelectedStressGraphIds()
+    {
+        var serviceMock = new Mock<IGraphService>();
+        var controller = new GraphsController(serviceMock.Object);
+        var request = new ResetDatabaseRequestDto
+        {
+            StressGraphIds =
+            [
+                StressGraphSeedIds.Balanced1K,
+                StressGraphSeedIds.Deep10K
+            ]
+        };
+
+        var result = await controller.ResetDatabase(request, CancellationToken.None);
+
+        Assert.IsInstanceOfType<NoContentResult>(result);
+        serviceMock.Verify(service => service.ResetDatabaseAsync(
+            It.Is<IReadOnlyCollection<string>>(ids => ids.SequenceEqual(request.StressGraphIds)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabase_UnknownStressGraphId_ReturnsBadRequest()
+    {
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.ResetDatabaseAsync(
+                It.IsAny<IReadOnlyCollection<string>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidStressGraphSeedSelectionException(["unknown"]));
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.ResetDatabase(
+            new ResetDatabaseRequestDto { StressGraphIds = ["unknown"] },
+            CancellationToken.None);
+
+        Assert.IsInstanceOfType<BadRequestObjectResult>(result);
+    }
+
+    [TestMethod]
+    public void ResetDatabase_AllowsAnEmptyHttpRequestBody()
+    {
+        var method = typeof(GraphsController).GetMethod(nameof(GraphsController.ResetDatabase));
+        Assert.IsNotNull(method);
+        var bodyAttribute = method.GetParameters()[0]
+            .GetCustomAttributes(typeof(FromBodyAttribute), inherit: true)
+            .Cast<FromBodyAttribute>()
+            .Single();
+
+        Assert.AreEqual(EmptyBodyBehavior.Allow, bodyAttribute.EmptyBodyBehavior);
+    }
+
     [TestMethod]
     public async Task GetBySlug_ReturnsOk_WhenGraphExists()
     {

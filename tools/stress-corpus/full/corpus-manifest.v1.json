@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "public-domain-stress-corpus-v1",
+  "entryCount": 10000,
+  "shardSize": 1000,
+  "reviewedPrefixSize": 180,
+  "constraints": {
+    "titleWords": {
+      "minimum": 3,
+      "maximum": 6
+    },
+    "titleCharactersMaximum": 35,
+    "excerptSentences": {
+      "minimum": 1,
+      "maximum": 2
+    },
+    "excerptCharactersMaximum": 232,
+    "runtimeBodyCharactersMaximum": 250,
+    "runtimePrefixWorstCase": "Objection 99999 — ",
+    "titleUniqueness": "case-insensitive",
+    "excerptUniqueness": "case-insensitive"
+  },
+  "generation": {
+    "script": "tools/stress-corpus/build-full-corpus.mjs",
+    "nodeVersion": "24.13.0",
+    "icuVersion": "77.1",
+    "ordering": "Frozen reviewed prefix followed by source-order round-robin over eligible candidates.",
+    "generatedTitleMethod": "Highest-scoring globally unique 3–6-word ordered source keywords; a natural contiguous source phrase is used when it scores higher.",
+    "hundredThousandReuse": "runtime entry at nodeIndex % 10000"
+  },
+  "sources": {
+    "manifestPath": "tools/stress-corpus/full/corpus-sources.v1.json",
+    "manifestSha256": "6938bd019665ff0b0ab9e17d812d5790a808e27b858192d6a17e1de6e4743ff2",
+    "sourceCount": 13,
+    "entries": [
+      {
+        "id": "aristotle-politics",
+        "ebookNumber": 6762,
+        "fileName": "aristotle-politics.txt",
+        "sourceSha256": "4b5f5d1bc2859780ba5954f5e98b5a8ebf0a0945ace77c861d5b164454155e9f",
+        "sourceBytes": 604414,
+        "rawCandidates": 480,
+        "eligibleCandidates": 421,
+        "selectedEntries": 439
+      },
+      {
+        "id": "plato-apology",
+        "ebookNumber": 1656,
+        "fileName": "plato-apology.txt",
+        "sourceSha256": "f4cc548bd8c8b59e14effdbaab9df97f29bd48f317a466fe8c3c63ad288b964c",
+        "sourceBytes": 107485,
+        "rawCandidates": 244,
+        "eligibleCandidates": 199,
+        "selectedEntries": 217
+      },
+      {
+        "id": "epictetus-encheiridion",
+        "ebookNumber": 10661,
+        "fileName": "epictetus-encheiridion.txt",
+        "sourceSha256": "7915eac7442daed1fbc461b8a281ecc315c5e619126d50d914c29c39fa3b2209",
+        "sourceBytes": 351891,
+        "rawCandidates": 234,
+        "eligibleCandidates": 193,
+        "selectedEntries": 211
+      },
+      {
+        "id": "machiavelli-prince",
+        "ebookNumber": 1232,
+        "fileName": "machiavelli-prince.txt",
+        "sourceSha256": "33496a305f7a4b933784fb5aec95f920fbc3d4687794817e4cc444aa6578d2e4",
+        "sourceBytes": 308019,
+        "rawCandidates": 285,
+        "eligibleCandidates": 261,
+        "selectedEntries": 279
+      },
+      {
+        "id": "bacon-essays",
+        "ebookNumber": 575,
+        "fileName": "bacon-essays.txt",
+        "sourceSha256": "4434aa015d325e65816eb0e694e7c573fa4b71523530e45adfeb23e7fcf63bf1",
+        "sourceBytes": 324388,
+        "rawCandidates": 1285,
+        "eligibleCandidates": 1215,
+        "selectedEntries": 1233
+      },
+      {
+        "id": "paine-common-sense",
+        "ebookNumber": 147,
+        "fileName": "paine-common-sense.txt",
+        "sourceSha256": "9c467182c78bd246ab05ce5bef11c32cb748ebaa5622dedc4bd4c02a8a0fff90",
+        "sourceBytes": 148539,
+        "rawCandidates": 308,
+        "eligibleCandidates": 271,
+        "selectedEntries": 289
+      },
+      {
+        "id": "wollstonecraft-rights",
+        "ebookNumber": 3420,
+        "fileName": "wollstonecraft-rights.txt",
+        "sourceSha256": "a5554f8925f5d768b1486777466e5c55f88efd45f1af7fcb6d273317c8926b1f",
+        "sourceBytes": 538208,
+        "rawCandidates": 1348,
+        "eligibleCandidates": 1125,
+        "selectedEntries": 1143
+      },
+      {
+        "id": "thoreau-civil-disobedience",
+        "ebookNumber": 71,
+        "fileName": "thoreau-civil-disobedience.txt",
+        "sourceSha256": "88310a64ab17a33347228deb109dc67f089c7313ef30e97d7870449612a77c98",
+        "sourceBytes": 72261,
+        "rawCandidates": 257,
+        "eligibleCandidates": 218,
+        "selectedEntries": 236
+      },
+      {
+        "id": "mill-on-liberty",
+        "ebookNumber": 34901,
+        "fileName": "mill-on-liberty.txt",
+        "sourceSha256": "cfc8de9ac48709ef8e66922b32bac51335c883082e4da24251e1290816df904c",
+        "sourceBytes": 331189,
+        "rawCandidates": 621,
+        "eligibleCandidates": 568,
+        "selectedEntries": 586
+      },
+      {
+        "id": "douglass-narrative",
+        "ebookNumber": 23,
+        "fileName": "douglass-narrative.txt",
+        "sourceSha256": "234c15348a66919bad1d534cdd48ee8ddf91f50115a706cbefaa8edd049672fd",
+        "sourceBytes": 249061,
+        "rawCandidates": 1533,
+        "eligibleCandidates": 1138,
+        "selectedEntries": 1156
+      },
+      {
+        "id": "darwin-origin",
+        "ebookNumber": 1228,
+        "fileName": "darwin-origin.txt",
+        "sourceSha256": "ededa9c0bf8761efed092c303b46c1c92de956838cba6249a33bedfd6d7363b4",
+        "sourceBytes": 970612,
+        "rawCandidates": 2082,
+        "eligibleCandidates": 1726,
+        "selectedEntries": 1404
+      },
+      {
+        "id": "smith-wealth",
+        "ebookNumber": 3300,
+        "fileName": "smith-wealth.txt",
+        "sourceSha256": "e91d52dca43fd0fd69baf7776b00a5d8e74b69675b6b608ca8a0378aaf3ae58d",
+        "sourceBytes": 2468951,
+        "rawCandidates": 6713,
+        "eligibleCandidates": 6401,
+        "selectedEntries": 1404
+      },
+      {
+        "id": "austen-pride",
+        "ebookNumber": 1342,
+        "fileName": "austen-pride.txt",
+        "sourceSha256": "74f2665d6e6925fc2c17dec644bec9e87df478a0f1836822125e8acbb3777806",
+        "sourceBytes": 772386,
+        "rawCandidates": 5195,
+        "eligibleCandidates": 2439,
+        "selectedEntries": 1403
+      }
+    ]
+  },
+  "filtering": {
+    "policy": "Light mechanical filtering removes overt slurs, particularly graphic wording, source artifacts, incomplete boundaries, and unusable titles. The frozen reviewed prefix is preserved unchanged.",
+    "eligibleCandidateCapacity": 16175,
+    "generatedEntriesSelected": 9820,
+    "eligibleCandidatesNotSelected": 6355,
+    "rejectedCandidatesByReason": {
+      "abbreviation-boundary-fragment": 1086,
+      "abbreviation-ending-fragment": 731,
+      "boundary-fragment": 23,
+      "duplicate-excerpt": 6,
+      "graphic-content": 23,
+      "heading-or-list": 11,
+      "incomplete-ending": 24,
+      "lowercase-fragment": 262,
+      "markup-artifact": 22,
+      "near-duplicate-excerpt": 2,
+      "no-valid-title": 286,
+      "numeric-list": 111,
+      "outline-heading": 100,
+      "overt-term": 10,
+      "reserved-reviewed-candidate": 209,
+      "source-artifact": 55,
+      "too-short": 357,
+      "unbalanced-parentheses": 20,
+      "unbalanced-quotation": 1072
+    }
+  },
+  "statistics": {
+    "entriesBySource": {
+      "aristotle-politics": 439,
+      "austen-pride": 1403,
+      "bacon-essays": 1233,
+      "darwin-origin": 1404,
+      "douglass-narrative": 1156,
+      "epictetus-encheiridion": 211,
+      "machiavelli-prince": 279,
+      "mill-on-liberty": 586,
+      "paine-common-sense": 289,
+      "plato-apology": 217,
+      "smith-wealth": 1404,
+      "thoreau-civil-disobedience": 236,
+      "wollstonecraft-rights": 1143
+    },
+    "titleMethods": {
+      "contiguous-source-phrase": 5,
+      "curated-review": 180,
+      "ordered-source-keywords": 9815
+    },
+    "titleCharacters": {
+      "minimum": 11,
+      "maximum": 35
+    },
+    "excerptCharacters": {
+      "minimum": 28,
+      "maximum": 232,
+      "under100": 3918
+    },
+    "uniqueTitleWords": 9170
+  },
+  "fingerprints": {
+    "method": "SHA-256 of JSON.stringify(ordered runtime entry array prefix)",
+    "reviewedContent": {
+      "method": "SHA-256 of JSON.stringify([{index,title,excerpt}, ...])",
+      "count": 180,
+      "sha256": "7a568f92d744cae8d790361380a7df8622e8d93c47f3b662e85698281a9443b0"
+    },
+    "first1000": "101ee037202b311da388711d10785efa77fc504533fc18811983472f9092555b",
+    "first10000": "ec0901fbf9f93b5beb6aa134d0172d1e6d17fa5fd820e17ca31fd993e677518d"
+  },
+  "shards": [
+    {
+      "path": "tools/stress-corpus/full/corpus-00000-00999.json",
+      "indexStart": 0,
+      "indexEnd": 999,
+      "entryCount": 1000,
+      "bytes": 812647,
+      "sha256": "da34592868dd79b7608e55f1464d58e31fcdcd3b9ccdef1e62aa98c285a8dca6"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-01000-01999.json",
+      "indexStart": 1000,
+      "indexEnd": 1999,
+      "entryCount": 1000,
+      "bytes": 813341,
+      "sha256": "289763bb01baa18969c1c427e52a4e830639da974e1fd3d99b87fd7d6cef8de7"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-02000-02999.json",
+      "indexStart": 2000,
+      "indexEnd": 2999,
+      "entryCount": 1000,
+      "bytes": 814398,
+      "sha256": "3dab515fbb957ade697f802b662d689d3c2c5b1b315f7594e5e2b2083a25e1d2"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-03000-03999.json",
+      "indexStart": 3000,
+      "indexEnd": 3999,
+      "entryCount": 1000,
+      "bytes": 817187,
+      "sha256": "7d63644d2ddf3d705ee585c53d93bdca73895155e6fd35b9a2ab0125d2b3deeb"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-04000-04999.json",
+      "indexStart": 4000,
+      "indexEnd": 4999,
+      "entryCount": 1000,
+      "bytes": 806894,
+      "sha256": "3d6398b385e9da57fd25e7463590586c87c6cf25c956d38446dfc363edb87137"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-05000-05999.json",
+      "indexStart": 5000,
+      "indexEnd": 5999,
+      "entryCount": 1000,
+      "bytes": 789358,
+      "sha256": "e2015b05f23e7501c73dc176f5e76c4c319915a840a0fc070eaab4a00fc3dd9a"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-06000-06999.json",
+      "indexStart": 6000,
+      "indexEnd": 6999,
+      "entryCount": 1000,
+      "bytes": 789044,
+      "sha256": "aca0dc2eef476bf81c3226ebcf494e083881ee04885be7731a14115d47efadfa"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-07000-07999.json",
+      "indexStart": 7000,
+      "indexEnd": 7999,
+      "entryCount": 1000,
+      "bytes": 808910,
+      "sha256": "a26c2bf3451635ef59eb9290479c362fb5ff23c3a60c6a9ea96c370defc81095"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-08000-08999.json",
+      "indexStart": 8000,
+      "indexEnd": 8999,
+      "entryCount": 1000,
+      "bytes": 813956,
+      "sha256": "b57bdadb04857da18b680fd79c749ed896f5167d96a87734586bcd8de86daf19"
+    },
+    {
+      "path": "tools/stress-corpus/full/corpus-09000-09999.json",
+      "indexStart": 9000,
+      "indexEnd": 9999,
+      "entryCount": 1000,
+      "bytes": 805828,
+      "sha256": "e296b711a0d141de5c9b69284fe758693989e9e6b4afd35a6f3b2fe6cd0e3069"
+    }
+  ],
+  "runtime": {
+    "path": "backend/data/seed/insights_stress_corpus.json",
+    "bytes": 5071219,
+    "sha256": "020620b659a626e0c085ece710508f650717f7992c7275ec8dff8496b8bb25ca"
+  }
+}

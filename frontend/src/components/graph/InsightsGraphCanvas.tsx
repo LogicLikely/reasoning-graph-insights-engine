@@ -1,0 +1,56 @@
+import { useState } from 'react'
+import {
+  AdaptedGraphMap,
+  type GraphLayoutDirection,
+} from '@logiclikely/graphmap'
+import '@logiclikely/graphmap/style.css'
+import type { GraphFixture, GraphFixtureNode } from '../../fixtures/sampleGraph'
+import { insightsGraphAdapter } from './insightsGraphAdapter'
+import {
+  getInsightsEdgePresentation,
+  getInsightsNodePresentation,
+  renderInsightsGraphNode,
+} from './insightsGraphPresentation'
+import './InsightsGraphCanvas.css'
+
+export interface InsightsGraphCanvasProps {
+  graph: GraphFixture
+  selectedNodeId?: string | null
+  onNodeSelect: (node: GraphFixtureNode | null) => void
+  isFullscreen: boolean
+  onFullscreenChange: (isFullscreen: boolean) => void
+}
+
+export function InsightsGraphCanvas({
+  graph,
+  selectedNodeId,
+  onNodeSelect,
+  isFullscreen,
+  onFullscreenChange,
+}: InsightsGraphCanvasProps) {
+  const [orientation, setOrientation] = useState<GraphLayoutDirection>('LR')
+
+  return (
+    <div className="insights-graphmap-host" data-testid="insights-graph-canvas">
+      <AdaptedGraphMap
+        graph={graph}
+        adapter={insightsGraphAdapter}
+        selectedNodeId={selectedNodeId ?? null}
+        onSelect={onNodeSelect}
+        defaultTheme="insights"
+        orientation={orientation}
+        onOrientationChange={setOrientation}
+        renderNode={renderInsightsGraphNode}
+        getNodePresentation={getInsightsNodePresentation}
+        getEdgePresentation={getInsightsEdgePresentation}
+        nodeSize={{ width: 230, height: 112 }}
+        defaultNodesDraggable
+        minZoom={0.35}
+        maxZoom={1.5}
+        fullscreen={{ value: isFullscreen, onChange: onFullscreenChange }}
+        className="insights-graphmap-root"
+        canvasClassName="insights-graphmap-canvas"
+      />
+    </div>
+  )
+}

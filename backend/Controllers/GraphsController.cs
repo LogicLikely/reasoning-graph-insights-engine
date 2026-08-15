@@ -1,6 +1,8 @@
 using Backend.Models.Dto;
 using Backend.Services;
+using Backend.Seeding;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Backend.Controllers;
 
@@ -13,6 +15,14 @@ public class GraphsController : ControllerBase
     public GraphsController(IGraphService graphService)
     {
         _graphService = graphService;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetSummaries(CancellationToken cancellationToken)
+    {
+        var summaries = await _graphService.GetSummariesAsync(cancellationToken);
+
+        return Ok(summaries);
     }
 
     [HttpGet("{slug}")]
@@ -31,9 +41,24 @@ public class GraphsController : ControllerBase
     }
 
     [HttpPost("reset")]
-    public async Task<IActionResult> ResetDatabase(CancellationToken cancellationToken)
+    public async Task<IActionResult> ResetDatabase(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ResetDatabaseRequestDto? request,
+        CancellationToken cancellationToken)
     {
-        await _graphService.ResetDatabaseAsync(cancellationToken);
+        try
+        {
+            await _graphService.ResetDatabaseAsync(
+                request?.StressGraphIds ?? [],
+                cancellationToken);
+        }
+        catch (InvalidStressGraphSeedSelectionException exception)
+        {
+            return BadRequest(new
+            {
+                message = exception.Message,
+                unknownStressGraphIds = exception.UnknownIds
+            });
+        }
 
         return NoContent();
     }

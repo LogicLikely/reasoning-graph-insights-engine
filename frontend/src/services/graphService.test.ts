@@ -73,6 +73,36 @@ describe('graphService', () => {
     expect(fixtureSpy).not.toHaveBeenCalled()
   })
 
+  it('loads the ordered graph catalog from the api', async () => {
+    const summaries = [
+      {
+        slug: 'sample-medium',
+        title: 'Sample graph',
+        description: 'First graph',
+        nodeCount: 11,
+        edgeCount: 10,
+      },
+      {
+        slug: 'flat-earth-large',
+        title: 'Large graph',
+        description: null,
+        nodeCount: 1_000,
+        edgeCount: 1_248,
+      },
+    ]
+    const catalogSpy = vi.fn().mockResolvedValue(summaries)
+
+    vi.doMock('./graphApi', () => ({
+      getGraphBySlugFromApi: vi.fn(),
+      getGraphCatalogFromApi: catalogSpy,
+    }))
+
+    const { getGraphCatalog } = await import('./graphService')
+
+    await expect(getGraphCatalog()).resolves.toEqual(summaries)
+    expect(catalogSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('uses the env var to determine the default data source', async () => {
     vi.stubEnv('VITE_USE_FIXTURE', 'true')
 
@@ -139,7 +169,25 @@ describe('graphService', () => {
     )
   })
 
-  it('posts to the reset endpoint when resetting the database', async () => {
+  it('posts selected stress graph IDs to the reset endpoint', async () => {
+    const postSpy = vi.fn().mockResolvedValue({})
+
+    vi.doMock('./httpClient', () => ({
+      httpClient: {
+        post: postSpy,
+      },
+    }))
+
+    const { resetDatabase } = await import('./graphService')
+
+    await resetDatabase(['stress-balanced-1k', 'stress-deep-10k'])
+
+    expect(postSpy).toHaveBeenCalledWith('/api/graphs/reset', {
+      stressGraphIds: ['stress-balanced-1k', 'stress-deep-10k'],
+    })
+  })
+
+  it('requests only standard graphs when reset options are omitted', async () => {
     const postSpy = vi.fn().mockResolvedValue({})
 
     vi.doMock('./httpClient', () => ({
@@ -152,6 +200,6 @@ describe('graphService', () => {
 
     await resetDatabase()
 
-    expect(postSpy).toHaveBeenCalledWith('/api/graphs/reset')
+    expect(postSpy).toHaveBeenCalledWith('/api/graphs/reset', { stressGraphIds: [] })
   })
 })

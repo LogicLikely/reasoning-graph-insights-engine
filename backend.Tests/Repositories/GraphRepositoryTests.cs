@@ -1,6 +1,7 @@
 using Backend.Data;
 using Backend.Models.Dto;
 using Backend.Repositories;
+using Backend.Seeding;
 using Microsoft.Extensions.Hosting;
 using Moq;
 using System.Text.Json;
@@ -10,6 +11,78 @@ namespace backend.Tests.Repositories;
 [TestClass]
 public class GraphRepositoryTests
 {
+    private static readonly Lazy<string> ValidStressCorpusJson = new(CreateValidStressCorpusJson);
+
+    [TestMethod]
+    public async Task GetSummariesAsync_ReturnsGraphMetadataInDatabaseOrder()
+    {
+        var connection = new FakeDbConnection();
+        connection.WhenCommandContains(
+            "FROM graphs",
+            [
+                new Dictionary<string, object?>
+                {
+                    ["slug"] = "sample-medium",
+                    ["title"] = "Sample Medium Reasoning Graph",
+                    ["description"] = "Seed graph",
+                    ["NodeCount"] = 18,
+                    ["EdgeCount"] = 17
+                },
+                new Dictionary<string, object?>
+                {
+                    ["slug"] = "flat-earth-large",
+                    ["title"] = "Large Flat-Earth Reasoning Graph",
+                    ["description"] = null,
+                    ["NodeCount"] = 105,
+                    ["EdgeCount"] = 112
+                }
+            ]);
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+
+        var result = await repository.GetSummariesAsync(CancellationToken.None);
+
+        Assert.AreEqual(2, result.Count);
+        Assert.AreEqual("sample-medium", result[0].Slug);
+        Assert.AreEqual("Sample Medium Reasoning Graph", result[0].Title);
+        Assert.AreEqual("Seed graph", result[0].Description);
+        Assert.AreEqual(18, result[0].NodeCount);
+        Assert.AreEqual(17, result[0].EdgeCount);
+        Assert.AreEqual("flat-earth-large", result[1].Slug);
+        Assert.AreEqual("Large Flat-Earth Reasoning Graph", result[1].Title);
+        Assert.IsNull(result[1].Description);
+        Assert.AreEqual(105, result[1].NodeCount);
+        Assert.AreEqual(112, result[1].EdgeCount);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        StringAssert.Contains(connection.ExecutedCommands[0].CommandText, "GROUP BY graph_id");
+        StringAssert.Contains(connection.ExecutedCommands[0].CommandText, "ORDER BY graph.id");
+    }
+
+    [TestMethod]
+    public async Task GetSummariesAsync_ReturnsEmptyList_WhenNoGraphsExist()
+    {
+        var connection = new FakeDbConnection();
+        connection.WhenCommandContains("FROM graphs", []);
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+
+        var result = await repository.GetSummariesAsync(CancellationToken.None);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(0, result.Count);
+        Assert.AreEqual(1, connection.ExecutedCommands.Count);
+    }
+
     [TestMethod]
     public async Task GetBySlugAsync_ReturnsNull_WhenGraphIsNotFound()
     {
@@ -317,12 +390,244 @@ public class GraphRepositoryTests
         Assert.AreEqual(-0.5m, connection.ExecutedCommands[1].Parameters["PosteriorOdds"]);
     }
 
-    private static GraphRepository CreateRepository(DbConnectionFactory connectionFactory)
+    [TestMethod]
+    public async Task ResetDatabaseAsync_InstallsBaseAndSelectedStressGraphsInOneTransaction()
+    {
+        var seedRoot = CreateSeedRoot(includeStressSeed: true);
+
+        try
+        {
+            var connection = new FakeDbConnection();
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            connectionFactoryMock
+                .Setup(factory => factory.CreateConnection())
+                .Returns(connection);
+
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+            var selected = new[]
+            {
+                StressGraphSeedCatalog.All[0],
+                StressGraphSeedCatalog.All[11]
+            };
+
+            await repository.ResetDatabaseAsync(selected, CancellationToken.None);
+
+            Assert.AreEqual(3, connection.ExecutedCommands.Count);
+            Assert.AreEqual("BASE SEED", connection.ExecutedCommands[0].CommandText);
+            Assert.AreEqual(3, connection.ExecutedCommands[1].Parameters["GraphId"]);
+            Assert.AreEqual(StressGraphSeedIds.Balanced1K, connection.ExecutedCommands[1].Parameters["Slug"]);
+            Assert.AreEqual("balanced", connection.ExecutedCommands[1].Parameters["Shape"]);
+            Assert.AreEqual(1_000, connection.ExecutedCommands[1].Parameters["NodeCount"]);
+            Assert.AreEqual(10_000, connection.ExecutedCommands[1].Parameters["CorpusEntryCount"]);
+            Assert.AreEqual(ValidStressCorpusJson.Value, connection.ExecutedCommands[1].Parameters["CorpusJson"]);
+            Assert.AreEqual(14, connection.ExecutedCommands[2].Parameters["GraphId"]);
+            Assert.AreEqual(StressGraphSeedIds.SharedDiamond100K, connection.ExecutedCommands[2].Parameters["Slug"]);
+            Assert.AreEqual(100_000, connection.ExecutedCommands[2].Parameters["NodeCount"]);
+            Assert.AreEqual(10_000, connection.ExecutedCommands[2].Parameters["CorpusEntryCount"]);
+            Assert.AreEqual(ValidStressCorpusJson.Value, connection.ExecutedCommands[2].Parameters["CorpusJson"]);
+            Assert.IsTrue(connection.ExecutedCommands.All(command => command.CommandTimeout == 300));
+            Assert.AreEqual(1, connection.BeginTransactionCount);
+            Assert.AreEqual(1, connection.CommitCount);
+            Assert.AreEqual(0, connection.RollbackCount);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_BaseOnly_DoesNotRequireStressSeedFile()
+    {
+        var seedRoot = CreateSeedRoot(
+            includeStressSeed: false,
+            includeStressCorpus: false);
+
+        try
+        {
+            var connection = new FakeDbConnection();
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            connectionFactoryMock
+                .Setup(factory => factory.CreateConnection())
+                .Returns(connection);
+
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+
+            await repository.ResetDatabaseAsync([], CancellationToken.None);
+
+            Assert.AreEqual(1, connection.ExecutedCommands.Count);
+            Assert.AreEqual(300, connection.ExecutedCommands[0].CommandTimeout);
+            Assert.AreEqual(1, connection.CommitCount);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_StressSeedFailure_RollsBackWithoutCommit()
+    {
+        var seedRoot = CreateSeedRoot(includeStressSeed: true);
+
+        try
+        {
+            var connection = new FakeDbConnection();
+            connection.ThrowWhenCommandContains("STRESS");
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            connectionFactoryMock
+                .Setup(factory => factory.CreateConnection())
+                .Returns(connection);
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+
+            await Assert.ThrowsExceptionAsync<InvalidOperationException>(() =>
+                repository.ResetDatabaseAsync(
+                    [StressGraphSeedCatalog.All[0]],
+                    CancellationToken.None));
+
+            Assert.AreEqual(2, connection.ExecutedCommands.Count);
+            Assert.AreEqual(1, connection.BeginTransactionCount);
+            Assert.AreEqual(0, connection.CommitCount);
+            Assert.AreEqual(1, connection.RollbackCount);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_MissingStressSeed_DoesNotOpenDatabase()
+    {
+        var seedRoot = CreateSeedRoot(
+            includeStressSeed: false,
+            includeStressCorpus: true);
+
+        try
+        {
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+
+            await Assert.ThrowsExceptionAsync<FileNotFoundException>(() =>
+                repository.ResetDatabaseAsync([StressGraphSeedCatalog.All[0]], CancellationToken.None));
+
+            connectionFactoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_MissingStressCorpus_DoesNotOpenDatabase()
+    {
+        var seedRoot = CreateSeedRoot(
+            includeStressSeed: true,
+            includeStressCorpus: false);
+
+        try
+        {
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+
+            var exception = await Assert.ThrowsExceptionAsync<FileNotFoundException>(() =>
+                repository.ResetDatabaseAsync([StressGraphSeedCatalog.All[0]], CancellationToken.None));
+
+            StringAssert.EndsWith(
+                exception.FileName!,
+                Path.Combine("Data", "Seed", "insights_stress_corpus.json"));
+            connectionFactoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task ResetDatabaseAsync_MalformedStressCorpus_DoesNotOpenDatabase()
+    {
+        var seedRoot = CreateSeedRoot(
+            includeStressSeed: true,
+            includeStressCorpus: true,
+            corpusJson: "{ definitely-not-valid-json }");
+
+        try
+        {
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+
+            await Assert.ThrowsExceptionAsync<InvalidDataException>(() =>
+                repository.ResetDatabaseAsync([StressGraphSeedCatalog.All[0]], CancellationToken.None));
+
+            connectionFactoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    private static string CreateSeedRoot(
+        bool includeStressSeed,
+        bool includeStressCorpus = true,
+        string? corpusJson = null)
+    {
+        var seedRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"reasoning-graph-seed-tests-{Guid.NewGuid():N}");
+        var sqlDirectory = Path.Combine(seedRoot, "Data", "Sql");
+        Directory.CreateDirectory(sqlDirectory);
+        File.WriteAllText(Path.Combine(sqlDirectory, "insights_seed.sql"), "BASE SEED");
+
+        if (includeStressSeed)
+        {
+            File.WriteAllText(
+                Path.Combine(sqlDirectory, "insights_stress_seed.sql"),
+                "STRESS @GraphId @Slug @Title @Description @Shape @NodeCount @CorpusJson @CorpusEntryCount");
+        }
+
+        if (includeStressCorpus)
+        {
+            var seedDirectory = Path.Combine(seedRoot, "Data", "Seed");
+            Directory.CreateDirectory(seedDirectory);
+            File.WriteAllText(
+                Path.Combine(seedDirectory, "insights_stress_corpus.json"),
+                corpusJson ?? ValidStressCorpusJson.Value);
+        }
+
+        return seedRoot;
+    }
+
+    private static string CreateValidStressCorpusJson()
+    {
+        return JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            corpusId = "test-corpus-v1",
+            entryCount = StressGraphCorpusLoader.RequiredEntryCount,
+            entries = Enumerable
+                .Range(0, StressGraphCorpusLoader.RequiredEntryCount)
+                .Select(index => new
+                {
+                    index,
+                    title = $"Distinct Corpus Title {index}",
+                    excerpt = $"Distinct public-domain excerpt number {index}.",
+                    category = "public-domain",
+                    tags = new[] { "corpus", "stress" }
+                })
+        });
+    }
+
+    private static GraphRepository CreateRepository(
+        DbConnectionFactory connectionFactory,
+        string? contentRootPath = null)
     {
         var hostEnvironmentMock = new Mock<IHostEnvironment>();
         hostEnvironmentMock
             .Setup(environment => environment.ContentRootPath)
-            .Returns(Directory.GetCurrentDirectory());
+            .Returns(contentRootPath ?? Directory.GetCurrentDirectory());
 
         return new GraphRepository(connectionFactory, hostEnvironmentMock.Object);
     }
