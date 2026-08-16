@@ -56,27 +56,56 @@ public class BenchmarkSchemaSqlTests
     public void Schema_ReconcilesDroppedGraphMapAdmissionDataWithoutDeletingHistory()
     {
         var sql = ReadRepositoryFile("backend", "data", "sql", "benchmark_schema.sql");
+        var reconciliationStart = sql.IndexOf("-- Phase 3.5", StringComparison.Ordinal);
+        Assert.IsTrue(reconciliationStart > 0);
+        var freshSchemaSql = sql[..reconciliationStart];
+        var reconciliationSql = sql[reconciliationStart..];
 
         Assert.IsFalse(Regex.IsMatch(
-            sql,
+            freshSchemaSql,
             @"\bvisualization_admission\s+text\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
         StringAssert.Contains(
-            sql,
-            "SET sample_json = sample_json - 'visualizationAdmission' - 'warnings'");
+            freshSchemaSql,
+            "CONSTRAINT ck_benchmark_samples_payload_identity CHECK (");
         StringAssert.Contains(
-            sql,
-            "SET output_json = output_json - 'visualizationAdmission' - 'warnings'");
-        StringAssert.Contains(
-            sql,
-            "ALTER TABLE benchmark.samples\n    DROP COLUMN IF EXISTS visualization_admission;");
-        StringAssert.Contains(
-            sql,
-            "ALTER TABLE benchmark.outputs\n    DROP COLUMN IF EXISTS visualization_admission;");
+            freshSchemaSql,
+            "CONSTRAINT ck_benchmark_outputs_payload_identity CHECK (");
+        StringAssert.Contains(reconciliationSql, "DO $phase35_samples$");
+        StringAssert.Contains(reconciliationSql, "DO $phase35_outputs$");
         Assert.AreEqual(
             2,
             Regex.Matches(
-                sql,
+                reconciliationSql,
+                @"IF\s+EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+information_schema\.columns",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Count);
+        StringAssert.Contains(reconciliationSql, "AND table_name = 'samples'");
+        StringAssert.Contains(reconciliationSql, "AND table_name = 'outputs'");
+        Assert.AreEqual(
+            2,
+            Regex.Matches(
+                reconciliationSql,
+                @"AND\s+column_name\s+=\s+'visualization_admission'",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Count);
+        StringAssert.Contains(
+            reconciliationSql,
+            "SET sample_json = sample_json - 'visualizationAdmission' - 'warnings'");
+        StringAssert.Contains(
+            reconciliationSql,
+            "SET output_json = output_json - 'visualizationAdmission' - 'warnings'");
+        StringAssert.Contains(
+            reconciliationSql,
+            "DROP COLUMN IF EXISTS visualization_admission;");
+        StringAssert.Contains(
+            reconciliationSql,
+            "DROP CONSTRAINT IF EXISTS ck_benchmark_samples_payload_identity;");
+        StringAssert.Contains(
+            reconciliationSql,
+            "DROP CONSTRAINT IF EXISTS ck_benchmark_outputs_payload_identity;");
+        Assert.AreEqual(
+            2,
+            Regex.Matches(
+                reconciliationSql,
                 @"DROP\s+COLUMN\s+IF\s+EXISTS\s+visualization_admission",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Count);
     }

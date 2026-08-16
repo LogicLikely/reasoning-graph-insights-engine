@@ -22,6 +22,42 @@ public class BenchmarkResetPreservationPostgreSqlTests
         "LOGICLIKELY_ALLOW_DESTRUCTIVE_POSTGRES_TESTS";
 
     [TestMethod]
+    public async Task SchemaInitialization_FreshAndSteadyState_PreservesPayloadConstraintOids()
+    {
+        var connectionString = RequireDisposablePostgreSql();
+        await EnsurePostgreSqlIsAvailable(connectionString);
+
+        var repositoryRoot = BenchmarkSchemaSqlTests.FindRepositoryRoot();
+        var options = Options.Create(new DatabaseOptions
+        {
+            ConnectionString = connectionString
+        });
+        var initializer = new BenchmarkSchemaInitializer(
+            new DbConnectionFactory(options),
+            CreateHostEnvironment(Path.Combine(repositoryRoot, "backend")));
+
+        await ResetBenchmarkSchema(connectionString);
+        try
+        {
+            await initializer.InitializeAsync(CancellationToken.None);
+            var initialConstraintOids = await ReadPayloadConstraintOids(connectionString);
+            Assert.AreEqual(2, initialConstraintOids.Length);
+
+            await initializer.InitializeAsync(CancellationToken.None);
+            var repeatedConstraintOids = await ReadPayloadConstraintOids(connectionString);
+
+            CollectionAssert.AreEqual(
+                initialConstraintOids,
+                repeatedConstraintOids,
+                "Steady-state initialization must not replace current payload constraints.");
+        }
+        finally
+        {
+            await ResetBenchmarkSchema(connectionString);
+        }
+    }
+
+    [TestMethod]
     public async Task GraphReset_PreservesCanonicalBenchmarkSnapshot()
     {
         var connectionString = RequireDisposablePostgreSql();
@@ -201,9 +237,32 @@ public class BenchmarkResetPreservationPostgreSqlTests
             var sampleDigest = CanonicalJson.ComputeSha256(before.Samples);
             var resultDigest = before.Outputs.Single().ResultDigest;
             var itemsDigest = CanonicalJson.ComputeSha256(before.Outputs.Single().Items);
+            var rowCounts = await ReadBenchmarkRowCounts(connectionString);
+            var initialConstraintOids = await ReadPayloadConstraintOids(connectionString);
 
-            await SimulatePrePhase35Store(connectionString);
+            await SimulatePrePhase35Samples(connectionString);
             await initializer.InitializeAsync(CancellationToken.None);
+            var afterSamplesConstraintOids = await ReadPayloadConstraintOids(connectionString);
+            Assert.AreNotEqual(
+                PayloadConstraintOid(initialConstraintOids, "ck_benchmark_samples_payload_identity"),
+                PayloadConstraintOid(afterSamplesConstraintOids, "ck_benchmark_samples_payload_identity"));
+            Assert.AreEqual(
+                PayloadConstraintOid(initialConstraintOids, "ck_benchmark_outputs_payload_identity"),
+                PayloadConstraintOid(afterSamplesConstraintOids, "ck_benchmark_outputs_payload_identity"),
+                "Reconciling samples must not replace the outputs payload constraint.");
+            Assert.AreEqual(0, await CountRetiredColumns(connectionString));
+            Assert.AreEqual(0, await CountRetiredJsonMembers(connectionString));
+
+            await SimulatePrePhase35Outputs(connectionString);
+            await initializer.InitializeAsync(CancellationToken.None);
+            var afterOutputsConstraintOids = await ReadPayloadConstraintOids(connectionString);
+            Assert.AreEqual(
+                PayloadConstraintOid(afterSamplesConstraintOids, "ck_benchmark_samples_payload_identity"),
+                PayloadConstraintOid(afterOutputsConstraintOids, "ck_benchmark_samples_payload_identity"),
+                "Reconciling outputs must not replace the samples payload constraint.");
+            Assert.AreNotEqual(
+                PayloadConstraintOid(afterSamplesConstraintOids, "ck_benchmark_outputs_payload_identity"),
+                PayloadConstraintOid(afterOutputsConstraintOids, "ck_benchmark_outputs_payload_identity"));
 
             var after = await benchmarkRepository.GetSnapshotAsync(
                 BenchmarkPersistenceTestData.RunId,
@@ -217,6 +276,7 @@ public class BenchmarkResetPreservationPostgreSqlTests
             Assert.AreEqual(
                 "kept",
                 after.Outputs[0].Summary.GetProperty("phase35Preserved").GetString());
+            Assert.AreEqual(rowCounts, await ReadBenchmarkRowCounts(connectionString));
             Assert.AreEqual(0, await CountRetiredColumns(connectionString));
             Assert.AreEqual(0, await CountRetiredJsonMembers(connectionString));
         }
@@ -293,18 +353,24 @@ public class BenchmarkResetPreservationPostgreSqlTests
         return Convert.ToInt32(await command.ExecuteScalarAsync());
     }
 
-    private static async Task SimulatePrePhase35Store(string connectionString)
+    private static async Task ResetBenchmarkSchema(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "DROP SCHEMA IF EXISTS benchmark CASCADE;",
+            connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SimulatePrePhase35Samples(string connectionString)
     {
         const string sql = """
             ALTER TABLE benchmark.samples
                 DROP CONSTRAINT ck_benchmark_samples_payload_identity;
-            ALTER TABLE benchmark.outputs
-                DROP CONSTRAINT ck_benchmark_outputs_payload_identity;
 
             ALTER TABLE benchmark.samples
                 ADD COLUMN visualization_admission text NOT NULL DEFAULT 'not-requested';
-            ALTER TABLE benchmark.outputs
-                ADD COLUMN visualization_admission text NOT NULL DEFAULT 'allowed';
 
             UPDATE benchmark.samples
             SET sample_json = jsonb_set(
@@ -318,6 +384,27 @@ public class BenchmarkResetPreservationPostgreSqlTests
                 '["legacy sample notice"]'::jsonb,
                 true
             );
+
+            ALTER TABLE benchmark.samples
+                ADD CONSTRAINT ck_benchmark_samples_payload_identity CHECK (
+                    sample_json->>'visualizationAdmission' = visualization_admission
+                );
+            """;
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SimulatePrePhase35Outputs(string connectionString)
+    {
+        const string sql = """
+            ALTER TABLE benchmark.outputs
+                DROP CONSTRAINT ck_benchmark_outputs_payload_identity;
+
+            ALTER TABLE benchmark.outputs
+                ADD COLUMN visualization_admission text NOT NULL DEFAULT 'allowed';
 
             UPDATE benchmark.outputs
             SET output_json = jsonb_set(
@@ -337,10 +424,6 @@ public class BenchmarkResetPreservationPostgreSqlTests
                 true
             );
 
-            ALTER TABLE benchmark.samples
-                ADD CONSTRAINT ck_benchmark_samples_payload_identity CHECK (
-                    sample_json->>'visualizationAdmission' = visualization_admission
-                );
             ALTER TABLE benchmark.outputs
                 ADD CONSTRAINT ck_benchmark_outputs_payload_identity CHECK (
                     output_json->>'visualizationAdmission' = visualization_admission
@@ -351,6 +434,56 @@ public class BenchmarkResetPreservationPostgreSqlTests
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<(string Name, long Oid)[]> ReadPayloadConstraintOids(
+        string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT conname, oid::bigint
+            FROM pg_catalog.pg_constraint
+            WHERE conrelid IN ('benchmark.samples'::regclass, 'benchmark.outputs'::regclass)
+              AND conname IN (
+                  'ck_benchmark_samples_payload_identity',
+                  'ck_benchmark_outputs_payload_identity'
+              )
+            ORDER BY conname;
+            """,
+            connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var constraints = new List<(string Name, long Oid)>();
+        while (await reader.ReadAsync())
+        {
+            constraints.Add((reader.GetString(0), reader.GetInt64(1)));
+        }
+
+        return [.. constraints];
+    }
+
+    private static long PayloadConstraintOid(
+        IEnumerable<(string Name, long Oid)> constraints,
+        string name)
+        => constraints.Single(constraint => constraint.Name == name).Oid;
+
+    private static async Task<(long Runs, long Samples, long Outputs)> ReadBenchmarkRowCounts(
+        string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT
+                (SELECT count(*) FROM benchmark.runs),
+                (SELECT count(*) FROM benchmark.samples),
+                (SELECT count(*) FROM benchmark.outputs);
+            """,
+            connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.IsTrue(await reader.ReadAsync());
+        return (reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2));
     }
 
     private static async Task<int> CountRetiredColumns(string connectionString)
