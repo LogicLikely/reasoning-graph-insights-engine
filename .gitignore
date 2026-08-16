@@ -154,6 +154,11 @@ backend.Tests.WorkerFixture/bin/
 backend.Tests.WorkerFixture/obj/
 backend.AnalysisWorker/bin/
 backend.AnalysisWorker/obj/
+backend.BenchmarkRunner/bin/
+backend.BenchmarkRunner/obj/
+backend.Benchmarks/bin/
+backend.Benchmarks/obj/
+**/BenchmarkDotNet.Artifacts/
 *.lscache
 
 # Maintainer-only stress-corpus editorial policy

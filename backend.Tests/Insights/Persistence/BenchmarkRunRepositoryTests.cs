@@ -109,6 +109,26 @@ public class BenchmarkRunRepositoryTests
             Equals(command.Parameters["SampleId"], BenchmarkPersistenceTestData.SampleId)));
         Assert.AreEqual("graph.lookup", connection.ExecutedCommands[0].Parameters["Phase"]);
         Assert.AreEqual("nodes.query", connection.ExecutedCommands[1].Parameters["Phase"]);
+        Assert.IsTrue(connection.ExecutedCommands.Take(2).All(command =>
+            Equals(
+                command.Parameters["TimingBoundaryProvenance"],
+                "directly-instrumented")));
+        StringAssert.Contains(
+            connection.ExecutedCommands[0].CommandText,
+            "timing_boundary_provenance");
+        using (var sampleDocument = JsonDocument.Parse(
+                   (string)connection.ExecutedCommands[0].Parameters["SampleJson"]!))
+        {
+            Assert.AreEqual(
+                "directly-instrumented",
+                sampleDocument.RootElement.GetProperty("timingBoundaryProvenance").GetString());
+            Assert.AreEqual(
+                18L,
+                sampleDocument.RootElement
+                    .GetProperty("operationCounters")
+                    .GetProperty("visitedNodeCount")
+                    .GetInt64());
+        }
         StringAssert.Contains(connection.ExecutedCommands[2].CommandText, "INSERT INTO benchmark.outputs");
         Assert.AreEqual("crashed", connection.ExecutedCommands[2].Parameters["Status"]);
         Assert.AreEqual("crash", connection.ExecutedCommands[2].Parameters["FailureKind"]);
@@ -260,6 +280,10 @@ public class BenchmarkRunRepositoryTests
         Assert.AreEqual(2, snapshot.Samples.Count);
         Assert.AreEqual("graph.lookup", snapshot.Samples[0].Phase);
         Assert.AreEqual("nodes.query", snapshot.Samples[1].Phase);
+        Assert.AreEqual(
+            TimingBoundaryProvenance.DirectlyInstrumented,
+            snapshot.Samples[0].TimingBoundaryProvenance);
+        Assert.AreEqual(18L, snapshot.Samples[0].OperationCounters?.VisitedNodeCount);
         Assert.AreEqual(2, snapshot.Outputs.Count);
         Assert.AreEqual(firstOutput.SampleId, snapshot.Outputs[0].SampleId);
         Assert.AreEqual(secondOutput.SampleId, snapshot.Outputs[1].SampleId);
@@ -319,6 +343,39 @@ public class BenchmarkRunRepositoryTests
             repository.CreateRunAsync(
                 ExplicitBenchmarkRunIntent.ForRun(manifest.RunId),
                 manifest,
+                CancellationToken.None));
+
+        factoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task AppendSampleAsync_RejectsBlankClassificationInvalidProvenanceAndCountersBeforeDatabaseAccess()
+    {
+        var factoryMock = CreateUnconfiguredFactoryMock();
+        var repository = new BenchmarkRunRepository(factoryMock.Object);
+        var intent = ExplicitBenchmarkRunIntent.ForRun(BenchmarkPersistenceTestData.RunId);
+        var sample = BenchmarkPersistenceTestData.Sample();
+
+        await Assert.ThrowsExceptionAsync<ArgumentException>(() =>
+            repository.AppendSampleAsync(
+                intent,
+                sample with
+                {
+                    Classification = sample.Classification with { IterationKind = " " }
+                },
+                CancellationToken.None));
+        await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(() =>
+            repository.AppendSampleAsync(
+                intent,
+                sample with { TimingBoundaryProvenance = (TimingBoundaryProvenance)999 },
+                CancellationToken.None));
+        await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(() =>
+            repository.AppendSampleAsync(
+                intent,
+                sample with
+                {
+                    OperationCounters = sample.OperationCounters! with { CandidateCount = -1 }
+                },
                 CancellationToken.None));
 
         factoryMock.Verify(factory => factory.CreateConnection(), Times.Never);

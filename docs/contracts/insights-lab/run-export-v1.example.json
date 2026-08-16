@@ -154,6 +154,15 @@
         "payloadSize": "bytes",
         "counts": "count",
         "density": "ratio"
+      },
+      "timingBoundaryProvenance": "directly-instrumented",
+      "operationCounters": {
+        "candidateCount": null,
+        "visitedNodeCount": 3,
+        "visitedEdgeCount": 2,
+        "algorithmIterationCount": 3,
+        "cancellationCheckCount": null,
+        "thresholdAttained": null
       }
     }
   ],
@@ -270,7 +279,7 @@
   ],
   "digests": {
     "manifestDigest": "sha256:ac284ac6f6177301f56481a03838d8edce714950f7c13f6d325c53824a05f71e",
-    "samplesDigest": "sha256:f170cb1e2f567b06d65fb7eb2cf71128d3b089f2caffeebef97052aa79ea47cb",
+    "samplesDigest": "sha256:7aba1bfd15deeff485f35706d26477a95776ac675beeda352ffad7330d670703",
     "outputsDigest": "sha256:9426e46c29d838d9458b5ba2d862487d6739cde998d94832d5597b00b5e2af95"
   }
 }

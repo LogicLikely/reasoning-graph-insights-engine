@@ -58,7 +58,30 @@ public sealed class RunExportServiceTests
     }
 
     [TestMethod]
-    public void FrozenPhase0Example_StrictlyValidatesWithoutChangingDigests()
+    public void CanonicalRoundTrip_PreservesExplicitNullCountersAndEstimatedProvenance()
+    {
+        var sample = Sample(new ExecutionOutcome(ExecutionStatus.Succeeded)) with
+        {
+            TimingBoundaryProvenance = TimingBoundaryProvenance.Estimated,
+            OperationCounters = null
+        };
+        var service = new RunExportService();
+        var export = service.Create(
+            Manifest(new ExecutionOutcome(ExecutionStatus.Succeeded)),
+            [sample],
+            [Output()]);
+
+        var json = service.Serialize(export);
+        StringAssert.Contains(json, "\"timingBoundaryProvenance\":\"estimated\"");
+        StringAssert.Contains(json, "\"operationCounters\":null");
+
+        var restored = service.DeserializeAndValidate(json);
+        Assert.AreEqual(TimingBoundaryProvenance.Estimated, restored.Samples[0].TimingBoundaryProvenance);
+        Assert.IsNull(restored.Samples[0].OperationCounters);
+    }
+
+    [TestMethod]
+    public void CheckedInPreBaselineV1Example_StrictlyValidatesWithoutChangingDigests()
     {
         var path = Path.Combine(
             AppContext.BaseDirectory,
@@ -178,6 +201,60 @@ public sealed class RunExportServiceTests
     }
 
     [TestMethod]
+    public void Create_PreservesNonemptyLegacyIterationLabelsAsStandaloneBuckets()
+    {
+        var original = Sample(new ExecutionOutcome(ExecutionStatus.Succeeded));
+        var legacySample = original with
+        {
+            Classification = original.Classification with
+            {
+                IterationKind = "profiled",
+                Temperature = "tepid"
+            }
+        };
+
+        var export = new RunExportService().Create(
+            Manifest(new ExecutionOutcome(ExecutionStatus.Succeeded)),
+            [legacySample],
+            [Output()]);
+
+        Assert.AreEqual("profiled", export.Samples.Single().Classification.IterationKind);
+        Assert.AreEqual("tepid", export.Samples.Single().Classification.Temperature);
+    }
+
+    [TestMethod]
+    public void Create_RejectsUnknownProvenanceAndNegativeOperationCounters()
+    {
+        var original = Sample(new ExecutionOutcome(ExecutionStatus.Succeeded));
+        var invalidSample = original with
+        {
+            OperationCounters = original.OperationCounters! with { CandidateCount = -1 }
+        };
+
+        var exception = Assert.ThrowsException<RunExportValidationException>(() =>
+            new RunExportService().Create(
+                Manifest(new ExecutionOutcome(ExecutionStatus.Succeeded)),
+                [invalidSample],
+                [Output()]));
+
+        Assert.IsTrue(exception.Issues.Any(issue =>
+            issue.Path == "$.samples[0].operationCounters.candidateCount" &&
+            issue.Code == "minimum"));
+
+        var validExport = ValidExport();
+        var invalidProvenanceExport = new VersionedRunExport(
+            validExport.SchemaIdentity,
+            validExport.SchemaVersion,
+            validExport.Manifest,
+            [original with { TimingBoundaryProvenance = (TimingBoundaryProvenance)999 }],
+            validExport.Outputs,
+            validExport.Digests);
+        var validation = new RunExportValidator().Validate(invalidProvenanceExport);
+        Assert.IsTrue(validation.Issues.Any(issue =>
+            issue.Path == "$.samples[0].timingBoundaryProvenance" && issue.Code == "enum"));
+    }
+
+    [TestMethod]
     public void Create_RejectsCanonicalParameterDigestMismatch()
     {
         var manifest = Manifest(new ExecutionOutcome(ExecutionStatus.Succeeded)) with
@@ -254,6 +331,21 @@ public sealed class RunExportServiceTests
         var root = JsonNode.Parse(service.Serialize(ValidExport()))!.AsObject();
         var sourceRevision = root["manifest"]!["sourceRevision"]!.AsObject();
         Assert.IsTrue(sourceRevision.Remove("dirtyWorktree"));
+
+        var exception = Assert.ThrowsException<RunExportValidationException>(() =>
+            service.DeserializeAndValidate(root.ToJsonString()));
+
+        Assert.IsTrue(exception.Issues.Any(issue => issue.Code == "json-schema"));
+    }
+
+    [DataTestMethod]
+    [DataRow("timingBoundaryProvenance")]
+    [DataRow("operationCounters")]
+    public void DeserializeAndValidate_RequiresExplicitSampleMeasurementEvidence(string member)
+    {
+        var service = new RunExportService();
+        var root = JsonNode.Parse(service.Serialize(ValidExport()))!.AsObject();
+        Assert.IsTrue(root["samples"]![0]!.AsObject().Remove(member));
 
         var exception = Assert.ThrowsException<RunExportValidationException>(() =>
             service.DeserializeAndValidate(root.ToJsonString()));
@@ -348,7 +440,11 @@ public sealed class RunExportServiceTests
             phase ?? InsightMeasurementPhases.GraphLookup,
             1.25m,
             0,
-            new IterationClassification("measured", "warm", "post-jit", "warm-cache"),
+            new IterationClassification(
+                IterationClassificationTokens.Measured,
+                IterationClassificationTokens.Warm,
+                IterationClassificationTokens.PostJit,
+                IterationClassificationTokens.WarmCache),
             new SampleNodeCounts(3, 3, 0, null),
             new SampleEdgeCounts(2, null, null),
             new SampleSearchCounts(null, null),
@@ -356,7 +452,9 @@ public sealed class RunExportServiceTests
             new SampleTransportMeasurements(null, null, null, null),
             new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
             outcome,
-            Units());
+            Units(),
+            TimingBoundaryProvenance.DirectlyInstrumented,
+            new SampleOperationCounters(null, 3, 2, 1, null, null));
     }
 
     private static CompactRunOutput Output(long totalCardinality = 1, string? resultDigest = null)

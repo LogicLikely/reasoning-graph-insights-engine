@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS benchmark.samples (
     iteration integer NOT NULL CHECK (iteration >= 0),
     layer text NOT NULL CHECK (length(btrim(layer)) > 0),
     phase text NOT NULL CHECK (length(btrim(phase)) > 0),
+    timing_boundary_provenance text NOT NULL,
     wall_clock_duration numeric NOT NULL CHECK (wall_clock_duration >= 0),
     status text NOT NULL CHECK (
         status IN (
@@ -136,6 +137,13 @@ CREATE TABLE IF NOT EXISTS benchmark.samples (
     inserted_at timestamp with time zone NOT NULL DEFAULT now(),
     CONSTRAINT fk_benchmark_samples_run
         FOREIGN KEY (run_id) REFERENCES benchmark.runs(run_id) ON DELETE CASCADE,
+    CONSTRAINT ck_benchmark_samples_timing_boundary_provenance CHECK (
+        timing_boundary_provenance IN (
+            'directly-instrumented',
+            'externally-observed',
+            'estimated'
+        )
+    ),
     CONSTRAINT ck_benchmark_samples_failure_matches_status CHECK (
         (status IN ('queued', 'running', 'succeeded') AND failure_kind IS NULL)
         OR (status = 'failed' AND failure_kind IN ('validation', 'execution'))
@@ -152,11 +160,80 @@ CREATE TABLE IF NOT EXISTS benchmark.samples (
         AND (sample_json->>'iteration')::integer = iteration
         AND sample_json->>'layer' = layer
         AND sample_json->>'phase' = phase
+        AND sample_json ? 'timingBoundaryProvenance'
+        AND sample_json->>'timingBoundaryProvenance' = timing_boundary_provenance
+        AND sample_json ? 'operationCounters'
         AND (sample_json->>'wallClockDuration')::numeric = wall_clock_duration
         AND sample_json#>>'{execution,status}' = status
         AND sample_json#>>'{execution,failure,kind}' IS NOT DISTINCT FROM failure_kind
     )
 );
+
+-- Phase 4 adds explicit timing-boundary provenance and operation counters to
+-- every raw sample. Stores created before the benchmark runner existed have no
+-- durable provenance evidence, so their boundary is conservatively reconciled
+-- as estimated while preserving every row and unrelated JSON member.
+DO $phase4_samples$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'benchmark'
+          AND table_name = 'samples'
+          AND column_name = 'timing_boundary_provenance'
+    ) THEN
+        ALTER TABLE benchmark.samples
+            ADD COLUMN timing_boundary_provenance text;
+
+        UPDATE benchmark.samples
+        SET
+            timing_boundary_provenance = 'estimated',
+            sample_json = jsonb_set(
+                jsonb_set(
+                    sample_json,
+                    '{timingBoundaryProvenance}',
+                    '"estimated"'::jsonb,
+                    true
+                ),
+                '{operationCounters}',
+                'null'::jsonb,
+                true
+            );
+
+        ALTER TABLE benchmark.samples
+            ALTER COLUMN timing_boundary_provenance SET NOT NULL;
+
+        ALTER TABLE benchmark.samples
+            ADD CONSTRAINT ck_benchmark_samples_timing_boundary_provenance CHECK (
+                timing_boundary_provenance IN (
+                    'directly-instrumented',
+                    'externally-observed',
+                    'estimated'
+                )
+            );
+
+        ALTER TABLE benchmark.samples
+            DROP CONSTRAINT IF EXISTS ck_benchmark_samples_payload_identity;
+
+        ALTER TABLE benchmark.samples
+            ADD CONSTRAINT ck_benchmark_samples_payload_identity CHECK (
+                (sample_json->>'runId')::uuid = run_id
+                AND (sample_json->>'sampleId')::uuid = sample_id
+                AND sample_json->>'scenarioKey' = scenario_key
+                AND sample_json->>'operationKey' = operation_key
+                AND (sample_json->>'iteration')::integer = iteration
+                AND sample_json->>'layer' = layer
+                AND sample_json->>'phase' = phase
+                AND sample_json ? 'timingBoundaryProvenance'
+                AND sample_json->>'timingBoundaryProvenance' = timing_boundary_provenance
+                AND sample_json ? 'operationCounters'
+                AND (sample_json->>'wallClockDuration')::numeric = wall_clock_duration
+                AND sample_json#>>'{execution,status}' = status
+                AND sample_json#>>'{execution,failure,kind}' IS NOT DISTINCT FROM failure_kind
+            );
+    END IF;
+END
+$phase4_samples$;
 
 CREATE TABLE IF NOT EXISTS benchmark.outputs (
     entry_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -251,6 +328,9 @@ BEGIN
                 AND (sample_json->>'iteration')::integer = iteration
                 AND sample_json->>'layer' = layer
                 AND sample_json->>'phase' = phase
+                AND sample_json ? 'timingBoundaryProvenance'
+                AND sample_json->>'timingBoundaryProvenance' = timing_boundary_provenance
+                AND sample_json ? 'operationCounters'
                 AND (sample_json->>'wallClockDuration')::numeric = wall_clock_duration
                 AND sample_json#>>'{execution,status}' = status
                 AND sample_json#>>'{execution,failure,kind}' IS NOT DISTINCT FROM failure_kind

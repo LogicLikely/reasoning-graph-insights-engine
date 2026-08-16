@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Backend.Insights.Contracts;
 
 namespace Backend.Insights.Export;
@@ -167,86 +166,5 @@ public sealed class RunExportService
         new([new RunExportValidationIssue("$", code, message)]);
 
     private static JsonSerializerOptions CreateDeserializationOptions()
-    {
-        var options = CanonicalJson.CreateSerializerOptions();
-        // Canonical JSON deliberately uses the shortest mathematical spelling,
-        // so an integral CLR value may appear as 1.6e10. System.Text.Json's
-        // built-in integer converters reject exponent spelling even when the
-        // mathematical value is integral; these strict converters bridge that
-        // lexical mismatch without accepting fractions or out-of-range values.
-        options.Converters.Insert(0, new CanonicalInt32Converter());
-        options.Converters.Insert(0, new CanonicalInt64Converter());
-        return options;
-    }
-
-    private abstract class CanonicalIntegerConverter<T> : JsonConverter<T>
-        where T : struct
-    {
-        public override T Read(
-            ref Utf8JsonReader reader,
-            Type typeToConvert,
-            JsonSerializerOptions options)
-        {
-            if (reader.TokenType != JsonTokenType.Number)
-            {
-                throw new JsonException($"Expected a JSON number for {typeof(T).Name}.");
-            }
-
-            decimal value;
-            try
-            {
-                value = reader.GetDecimal();
-            }
-            catch (FormatException exception)
-            {
-                throw new JsonException($"JSON number is not a valid {typeof(T).Name} value.", exception);
-            }
-
-            if (decimal.Truncate(value) != value ||
-                !TryConvert(value, out var converted))
-            {
-                throw new JsonException($"JSON number is not a valid {typeof(T).Name} value.");
-            }
-
-            return converted;
-        }
-
-        protected abstract bool TryConvert(decimal value, out T converted);
-    }
-
-    private sealed class CanonicalInt32Converter : CanonicalIntegerConverter<int>
-    {
-        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) =>
-            writer.WriteNumberValue(value);
-
-        protected override bool TryConvert(decimal value, out int converted)
-        {
-            if (value is >= int.MinValue and <= int.MaxValue)
-            {
-                converted = decimal.ToInt32(value);
-                return true;
-            }
-
-            converted = default;
-            return false;
-        }
-    }
-
-    private sealed class CanonicalInt64Converter : CanonicalIntegerConverter<long>
-    {
-        public override void Write(Utf8JsonWriter writer, long value, JsonSerializerOptions options) =>
-            writer.WriteNumberValue(value);
-
-        protected override bool TryConvert(decimal value, out long converted)
-        {
-            if (value is >= long.MinValue and <= long.MaxValue)
-            {
-                converted = decimal.ToInt64(value);
-                return true;
-            }
-
-            converted = default;
-            return false;
-        }
-    }
+        => CanonicalJson.CreateSerializerOptions();
 }

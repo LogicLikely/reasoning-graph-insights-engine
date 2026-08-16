@@ -44,12 +44,54 @@ public class BenchmarkSchemaSqlTests
         StringAssert.Contains(sql, "environment_profile text NOT NULL");
         StringAssert.Contains(sql, "build_mode text NOT NULL");
         StringAssert.Contains(sql, "measurement_units jsonb NOT NULL");
+        StringAssert.Contains(sql, "timing_boundary_provenance text NOT NULL");
+        StringAssert.Contains(sql, "ck_benchmark_samples_timing_boundary_provenance");
+        StringAssert.Contains(
+            sql,
+            "sample_json->>'timingBoundaryProvenance' = timing_boundary_provenance");
+        StringAssert.Contains(sql, "sample_json ? 'timingBoundaryProvenance'");
+        StringAssert.Contains(sql, "sample_json ? 'operationCounters'");
         StringAssert.Contains(sql, "ck_benchmark_runs_failure_matches_status");
         StringAssert.Contains(sql, "ck_benchmark_runs_completion_matches_status");
         StringAssert.Contains(sql, "ck_benchmark_runs_completion_not_before_start");
         StringAssert.Contains(sql, "ck_benchmark_samples_failure_matches_status");
         StringAssert.Contains(sql, "ck_benchmark_outputs_failure_matches_status");
         StringAssert.Contains(sql, "jsonb_array_length(output_json->'items') <= 100");
+    }
+
+    [TestMethod]
+    public void Schema_ReconcilesLegacySampleMeasurementEvidenceWithoutDeletingRows()
+    {
+        var sql = ReadRepositoryFile("backend", "data", "sql", "benchmark_schema.sql");
+        var reconciliationStart = sql.IndexOf("-- Phase 4", StringComparison.Ordinal);
+        Assert.IsTrue(reconciliationStart > 0);
+        var reconciliationSql = sql[reconciliationStart..];
+
+        StringAssert.Contains(reconciliationSql, "DO $phase4_samples$");
+        StringAssert.Contains(
+            reconciliationSql,
+            "AND column_name = 'timing_boundary_provenance'");
+        StringAssert.Contains(
+            reconciliationSql,
+            "ADD COLUMN timing_boundary_provenance text;");
+        StringAssert.Contains(
+            reconciliationSql,
+            "timing_boundary_provenance = 'estimated'");
+        StringAssert.Contains(
+            reconciliationSql,
+            "'{timingBoundaryProvenance}'");
+        StringAssert.Contains(reconciliationSql, "\"estimated\"'::jsonb");
+        StringAssert.Contains(reconciliationSql, "'{operationCounters}'");
+        StringAssert.Contains(reconciliationSql, "'null'::jsonb");
+        StringAssert.Contains(
+            reconciliationSql,
+            "ALTER COLUMN timing_boundary_provenance SET NOT NULL;");
+        Assert.IsFalse(
+            Regex.IsMatch(
+                reconciliationSql,
+                @"^\s*(TRUNCATE|DELETE\s+FROM)\b",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline),
+            "Phase 4 reconciliation must preserve benchmark history.");
     }
 
     [TestMethod]

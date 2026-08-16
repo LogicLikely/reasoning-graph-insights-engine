@@ -1,17 +1,18 @@
 using System.Text;
 using System.Text.Json;
 using Backend.Insights.Contracts;
+using Backend.Insights.Measurement;
 using Backend.Insights.Workers;
 
 Console.InputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 Console.Error.Write(string.Empty);
 
-return await WorkerFixture.RunAsync();
+return await WorkerFixture.RunAsync(args);
 
 internal static class WorkerFixture
 {
-    public static async Task<int> RunAsync()
+    public static async Task<int> RunAsync(IReadOnlyList<string>? arguments = null)
     {
         var requestLine = await Console.In.ReadLineAsync();
         if (requestLine is null)
@@ -29,9 +30,7 @@ internal static class WorkerFixture
             return 65;
         }
 
-        var mode = request.Input.TryGetProperty("mode", out var modeElement)
-            ? modeElement.GetString()
-            : null;
+        var mode = ReadString(request.Input, "mode") ?? ReadModeArgument(arguments);
         if (string.IsNullOrWhiteSpace(mode))
         {
             return 66;
@@ -215,13 +214,17 @@ internal static class WorkerFixture
         return new RunSample(
             request.RunId,
             request.SampleId,
-            "worker.fixture",
+            ReadScenarioKey(request),
             request.OperationKey,
-            "isolated-worker",
-            "worker.fixture",
+            InsightMeasurementLayers.BenchmarkOrchestration,
+            InsightMeasurementPhases.WorkerSupervision,
             1m,
             0,
-            new IterationClassification("measured", "warm", "post-jit", "warm-cache"),
+            new IterationClassification(
+                IterationClassificationTokens.Measured,
+                IterationClassificationTokens.Warm,
+                IterationClassificationTokens.PostJit,
+                IterationClassificationTokens.WarmCache),
             new SampleNodeCounts(null, null, null, null),
             new SampleEdgeCounts(null, null, null),
             new SampleSearchCounts(null, null),
@@ -229,20 +232,36 @@ internal static class WorkerFixture
             new SampleTransportMeasurements(null, null, null, null),
             new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            StandardUnits());
+            StandardUnits(),
+            TimingBoundaryProvenance.DirectlyInstrumented,
+            null);
     }
 
     private static CompactRunOutput CreateOutput(WorkerRequestFrame request)
     {
         var item = JsonSerializer.SerializeToElement(new { fixture = "partial" });
+        var graph = request.Input.TryGetProperty("graph", out var graphElement)
+            ? graphElement
+            : default;
+        var graphSlug = ReadString(graph, "slug") ?? "worker-fixture";
+        var graphId = graph.ValueKind == JsonValueKind.Object &&
+                      graph.TryGetProperty("id", out var graphIdElement) &&
+                      graphIdElement.TryGetInt32(out var parsedGraphId)
+            ? parsedGraphId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : null;
+        var requestedStrategy = ReadString(request.Input, "requestedStrategy");
         return new CompactRunOutput(
             request.RunId,
             request.SampleId,
-            "worker.fixture",
+            ReadScenarioKey(request),
             request.OperationKey,
             request.AlgorithmSemanticIdentity,
-            new StrategySelection(null, null),
-            new GraphTargetIdentifiers("worker-fixture", null, null, Array.Empty<string>()),
+            new StrategySelection(requestedStrategy, requestedStrategy),
+            new GraphTargetIdentifiers(
+                graphSlug,
+                graphId,
+                ReadString(request.Input, "targetNodeId") ?? ReadString(request.Input, "changedNodeId"),
+                Array.Empty<string>()),
             request.CanonicalParameters,
             new ExecutionOutcome(ExecutionStatus.Succeeded),
             JsonSerializer.SerializeToElement(new { accepted = true }),
@@ -283,6 +302,34 @@ internal static class WorkerFixture
             WorkerCancellationReason.Timeout => "timeout",
             _ => "unknown"
         };
+    }
+
+    private static string ReadScenarioKey(WorkerRequestFrame request) =>
+        ReadString(request.Input, "scenarioKey") ?? "worker.fixture";
+
+    private static string? ReadString(JsonElement value, string propertyName) =>
+        value.ValueKind == JsonValueKind.Object &&
+        value.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+
+    private static string? ReadModeArgument(IReadOnlyList<string>? arguments)
+    {
+        if (arguments is null)
+        {
+            return null;
+        }
+
+        for (var index = 0; index + 1 < arguments.Count; index++)
+        {
+            if (string.Equals(arguments[index], "--mode", StringComparison.Ordinal))
+            {
+                return arguments[index + 1];
+            }
+        }
+
+        return null;
     }
 }
 

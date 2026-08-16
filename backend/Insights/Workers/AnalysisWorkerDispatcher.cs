@@ -25,11 +25,24 @@ public sealed record CriticalCounterV1WorkerInput(
     [property: JsonRequired] string TargetNodeId,
     [property: JsonRequired] string RequestedStrategy,
     [property: JsonRequired] decimal ThresholdLogOdds,
-    [property: JsonRequired] int? AutoCandidateCutoff);
+    [property: JsonRequired] int? AutoCandidateCutoff,
+    int? CandidateLimit = null);
 
 public sealed record RobustnessV0WorkerInput(
     [property: JsonRequired] string ScenarioKey,
     [property: JsonRequired] Graph Graph);
+
+public sealed record SinglePairPathV0WorkerInput(
+    [property: JsonRequired] string ScenarioKey,
+    [property: JsonRequired] Graph Graph,
+    [property: JsonRequired] string StartNodeId,
+    [property: JsonRequired] string TargetNodeId,
+    [property: JsonRequired] string RequestedStrategy);
+
+public sealed record LikelihoodRecalculateV0WorkerInput(
+    [property: JsonRequired] string ScenarioKey,
+    [property: JsonRequired] Graph Graph,
+    [property: JsonRequired] string ChangedNodeId);
 
 public sealed record StrongestPathV1WorkerParameters(
     [property: JsonRequired] string StartNodeId,
@@ -42,14 +55,24 @@ public sealed record CriticalCounterV1WorkerParameters(
     [property: JsonRequired] string TargetNodeId,
     [property: JsonRequired] string RequestedStrategy,
     [property: JsonRequired] decimal ThresholdLogOdds,
-    [property: JsonRequired] int? AutoCandidateCutoff);
+    [property: JsonRequired] int? AutoCandidateCutoff,
+    int? CandidateLimit = null);
 
 public sealed record RobustnessV0WorkerParameters;
 
+public sealed record SinglePairPathV0WorkerParameters(
+    [property: JsonRequired] string StartNodeId,
+    [property: JsonRequired] string TargetNodeId,
+    [property: JsonRequired] string RequestedStrategy);
+
+public sealed record LikelihoodRecalculateV0WorkerParameters(
+    [property: JsonRequired] string ChangedNodeId);
+
 /// <summary>
-/// Stateless projection from the Phase 1 worker request envelope to the four
-/// Phase 3 analysis result contracts. Process lifetime, cancellation-frame
-/// handling, and hard deadlines remain outside this class.
+/// Stateless projection from the Phase 1 worker request envelope to the
+/// retained in-memory analysis and diagnostic result contracts. Process
+/// lifetime, cancellation-frame handling, and hard deadlines remain outside
+/// this class.
 /// </summary>
 public sealed class AnalysisWorkerDispatcher
 {
@@ -80,6 +103,14 @@ public sealed class AnalysisWorkerDispatcher
             OperationKeys.NodeRobustness => DispatchRobustness(
                 request,
                 DeserializeInput<RobustnessV0WorkerInput>(request.Input),
+                cancellationToken),
+            OperationKeys.PathSinglePair => DispatchSinglePair(
+                request,
+                DeserializeInput<SinglePairPathV0WorkerInput>(request.Input),
+                cancellationToken),
+            OperationKeys.LikelihoodRecalculate => DispatchLikelihoodRecalculation(
+                request,
+                DeserializeInput<LikelihoodRecalculateV0WorkerInput>(request.Input),
                 cancellationToken),
             _ => throw new ArgumentException(
                 $"Operation '{request.OperationKey}' is not a Phase 3 analysis worker operation.",
@@ -170,8 +201,18 @@ public sealed class AnalysisWorkerDispatcher
                 input.TargetNodeId,
                 input.RequestedStrategy,
                 input.ThresholdLogOdds,
-                input.AutoCandidateCutoff));
+                input.AutoCandidateCutoff,
+                input.CandidateLimit));
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (input.CandidateLimit.HasValue)
+        {
+            _ = Benchmarking.CriticalCounterCandidateGuard.RequireAtMost(
+                input.Graph,
+                input.TargetNodeId,
+                input.CandidateLimit.Value,
+                cancellationToken);
+        }
 
         var result = new CriticalCounterV1Analyzer().Analyze(
             new CriticalCounterV1AnalysisRequest(
@@ -280,6 +321,101 @@ public sealed class AnalysisWorkerDispatcher
                 item.EdgeIds,
                 CanonicalResultNumber.Normalize(
                     item.AccumulatedPathLogLikelihoodRatio))),
+            cancellationToken);
+    }
+
+    private static CompactRunOutput DispatchSinglePair(
+        WorkerRequestFrame request,
+        SinglePairPathV0WorkerInput input,
+        CancellationToken cancellationToken)
+    {
+        ValidateCommonInput(input.ScenarioKey, input.Graph);
+        ValidateParameters(
+            request.CanonicalParameters.Value,
+            new SinglePairPathV0WorkerParameters(
+                input.StartNodeId,
+                input.TargetNodeId,
+                input.RequestedStrategy));
+        var selection = input.RequestedStrategy switch
+        {
+            OperationStrategyNames.Minimum => LogPathSelection.Minimum,
+            OperationStrategyNames.Maximum => LogPathSelection.Maximum,
+            _ => throw new ArgumentException("Single-pair strategy must be minimum or maximum.", nameof(input))
+        };
+
+        var context = GraphCalculationContext.From(input.Graph.Nodes, input.Graph.Edges, cancellationToken);
+        var accumulated = new GraphLikelihoodCalculator().GetLogPath(
+            context,
+            input.StartNodeId,
+            input.TargetNodeId,
+            selection,
+            cancellationToken);
+        var item = new SinglePairPathV0WorkerItem(
+            input.StartNodeId,
+            input.TargetNodeId,
+            input.RequestedStrategy,
+            accumulated.HasValue,
+            accumulated.HasValue ? CanonicalResultNumber.Normalize(accumulated.Value) : null);
+        var items = new[] { item };
+
+        return CreateOutput(
+            request,
+            input.ScenarioKey,
+            input.Graph,
+            input.TargetNodeId,
+            new StrategySelection(input.RequestedStrategy, input.RequestedStrategy),
+            SerializeItems(items, cancellationToken),
+            1,
+            CanonicalJson.ComputeSha256Sequence(items, cancellationToken),
+            new SinglePairPathV0WorkerSummary(input.StartNodeId, input.TargetNodeId, accumulated.HasValue),
+            new SinglePairPathV0WorkerDistribution(accumulated.HasValue ? 1 : 0),
+            Array.Empty<OrderedPathProjection>(),
+            cancellationToken);
+    }
+
+    private static CompactRunOutput DispatchLikelihoodRecalculation(
+        WorkerRequestFrame request,
+        LikelihoodRecalculateV0WorkerInput input,
+        CancellationToken cancellationToken)
+    {
+        ValidateCommonInput(input.ScenarioKey, input.Graph);
+        ValidateParameters(
+            request.CanonicalParameters.Value,
+            new LikelihoodRecalculateV0WorkerParameters(input.ChangedNodeId));
+
+        var context = GraphCalculationContext.From(input.Graph.Nodes, input.Graph.Edges, cancellationToken);
+        var before = context.NodesById.ToDictionary(
+            entry => entry.Key,
+            entry => entry.Value.PosteriorOdds,
+            StringComparer.Ordinal);
+        var recalculated = new GraphLikelihoodCalculator().RecalculateAncestors(
+            context,
+            input.ChangedNodeId,
+            cancellationToken);
+        var items = recalculated.Select((entry, index) => new LikelihoodRecalculateV0WorkerItem(
+                index + 1,
+                entry.Key,
+                CanonicalResultNumber.Normalize(before[entry.Key]),
+                CanonicalResultNumber.Normalize(entry.Value)))
+            .ToArray();
+        var retained = items.Take(OperationResultEnvelope.MaximumRetainedItems).ToArray();
+        var deltas = items.Select(item => item.AfterLogPosteriorOdds - item.BeforeLogPosteriorOdds).ToArray();
+
+        return CreateOutput(
+            request,
+            input.ScenarioKey,
+            input.Graph,
+            input.ChangedNodeId,
+            new StrategySelection(null, null),
+            SerializeItems(retained, cancellationToken),
+            items.LongLength,
+            CanonicalJson.ComputeSha256Sequence(items, cancellationToken),
+            new LikelihoodRecalculateV0WorkerSummary(input.ChangedNodeId, items.LongLength),
+            new LikelihoodRecalculateV0WorkerDistribution(
+                items.LongLength,
+                deltas.Length == 0 ? null : CanonicalResultNumber.Normalize(deltas.Min()),
+                deltas.Length == 0 ? null : CanonicalResultNumber.Normalize(deltas.Max())),
+            Array.Empty<OrderedPathProjection>(),
             cancellationToken);
     }
 
@@ -489,4 +625,33 @@ public sealed class AnalysisWorkerDispatcher
     private sealed record RobustnessV0WorkerSummary(
         long RankedNodeCount,
         RobustnessV0WorkerLeastRobust? LeastRobust);
+
+    private sealed record SinglePairPathV0WorkerItem(
+        string StartNodeId,
+        string TargetNodeId,
+        string Strategy,
+        bool PathFound,
+        decimal? AccumulatedLogLikelihoodRatio);
+
+    private sealed record SinglePairPathV0WorkerSummary(
+        string StartNodeId,
+        string TargetNodeId,
+        bool PathFound);
+
+    private sealed record SinglePairPathV0WorkerDistribution(long FoundPathCount);
+
+    private sealed record LikelihoodRecalculateV0WorkerItem(
+        int Order,
+        string NodeId,
+        decimal BeforeLogPosteriorOdds,
+        decimal AfterLogPosteriorOdds);
+
+    private sealed record LikelihoodRecalculateV0WorkerSummary(
+        string ChangedNodeId,
+        long RecalculatedNodeCount);
+
+    private sealed record LikelihoodRecalculateV0WorkerDistribution(
+        long Count,
+        decimal? MinimumLogPosteriorOddsDelta,
+        decimal? MaximumLogPosteriorOddsDelta);
 }

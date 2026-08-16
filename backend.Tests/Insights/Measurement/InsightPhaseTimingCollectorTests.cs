@@ -1,3 +1,4 @@
+using Backend.Insights.Contracts;
 using Backend.Insights.Measurement;
 
 namespace backend.Tests.Insights.Measurement;
@@ -23,6 +24,9 @@ public sealed class InsightPhaseTimingCollectorTests
         Assert.AreEqual(0, timing.Sequence);
         Assert.AreEqual(25m, timing.Duration);
         Assert.AreEqual("ms", timing.Unit);
+        Assert.AreEqual(
+            TimingBoundaryProvenance.DirectlyInstrumented,
+            timing.TimingBoundaryProvenance);
     }
 
     [TestMethod]
@@ -56,15 +60,27 @@ public sealed class InsightPhaseTimingCollectorTests
         var first = collector.Record(
             InsightMeasurementLayers.Transport,
             InsightMeasurementPhases.ResponseBytes,
-            4.125m);
+            4.125m,
+            TimingBoundaryProvenance.Estimated);
 
         Assert.AreEqual(0, first.Sequence);
         Assert.AreEqual(4.125m, collector.Snapshot().Single().Duration);
+        Assert.AreEqual(TimingBoundaryProvenance.Estimated, first.TimingBoundaryProvenance);
         Assert.ThrowsException<ArgumentOutOfRangeException>(() => collector.Record(
             InsightMeasurementLayers.Transport,
             InsightMeasurementPhases.ResponseBytes,
-            -1m));
-        Assert.ThrowsException<ArgumentException>(() => collector.Record("unknown", "unknown", 1m));
+            -1m,
+            TimingBoundaryProvenance.Estimated));
+        Assert.ThrowsException<ArgumentException>(() => collector.Record(
+            "unknown",
+            "unknown",
+            1m,
+            TimingBoundaryProvenance.Estimated));
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => collector.Record(
+            InsightMeasurementLayers.Transport,
+            InsightMeasurementPhases.ResponseBytes,
+            1m,
+            (TimingBoundaryProvenance)999));
     }
 
     private sealed class FakeMonotonicClock : IMonotonicClock

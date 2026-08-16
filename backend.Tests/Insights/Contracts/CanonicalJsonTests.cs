@@ -130,6 +130,20 @@ public class CanonicalJsonTests
             JsonSerializer.Serialize((ExecutionStatus)999, options));
     }
 
+    [TestMethod]
+    public void ContractSerializer_ReadsCanonicalExponentIntegersStrictly()
+    {
+        var options = CanonicalJson.CreateSerializerOptions();
+
+        Assert.AreEqual(1_000, JsonSerializer.Deserialize<int>("1e3", options));
+        Assert.AreEqual(10_000_000_000L,
+            JsonSerializer.Deserialize<long>("1e10", options));
+        Assert.ThrowsException<JsonException>(() =>
+            JsonSerializer.Deserialize<int>("1.5", options));
+        Assert.ThrowsException<JsonException>(() =>
+            JsonSerializer.Deserialize<int>("1e10", options));
+    }
+
     private static IEnumerable<int> CancelAfterFirst(CancellationTokenSource cancellation)
     {
         yield return 1;

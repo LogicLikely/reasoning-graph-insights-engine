@@ -102,6 +102,60 @@ public class RunExportArtifactContractTests
     }
 
     [TestMethod]
+    public void Schema_FreezesSampleClassificationProvenanceAndCounterEvidence()
+    {
+        using var schema = JsonDocument.Parse(
+            File.ReadAllText(ArtifactPath("run-export-v1.schema.json")));
+        var definitions = schema.RootElement.GetProperty("$defs");
+        var sample = definitions.GetProperty("runSample");
+        var required = sample.GetProperty("required")
+            .EnumerateArray()
+            .Select(value => value.GetString())
+            .ToArray();
+
+        CollectionAssert.Contains(required, "timingBoundaryProvenance");
+        CollectionAssert.Contains(required, "operationCounters");
+        CollectionAssert.AreEqual(
+            new[] { "directly-instrumented", "externally-observed", "estimated" },
+            definitions.GetProperty("timingBoundaryProvenance")
+                .GetProperty("enum")
+                .EnumerateArray()
+                .Select(value => value.GetString())
+                .ToArray());
+
+        var classification = definitions.GetProperty("iterationClassification")
+            .GetProperty("properties");
+        Assert.AreEqual(
+            "string",
+            classification.GetProperty("iterationKind").GetProperty("type").GetString());
+        Assert.AreEqual(
+            1,
+            classification.GetProperty("iterationKind").GetProperty("minLength").GetInt32());
+        Assert.AreEqual(
+            "string",
+            classification.GetProperty("temperature").GetProperty("type").GetString());
+        Assert.AreEqual(
+            1,
+            classification.GetProperty("temperature").GetProperty("minLength").GetInt32());
+
+        CollectionAssert.AreEquivalent(
+            new[]
+            {
+                "candidateCount",
+                "visitedNodeCount",
+                "visitedEdgeCount",
+                "algorithmIterationCount",
+                "cancellationCheckCount",
+                "thresholdAttained"
+            },
+            definitions.GetProperty("sampleOperationCounters")
+                .GetProperty("required")
+                .EnumerateArray()
+                .Select(value => value.GetString())
+                .ToArray());
+    }
+
+    [TestMethod]
     public void Example_DeserializesIntoTypedContractWithAuditedFields()
     {
         var json = File.ReadAllText(ArtifactPath("run-export-v1.example.json"));
@@ -119,6 +173,11 @@ public class RunExportArtifactContractTests
         Assert.IsFalse(string.IsNullOrWhiteSpace(export.Manifest.EnvironmentProfile));
         Assert.IsTrue(export.Samples.Count > 0);
         Assert.IsFalse(string.IsNullOrWhiteSpace(export.Samples[0].Classification.IterationKind));
+        Assert.AreEqual(
+            TimingBoundaryProvenance.DirectlyInstrumented,
+            export.Samples[0].TimingBoundaryProvenance);
+        Assert.AreEqual(3L, export.Samples[0].OperationCounters?.VisitedNodeCount);
+        Assert.AreEqual(2L, export.Samples[0].OperationCounters?.VisitedEdgeCount);
         Assert.IsNotNull(export.Samples[0].Transport.TimeToFirstByte);
         Assert.IsNotNull(export.Samples[0].Transport.FullTransferDuration);
         Assert.IsTrue(export.Outputs.Count > 0);

@@ -226,6 +226,11 @@ public sealed partial class RunExportValidator
             ValidateResources(sample.Resources, $"{path}.resources", issues);
             ValidateExecution(sample.Execution, $"{path}.execution", issues);
             ValidateUnits(sample.MeasurementUnits, $"{path}.measurementUnits", issues);
+            ValidateTimingBoundaryProvenance(
+                sample.TimingBoundaryProvenance,
+                $"{path}.timingBoundaryProvenance",
+                issues);
+            ValidateOperationCounters(sample.OperationCounters, $"{path}.operationCounters", issues);
             if (sample.MeasurementUnits is not null &&
                 export.Manifest.MeasurementUnits is not null &&
                 sample.MeasurementUnits != export.Manifest.MeasurementUnits)
@@ -585,10 +590,41 @@ public sealed partial class RunExportValidator
             return;
         }
 
+        // Phase 4 producers use the shared canonical tokens. Pre-Phase 4 v1
+        // rows allowed any non-empty label, so imports preserve those raw
+        // labels as incompatible standalone buckets instead of rewriting them.
         Required(value.IterationKind, $"{path}.iterationKind", issues);
         Required(value.Temperature, $"{path}.temperature", issues);
         Required(value.JitState, $"{path}.jitState", issues);
         Required(value.CacheState, $"{path}.cacheState", issues);
+    }
+
+    private static void ValidateTimingBoundaryProvenance(
+        TimingBoundaryProvenance value,
+        string path,
+        ICollection<RunExportValidationIssue> issues)
+    {
+        if (!Enum.IsDefined(value))
+        {
+            Add(issues, path, "enum", "Unknown timing-boundary provenance.");
+        }
+    }
+
+    private static void ValidateOperationCounters(
+        SampleOperationCounters? value,
+        string path,
+        ICollection<RunExportValidationIssue> issues)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        Nonnegative(value.CandidateCount, $"{path}.candidateCount", issues);
+        Nonnegative(value.VisitedNodeCount, $"{path}.visitedNodeCount", issues);
+        Nonnegative(value.VisitedEdgeCount, $"{path}.visitedEdgeCount", issues);
+        Nonnegative(value.AlgorithmIterationCount, $"{path}.algorithmIterationCount", issues);
+        Nonnegative(value.CancellationCheckCount, $"{path}.cancellationCheckCount", issues);
     }
 
     private static void ValidateNodeCounts(SampleNodeCounts? value, string path, ICollection<RunExportValidationIssue> issues)
@@ -767,14 +803,31 @@ public sealed partial class RunExportValidator
         VersionedRunExport export,
         ICollection<RunExportValidationIssue> issues)
     {
-        if (!RunExportOrdering.IsNormalized(export.Samples))
+        try
         {
-            Add(issues, "$.samples", "order", "Samples are not in the frozen deterministic export order.");
+            if (!RunExportOrdering.IsNormalized(export.Samples))
+            {
+                Add(issues, "$.samples", "order", "Samples are not in the frozen deterministic export order.");
+            }
+        }
+        catch (Exception exception) when (
+            exception is JsonException or FormatException or InvalidOperationException)
+        {
+            // Domain validation and section-digest validation report the
+            // invalid representation; ordering cannot be established yet.
         }
 
-        if (!RunExportOrdering.IsNormalized(export.Outputs))
+        try
         {
-            Add(issues, "$.outputs", "order", "Outputs are not in the frozen deterministic export order.");
+            if (!RunExportOrdering.IsNormalized(export.Outputs))
+            {
+                Add(issues, "$.outputs", "order", "Outputs are not in the frozen deterministic export order.");
+            }
+        }
+        catch (Exception exception) when (
+            exception is JsonException or FormatException or InvalidOperationException)
+        {
+            // See the sample-order branch above.
         }
     }
 

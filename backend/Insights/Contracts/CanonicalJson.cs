@@ -24,6 +24,13 @@ public static class CanonicalJson
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
             WriteIndented = false
         };
+        // Canonical JSON uses the shortest mathematical spelling, including
+        // exponent notation for integral values such as 1000 -> 1e3. The
+        // platform integer converters reject that spelling, so the shared
+        // contract options must bridge it without accepting fractions or
+        // values outside the target CLR range.
+        options.Converters.Add(new CanonicalInt32Converter());
+        options.Converters.Add(new CanonicalInt64Converter());
         options.Converters.Add(new StrictKebabCaseEnumConverterFactory());
         return options;
     }
@@ -328,6 +335,76 @@ public static class CanonicalJson
         {
             var converterType = typeof(StrictKebabCaseEnumConverter<>).MakeGenericType(typeToConvert);
             return (JsonConverter)Activator.CreateInstance(converterType)!;
+        }
+    }
+
+    private abstract class CanonicalIntegerConverter<T> : JsonConverter<T>
+        where T : struct
+    {
+        public override T Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            if (reader.TokenType != JsonTokenType.Number)
+            {
+                throw new JsonException($"Expected a JSON number for {typeof(T).Name}.");
+            }
+
+            decimal value;
+            try
+            {
+                value = reader.GetDecimal();
+            }
+            catch (FormatException exception)
+            {
+                throw new JsonException($"JSON number is not a valid {typeof(T).Name} value.", exception);
+            }
+
+            if (decimal.Truncate(value) != value || !TryConvert(value, out var converted))
+            {
+                throw new JsonException($"JSON number is not a valid {typeof(T).Name} value.");
+            }
+
+            return converted;
+        }
+
+        protected abstract bool TryConvert(decimal value, out T converted);
+    }
+
+    private sealed class CanonicalInt32Converter : CanonicalIntegerConverter<int>
+    {
+        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) =>
+            writer.WriteNumberValue(value);
+
+        protected override bool TryConvert(decimal value, out int converted)
+        {
+            if (value is >= int.MinValue and <= int.MaxValue)
+            {
+                converted = decimal.ToInt32(value);
+                return true;
+            }
+
+            converted = default;
+            return false;
+        }
+    }
+
+    private sealed class CanonicalInt64Converter : CanonicalIntegerConverter<long>
+    {
+        public override void Write(Utf8JsonWriter writer, long value, JsonSerializerOptions options) =>
+            writer.WriteNumberValue(value);
+
+        protected override bool TryConvert(decimal value, out long converted)
+        {
+            if (value is >= long.MinValue and <= long.MaxValue)
+            {
+                converted = decimal.ToInt64(value);
+                return true;
+            }
+
+            converted = default;
+            return false;
         }
     }
 

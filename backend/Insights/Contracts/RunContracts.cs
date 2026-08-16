@@ -71,6 +71,13 @@ public sealed record MeasurementUnitContract(
     string Counts,
     string Density);
 
+public enum TimingBoundaryProvenance
+{
+    DirectlyInstrumented,
+    ExternallyObserved,
+    Estimated
+}
+
 public sealed record RunManifest(
     Guid RunId,
     string Name,
@@ -102,6 +109,21 @@ public sealed record IterationClassification(
     string JitState,
     string CacheState);
 
+public static class IterationClassificationTokens
+{
+    public const string Setup = "setup";
+    public const string Warmup = "warmup";
+    public const string Measured = "measured";
+
+    public const string Cold = "cold";
+    public const string Warm = "warm";
+
+    public const string PreJit = "pre-jit";
+    public const string PostJit = "post-jit";
+    public const string ColdCache = "cold-cache";
+    public const string WarmCache = "warm-cache";
+}
+
 public sealed record SampleNodeCounts(
     long? Requested,
     long? Canonical,
@@ -123,6 +145,14 @@ public sealed record SampleTransportMeasurements(
     decimal? TimeToFirstByte,
     decimal? FullTransferDuration);
 
+public sealed record SampleOperationCounters(
+    long? CandidateCount,
+    long? VisitedNodeCount,
+    long? VisitedEdgeCount,
+    long? AlgorithmIterationCount,
+    long? CancellationCheckCount,
+    bool? ThresholdAttained);
+
 public sealed record RunSample(
     Guid RunId,
     Guid SampleId,
@@ -140,7 +170,9 @@ public sealed record RunSample(
     SampleTransportMeasurements Transport,
     RuntimeResourceMeasurements Resources,
     ExecutionOutcome Execution,
-    MeasurementUnitContract MeasurementUnits);
+    MeasurementUnitContract MeasurementUnits,
+    TimingBoundaryProvenance TimingBoundaryProvenance,
+    SampleOperationCounters? OperationCounters);
 
 public sealed record CompactRunOutput
 {

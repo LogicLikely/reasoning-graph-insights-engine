@@ -153,7 +153,8 @@ public sealed record PhaseTimingMeasurement(
     string Layer,
     string Phase,
     decimal Duration,
-    string Unit);
+    string Unit,
+    TimingBoundaryProvenance TimingBoundaryProvenance);
 
 public sealed record RuntimeResourceMeasurements(
     long? AllocatedBytes,

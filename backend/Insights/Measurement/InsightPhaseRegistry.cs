@@ -7,9 +7,11 @@ public static class InsightMeasurementLayers
 {
     public const string PostgreSqlRepository = "postgresql-repository";
     public const string BackendServiceApi = "backend-service-api";
+    public const string BenchmarkOrchestration = "benchmark-orchestration";
     public const string Transport = "transport";
     public const string BrowserData = "browser-data";
     public const string GraphMap = "graph-map";
+    public const string LabResult = "lab-result";
     public const string EndToEnd = "end-to-end";
 }
 
@@ -30,6 +32,12 @@ public static class InsightMeasurementPhases
     public const string ResultShaping = "result-shaping";
     public const string Serialization = "serialization";
 
+    public const string FixtureConstruction = "fixture-construction";
+    public const string OperationExecution = "operation-execution";
+    public const string WorkerSupervision = "worker-supervision";
+    public const string Persistence = "persistence";
+    public const string ExportValidation = "export-validation";
+
     public const string ResponseBytes = "response-bytes";
     public const string TimeToFirstByte = "time-to-first-byte";
     public const string FullTransfer = "full-transfer";
@@ -44,6 +52,8 @@ public static class InsightMeasurementPhases
     public const string ReactCommit = "react-commit";
     public const string DeferredEdgeCommit = "deferred-edge-commit";
     public const string ViewportFit = "viewport-fit";
+
+    public const string ResultRender = "result-render";
 
     public const string ActionToStableResultAndView = "action-to-stable-result-and-view";
 
@@ -89,6 +99,12 @@ public static partial class InsightPhaseRegistry
             Phase(InsightMeasurementLayers.BackendServiceApi, InsightMeasurementPhases.ResultShaping, true),
             Phase(InsightMeasurementLayers.BackendServiceApi, InsightMeasurementPhases.Serialization, true),
 
+            Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.FixtureConstruction, false),
+            Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.OperationExecution, false),
+            Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.WorkerSupervision, false),
+            Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.Persistence, false),
+            Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.ExportValidation, false),
+
             Phase(InsightMeasurementLayers.Transport, InsightMeasurementPhases.ResponseBytes, true),
             Phase(InsightMeasurementLayers.Transport, InsightMeasurementPhases.TimeToFirstByte, false),
             Phase(InsightMeasurementLayers.Transport, InsightMeasurementPhases.FullTransfer, false),
@@ -103,6 +119,8 @@ public static partial class InsightPhaseRegistry
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.ReactCommit, false),
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.DeferredEdgeCommit, false),
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.ViewportFit, false),
+
+            Phase(InsightMeasurementLayers.LabResult, InsightMeasurementPhases.ResultRender, false),
 
             Phase(InsightMeasurementLayers.EndToEnd, InsightMeasurementPhases.ActionToStableResultAndView, false)
         ]);

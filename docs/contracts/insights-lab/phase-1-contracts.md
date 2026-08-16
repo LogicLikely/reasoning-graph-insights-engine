@@ -1,11 +1,13 @@
 # Insights Lab Phase 1 contracts
 
-**Contract status:** Frozen for Phase 1; reconciled by Phase 3.5
+**Contract status:** Frozen for Phase 1; reconciled by Phase 3.5 and extended
+with Phase 4 controlled-measurement evidence
 
 **Contract family:** `insights-lab-v1`
 
 **Scope:** Correlation, named phase measurement, reset-safe benchmark storage,
-versioned run export, and isolated-worker supervision
+versioned run export, isolated-worker supervision, and controlled-run raw
+measurement evidence
 
 This record implements Phase 1 of the Insights Lab plan. It preserves the
 Phase 0 operation, algorithm, result, canonical JSON, and compatibility
@@ -41,9 +43,11 @@ The registry order is the canonical export order for otherwise equal samples.
 |---|---|
 | `postgresql-repository` | `connection-open-wait`, `graph-lookup`, `node-query`, `edge-query`, `evidence-json-materialization`, `catalog-aggregation` |
 | `backend-service-api` | `dto-mapping`, `validation`, `calculation-context-construction`, `algorithm`, `algorithm.<subphase>`, `ranking`, `result-shaping`, `serialization` |
+| `benchmark-orchestration` | `fixture-construction`, `operation-execution`, `worker-supervision`, `persistence`, `export-validation` |
 | `transport` | `response-bytes`, `time-to-first-byte`, `full-transfer` |
 | `browser-data` | `axios-receipt-parse`, `domain-mapping`, `graph-map-adapter`, `search-index-construction` |
 | `graph-map` | `node-edge-materialization`, `dagre-layout`, `react-commit`, `deferred-edge-commit`, `viewport-fit` |
+| `lab-result` | `result-render` |
 | `end-to-end` | `action-to-stable-result-and-view` |
 
 Algorithm subphases use lowercase dot-separated kebab-case tokens. Phase
@@ -53,6 +57,14 @@ deterministic invocation order for nested scopes. Durations are inclusive for
 their own scope; cross-layer timings may nest and must not be added as though
 they were mutually exclusive.
 
+Every phase timing states where its time boundary came from. The exact
+`timingBoundaryProvenance` tokens are `directly-instrumented`,
+`externally-observed`, and `estimated`. A collector-owned monotonic scope is
+directly instrumented. A duration supplied to the collector must explicitly
+declare external observation or estimation (or direct instrumentation if the
+caller owns a trustworthy monotonic boundary); the collector never guesses.
+Approximate or reconstructed data is always `estimated`.
+
 The backend currently measures the repository fetch/catalog phases and service
 DTO mapping. A correlated response exposes server phases that finished before
 headers were committed through `Server-Timing`. Response byte count belongs in
@@ -60,6 +72,30 @@ the transport measurement fields; true time-to-first-byte and full-transfer
 remain client-observed measurements for the later controlled browser/API
 runner. Reserving browser and GraphMap phase names here does not implement their
 later-phase behavior.
+
+BenchmarkDotNet owns repeatable in-process operation measurements and its own
+runtime statistics. The controlled runner owns fixture construction, isolated
+worker supervision, persistence, and export validation. Those orchestration
+durations remain separate raw rows and are not relabeled as algorithm time.
+`lab-result/result-render` is reserved for the Lab result surface and is not
+produced by the Goal 1 command-line runner.
+
+Each raw sample has an iteration classification. Phase 4 producers emit
+`iterationKind` as exactly `setup`, `warmup`, or `measured`, and `temperature`
+as exactly `cold` or `warm`. JIT/cache evidence uses stable tokens, including
+`pre-jit`, `post-jit`, `cold-cache`, and `warm-cache`. The v1 reader continues
+to accept non-empty legacy labels because older persisted rows had a free-form
+classification contract; each unknown label is an incompatible standalone
+bucket and is never aggregated with a canonical population. Setup and warmup
+rows remain visible and must not be folded into measured rows; cold and warm
+populations must not be aggregated together.
+
+The required `operationCounters` member is either `null` when no trustworthy
+counter source exists or an object with the nullable fields `candidateCount`,
+`visitedNodeCount`, `visitedEdgeCount`, `algorithmIterationCount`,
+`cancellationCheckCount`, and `thresholdAttained`. Numeric counter values are
+nonnegative. These counters are algorithm work evidence, not values inferred
+from elapsed time.
 
 ## 3. Explicit, reset-safe persistence
 
@@ -79,6 +115,10 @@ The storage rules are:
   stored as JSONB, including original offset strings. Indexed relational
   columns duplicate comparison and lifecycle fields but do not replace the
   stored payload. Canonical spelling and digests are produced when exporting.
+- Sample timing-boundary provenance is duplicated in a constrained relational
+  column for auditing and remains identical to the JSON payload. The
+  `operationCounters` JSON member is always present, including when its value
+  is explicitly `null`.
 - Identity-generated entry ordinals preserve append order and allow multiple
   phase rows to share one sample ID. Samples and complete compact outputs
   flushed before a worker failure remain available.
@@ -114,10 +154,18 @@ Export creation and import validate:
   agreement across manifest, samples, and outputs;
 - canonical-parameter digests;
 - the manifest, samples, and outputs section digests;
-- deterministic collection order and the top-100 retention limit.
+- deterministic collection order and the top-100 retention limit;
+- non-empty iteration/temperature labels, timing-boundary provenance, and
+  nonnegative nullable operation counters.
 
 Serialization is canonical UTF-8 JSON with explicit nulls. A serialize/import
 round trip must preserve all three section digests and canonical bytes.
+
+When initializing a benchmark store created before Phase 4, every existing
+sample row is preserved, its timing provenance is conservatively reconciled to
+`estimated`, and its JSON payload receives `operationCounters: null`. Repeated
+steady-state initialization does not rewrite current rows or replace current
+constraints.
 
 `resultDigest` covers the complete logical result. It is recomputed from
 retained `items` only when `totalResultCardinality == items.Count`. A top-100

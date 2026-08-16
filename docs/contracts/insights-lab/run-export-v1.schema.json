@@ -111,6 +111,13 @@
         "skip"
       ]
     },
+    "timingBoundaryProvenance": {
+      "enum": [
+        "directly-instrumented",
+        "externally-observed",
+        "estimated"
+      ]
+    },
     "validationFailure": {
       "type": "object",
       "additionalProperties": false,
@@ -1276,6 +1283,61 @@
         }
       }
     },
+    "sampleOperationCounters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateCount",
+        "visitedNodeCount",
+        "visitedEdgeCount",
+        "algorithmIterationCount",
+        "cancellationCheckCount",
+        "thresholdAttained"
+      ],
+      "properties": {
+        "candidateCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "visitedNodeCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "visitedEdgeCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "algorithmIterationCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cancellationCheckCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "thresholdAttained": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
     "runSample": {
       "type": "object",
       "additionalProperties": false,
@@ -1296,7 +1358,9 @@
         "transport",
         "resources",
         "execution",
-        "measurementUnits"
+        "measurementUnits",
+        "timingBoundaryProvenance",
+        "operationCounters"
       ],
       "properties": {
         "runId": {
@@ -1360,6 +1424,19 @@
         },
         "measurementUnits": {
           "$ref": "#/$defs/measurementUnitContract"
+        },
+        "timingBoundaryProvenance": {
+          "$ref": "#/$defs/timingBoundaryProvenance"
+        },
+        "operationCounters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sampleOperationCounters"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },

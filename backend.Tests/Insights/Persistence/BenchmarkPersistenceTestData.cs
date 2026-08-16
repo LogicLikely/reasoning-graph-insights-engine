@@ -80,7 +80,11 @@ internal static class BenchmarkPersistenceTestData
             phase,
             1.25m,
             0,
-            new IterationClassification("measured", "warm", "post-jit", "warm-cache"),
+            new IterationClassification(
+                IterationClassificationTokens.Measured,
+                IterationClassificationTokens.Warm,
+                IterationClassificationTokens.PostJit,
+                IterationClassificationTokens.WarmCache),
             new SampleNodeCounts(18, 18, 0, null),
             new SampleEdgeCounts(17, null, null),
             new SampleSearchCounts(null, null),
@@ -88,7 +92,9 @@ internal static class BenchmarkPersistenceTestData
             new SampleTransportMeasurements(null, null, null, null),
             new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
             execution ?? new ExecutionOutcome(ExecutionStatus.Succeeded),
-            Units);
+            Units,
+            TimingBoundaryProvenance.DirectlyInstrumented,
+            new SampleOperationCounters(null, 18, 17, 1, null, null));
     }
 
     internal static CompactRunOutput Output(

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Backend.Insights.Contracts;
 
 namespace Backend.Insights.Measurement;
 
@@ -7,7 +8,8 @@ public sealed record InsightPhaseTimingRecord(
     string Layer,
     string Phase,
     decimal Duration,
-    string Unit);
+    string Unit,
+    TimingBoundaryProvenance TimingBoundaryProvenance);
 
 public interface IMonotonicClock
 {
@@ -33,7 +35,11 @@ public interface IInsightPhaseTimingCollector
 {
     IDisposable Measure(string layer, string phase);
 
-    InsightPhaseTimingRecord Record(string layer, string phase, decimal durationMilliseconds);
+    InsightPhaseTimingRecord Record(
+        string layer,
+        string phase,
+        decimal durationMilliseconds,
+        TimingBoundaryProvenance timingBoundaryProvenance);
 
     IReadOnlyList<InsightPhaseTimingRecord> Snapshot();
 }
@@ -77,12 +83,14 @@ public sealed class InsightPhaseTimingCollector : IInsightPhaseTimingCollector
     public InsightPhaseTimingRecord Record(
         string layer,
         string phase,
-        decimal durationMilliseconds)
+        decimal durationMilliseconds,
+        TimingBoundaryProvenance timingBoundaryProvenance)
     {
         ValidatePhase(layer, phase);
         ArgumentOutOfRangeException.ThrowIfNegative(durationMilliseconds);
+        ValidateProvenance(timingBoundaryProvenance);
         var sequence = Interlocked.Increment(ref _nextSequence) - 1;
-        return Add(sequence, layer, phase, durationMilliseconds);
+        return Add(sequence, layer, phase, durationMilliseconds, timingBoundaryProvenance);
     }
 
     public IReadOnlyList<InsightPhaseTimingRecord> Snapshot()
@@ -108,16 +116,28 @@ public sealed class InsightPhaseTimingCollector : IInsightPhaseTimingCollector
         }
 
         var duration = (completedAt - startedAt) * 1000m / _clock.Frequency;
-        return Add(sequence, layer, phase, duration);
+        return Add(
+            sequence,
+            layer,
+            phase,
+            duration,
+            TimingBoundaryProvenance.DirectlyInstrumented);
     }
 
     private InsightPhaseTimingRecord Add(
         long sequence,
         string layer,
         string phase,
-        decimal duration)
+        decimal duration,
+        TimingBoundaryProvenance timingBoundaryProvenance)
     {
-        var record = new InsightPhaseTimingRecord(sequence, layer, phase, duration, DurationUnit);
+        var record = new InsightPhaseTimingRecord(
+            sequence,
+            layer,
+            phase,
+            duration,
+            DurationUnit,
+            timingBoundaryProvenance);
         lock (_gate)
         {
             _records.Add(record);
@@ -133,6 +153,17 @@ public sealed class InsightPhaseTimingCollector : IInsightPhaseTimingCollector
             throw new ArgumentException(
                 $"Unknown Insights measurement phase '{layer}/{phase}'.",
                 nameof(phase));
+        }
+    }
+
+    private static void ValidateProvenance(TimingBoundaryProvenance timingBoundaryProvenance)
+    {
+        if (!Enum.IsDefined(timingBoundaryProvenance))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(timingBoundaryProvenance),
+                timingBoundaryProvenance,
+                "Unknown timing-boundary provenance.");
         }
     }
 

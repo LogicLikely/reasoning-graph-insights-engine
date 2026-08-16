@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Backend.Insights.Contracts;
 using Backend.Insights.Measurement;
 using Backend.Middleware;
 using Microsoft.AspNetCore.Http;
@@ -51,7 +52,8 @@ public sealed class InsightsCorrelationMiddlewareTests
             collector.Record(
                 InsightMeasurementLayers.PostgreSqlRepository,
                 InsightMeasurementPhases.GraphLookup,
-                1m);
+                1m,
+                TimingBoundaryProvenance.DirectlyInstrumented);
             return Task.CompletedTask;
         });
 
@@ -77,11 +79,13 @@ public sealed class InsightsCorrelationMiddlewareTests
             collector.Record(
                 InsightMeasurementLayers.PostgreSqlRepository,
                 InsightMeasurementPhases.GraphLookup,
-                2.5m);
+                2.5m,
+                TimingBoundaryProvenance.DirectlyInstrumented);
             collector.Record(
                 InsightMeasurementLayers.Transport,
                 InsightMeasurementPhases.TimeToFirstByte,
-                99m);
+                99m,
+                TimingBoundaryProvenance.ExternallyObserved);
             return Task.CompletedTask;
         });
 

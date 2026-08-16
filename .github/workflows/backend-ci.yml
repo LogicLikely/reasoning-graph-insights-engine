@@ -5,7 +5,12 @@ on:
         branches: [main]
         paths:
             - "backend/**"
+            - "backend.AnalysisWorker/**"
+            - "backend.BenchmarkRunner/**"
+            - "backend.Benchmarks/**"
             - "backend.Tests/**"
+            - "backend.Tests.WorkerFixture/**"
+            - "docs/contracts/insights-lab/**"
             - "*.sln"
             - ".github/workflows/backend-ci.yml"
     workflow_dispatch:
@@ -49,3 +54,9 @@ jobs:
 
             - name: Test
               run: dotnet test --no-build --configuration Release
+
+            - name: Benchmark runner discovery smoke
+              run: dotnet run --project backend.BenchmarkRunner --no-build --configuration Release -- list --profile quick
+
+            - name: Pure-algorithm benchmark dry smoke
+              run: dotnet run --project backend.Benchmarks --no-build --configuration Release -- --job dry --anyCategories quick

@@ -676,7 +676,17 @@ Acceptance:
 
 ### Phase 4 — Benchmark runners
 
-**Status:** Not started. The Phase 3.5 prerequisite is complete.
+**Status:** Goal 1, Benchmark Core, is complete as of 2026-08-16. Goal 2 is not started.
+
+Goal 1 completion record:
+
+- The shared run contract now identifies directly instrumented, externally observed, and estimated timing boundaries; keeps setup, warmup, measured, cold, and warm populations distinct; preserves raw samples and explicit units; and reserves neutral Lab result-render measurement for Goal 2. Pre-Phase-4 nonblank v1 classification labels remain readable as separate, non-aggregated compatibility buckets.
+- The serial CLI runner uses the retained operation registry, deterministic stress fixtures, shared operation execution, the existing worker protocol, optional reset-safe PostgreSQL persistence, and schema-validated versioned JSON export. It records actual strategy selection, cancellation and every terminal lifecycle state, phase provenance and available operation counters, real source-revision state, and partial evidence from failed isolated work.
+- The bounded `quick` profile covers the retained in-memory algorithms and records explicit reasons for deferred Goal 2 journeys, unsafe uncapped exact work, and unsafe in-process recursive work. Exact and auto critical-counter execution require an explicit positive candidate limit; recursive, combinatorial, and override-derived hazardous cases are isolated.
+- The dedicated BenchmarkDotNet project covers calculation-context construction, strongest path, minimum and maximum single-pair paths, evidence impact, exact and greedy critical counters, both auto-strategy branches, robustness, and likelihood recalculation. Fixture preparation is outside measured work, mutation-prone state is reset per iteration, and MemoryDiagnoser plus available deterministic algorithm counters are included.
+- Release verification completed with a clean six-project solution build; 403 backend tests passed with no skips against a disposable PostgreSQL database; two equivalent 15-case quick runs matched dataset, parameter, result, status, and scenario identities; and standard out-of-process BenchmarkDotNet `Dry` and `ShortRun` jobs each executed all 11 workloads successfully. These development measurements are informational and establish no authoritative thresholds or baselines.
+
+Goal 2 remains explicitly deferred. It includes real graph catalog/fetch/search and REST/database performance journeys, API serialization and network transfer, Playwright and browser parsing/adaptation, GraphMap and React/result-panel measurement, and integrated cold, standard, or authoritative suites. Phase 5 UI and Phase 6 calibration also remain unstarted.
 
 Execution constraints:
 

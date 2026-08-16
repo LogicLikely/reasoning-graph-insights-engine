@@ -286,6 +286,84 @@ public class BenchmarkResetPreservationPostgreSqlTests
         }
     }
 
+    [TestMethod]
+    public async Task Phase4SampleReconciliation_MarksLegacyBoundariesEstimatedAndPreservesRows()
+    {
+        var connectionString = RequireDisposablePostgreSql();
+        await EnsurePostgreSqlIsAvailable(connectionString);
+
+        var repositoryRoot = BenchmarkSchemaSqlTests.FindRepositoryRoot();
+        var backendRoot = Path.Combine(repositoryRoot, "backend");
+        var options = Options.Create(new DatabaseOptions
+        {
+            ConnectionString = connectionString
+        });
+        var connectionFactory = new DbConnectionFactory(options);
+        var initializer = new BenchmarkSchemaInitializer(
+            connectionFactory,
+            CreateHostEnvironment(backendRoot));
+        var benchmarkRepository = new BenchmarkRunRepository(connectionFactory);
+        var intent = ExplicitBenchmarkRunIntent.ForRun(BenchmarkPersistenceTestData.RunId);
+
+        await initializer.InitializeAsync(CancellationToken.None);
+        await DeleteFixtureRun(connectionString);
+
+        try
+        {
+            await benchmarkRepository.CreateRunAsync(
+                intent,
+                BenchmarkPersistenceTestData.Manifest(),
+                CancellationToken.None);
+            await benchmarkRepository.AppendSampleAsync(
+                intent,
+                BenchmarkPersistenceTestData.Sample(),
+                CancellationToken.None);
+            await benchmarkRepository.AppendOutputAsync(
+                intent,
+                BenchmarkPersistenceTestData.Output(),
+                CancellationToken.None);
+
+            var rowCounts = await ReadBenchmarkRowCounts(connectionString);
+            var initialConstraintOids = await ReadPayloadConstraintOids(connectionString);
+            await SimulatePrePhase4Samples(connectionString);
+
+            await initializer.InitializeAsync(CancellationToken.None);
+
+            var reconciledConstraintOids = await ReadPayloadConstraintOids(connectionString);
+            Assert.AreNotEqual(
+                PayloadConstraintOid(initialConstraintOids, "ck_benchmark_samples_payload_identity"),
+                PayloadConstraintOid(reconciledConstraintOids, "ck_benchmark_samples_payload_identity"));
+            Assert.AreEqual(
+                PayloadConstraintOid(initialConstraintOids, "ck_benchmark_outputs_payload_identity"),
+                PayloadConstraintOid(reconciledConstraintOids, "ck_benchmark_outputs_payload_identity"),
+                "Reconciling legacy samples must not replace the outputs payload constraint.");
+
+            var after = await benchmarkRepository.GetSnapshotAsync(
+                BenchmarkPersistenceTestData.RunId,
+                CancellationToken.None);
+            Assert.IsNotNull(after);
+            Assert.AreEqual(rowCounts, await ReadBenchmarkRowCounts(connectionString));
+            Assert.AreEqual(1, after.Samples.Count);
+            Assert.AreEqual(
+                TimingBoundaryProvenance.Estimated,
+                after.Samples[0].TimingBoundaryProvenance);
+            Assert.IsNull(after.Samples[0].OperationCounters);
+            Assert.AreEqual(17L, after.Samples[0].SearchCounts.Matches);
+            Assert.AreEqual("profiled", after.Samples[0].Classification.IterationKind);
+            Assert.AreEqual("tepid", after.Samples[0].Classification.Temperature);
+
+            await initializer.InitializeAsync(CancellationToken.None);
+            CollectionAssert.AreEqual(
+                reconciledConstraintOids,
+                await ReadPayloadConstraintOids(connectionString),
+                "Steady-state initialization must not replace reconciled constraints.");
+        }
+        finally
+        {
+            await DeleteFixtureRun(connectionString);
+        }
+    }
+
     private static string RequireDisposablePostgreSql()
     {
         var connectionString = Environment.GetEnvironmentVariable(
@@ -388,6 +466,57 @@ public class BenchmarkResetPreservationPostgreSqlTests
             ALTER TABLE benchmark.samples
                 ADD CONSTRAINT ck_benchmark_samples_payload_identity CHECK (
                     sample_json->>'visualizationAdmission' = visualization_admission
+                );
+            """;
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SimulatePrePhase4Samples(string connectionString)
+    {
+        const string sql = """
+            ALTER TABLE benchmark.samples
+                DROP CONSTRAINT ck_benchmark_samples_payload_identity;
+
+            ALTER TABLE benchmark.samples
+                DROP CONSTRAINT ck_benchmark_samples_timing_boundary_provenance;
+
+            ALTER TABLE benchmark.samples
+                DROP COLUMN timing_boundary_provenance;
+
+            UPDATE benchmark.samples
+            SET sample_json = jsonb_set(
+                jsonb_set(
+                    jsonb_set(
+                        sample_json - 'timingBoundaryProvenance' - 'operationCounters',
+                        '{searchCounts,matches}',
+                        '17'::jsonb,
+                        true
+                    ),
+                    '{classification,iterationKind}',
+                    '"profiled"'::jsonb,
+                    true
+                ),
+                '{classification,temperature}',
+                '"tepid"'::jsonb,
+                true
+            );
+
+            ALTER TABLE benchmark.samples
+                ADD CONSTRAINT ck_benchmark_samples_payload_identity CHECK (
+                    (sample_json->>'runId')::uuid = run_id
+                    AND (sample_json->>'sampleId')::uuid = sample_id
+                    AND sample_json->>'scenarioKey' = scenario_key
+                    AND sample_json->>'operationKey' = operation_key
+                    AND (sample_json->>'iteration')::integer = iteration
+                    AND sample_json->>'layer' = layer
+                    AND sample_json->>'phase' = phase
+                    AND (sample_json->>'wallClockDuration')::numeric = wall_clock_duration
+                    AND sample_json#>>'{execution,status}' = status
+                    AND sample_json#>>'{execution,failure,kind}' IS NOT DISTINCT FROM failure_kind
                 );
             """;
 
@@ -518,4 +647,5 @@ public class BenchmarkResetPreservationPostgreSqlTests
             connection);
         return Convert.ToInt32(await command.ExecuteScalarAsync());
     }
+
 }

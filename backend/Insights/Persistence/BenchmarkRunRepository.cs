@@ -130,6 +130,7 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             iteration,
             layer,
             phase,
+            timing_boundary_provenance,
             wall_clock_duration,
             status,
             failure_kind,
@@ -143,6 +144,7 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             @Iteration,
             @Layer,
             @Phase,
+            @TimingBoundaryProvenance,
             @WallClockDuration,
             @Status,
             @FailureKind,
@@ -313,6 +315,7 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
                 sample.Iteration,
                 sample.Layer,
                 sample.Phase,
+                TimingBoundaryProvenance = EnumToken(sample.TimingBoundaryProvenance),
                 sample.WallClockDuration,
                 Status = EnumToken(sample.Execution.Status),
                 FailureKind = NullableEnumToken(sample.Execution.Failure?.Kind),
@@ -475,6 +478,38 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
         _ = InsightOperationRegistry.Get(sample.OperationKey);
         ArgumentOutOfRangeException.ThrowIfNegative(sample.Iteration);
         ArgumentOutOfRangeException.ThrowIfNegative(sample.WallClockDuration);
+        if (!Enum.IsDefined(sample.TimingBoundaryProvenance))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(sample),
+                sample.TimingBoundaryProvenance,
+                "Unknown sample timing-boundary provenance.");
+        }
+
+        // Phase 4 writes shared canonical tokens, while pre-Phase 4 v1 rows
+        // may carry other non-empty labels. Preserve those raw labels as
+        // incompatible standalone buckets rather than making history unreadable.
+        ArgumentNullException.ThrowIfNull(sample.Classification);
+        RequireText(sample.Classification.IterationKind, "Sample iteration kind");
+        RequireText(sample.Classification.Temperature, "Sample temperature");
+        RequireText(sample.Classification.JitState, "Sample JIT state");
+        RequireText(sample.Classification.CacheState, "Sample cache state");
+
+        ValidateOperationCounters(sample.OperationCounters);
+    }
+
+    private static void ValidateOperationCounters(SampleOperationCounters? counters)
+    {
+        if (counters is null)
+        {
+            return;
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(counters.CandidateCount ?? 0);
+        ArgumentOutOfRangeException.ThrowIfNegative(counters.VisitedNodeCount ?? 0);
+        ArgumentOutOfRangeException.ThrowIfNegative(counters.VisitedEdgeCount ?? 0);
+        ArgumentOutOfRangeException.ThrowIfNegative(counters.AlgorithmIterationCount ?? 0);
+        ArgumentOutOfRangeException.ThrowIfNegative(counters.CancellationCheckCount ?? 0);
     }
 
     private static void ValidateOutput(CompactRunOutput output)

@@ -15,6 +15,9 @@ public class ResultContractTests
         CollectionAssert.AreEqual(
             new[] { "Validation", "Execution", "Timeout", "Cancellation", "Crash", "Skip" },
             Enum.GetNames<FailureKind>());
+        CollectionAssert.AreEqual(
+            new[] { "DirectlyInstrumented", "ExternallyObserved", "Estimated" },
+            Enum.GetNames<TimingBoundaryProvenance>());
 
         Assert.AreEqual(
             """{"execution":["queued","running","succeeded","failed","timed-out","cancelled","crashed","skipped"],"failure":["validation","execution","timeout","cancellation","crash","skip"]}""",
@@ -23,6 +26,9 @@ public class ResultContractTests
                 Execution = Enum.GetValues<ExecutionStatus>(),
                 Failure = Enum.GetValues<FailureKind>()
             }));
+        Assert.AreEqual(
+            """["directly-instrumented","externally-observed","estimated"]""",
+            CanonicalJson.Canonicalize(Enum.GetValues<TimingBoundaryProvenance>()));
     }
 
     [TestMethod]
@@ -99,7 +105,12 @@ public class ResultContractTests
             [item],
             CanonicalJson.ComputeSha256(new[] { item }),
             [new OrderedPathProjection(["leaf", "target"], ["edge"], 2m)],
-            [new PhaseTimingMeasurement("backend-service", "ranking", 1.25m, "ms")],
+            [new PhaseTimingMeasurement(
+                "backend-service",
+                "ranking",
+                1.25m,
+                "ms",
+                TimingBoundaryProvenance.DirectlyInstrumented)],
             new RuntimeResourceMeasurements(1_024, 1, 0, 0, 1m, "ms", 512));
 
         Assert.AreEqual(ExecutionStatus.Succeeded, envelope.Execution.Status);
@@ -113,6 +124,7 @@ public class ResultContractTests
         StringAssert.Contains(canonical, "\"algorithmSemanticIdentity\":\"strongest-path-v1\"");
         StringAssert.Contains(canonical, "\"orderedPaths\"");
         StringAssert.Contains(canonical, "\"phaseTimings\"");
+        StringAssert.Contains(canonical, "\"timingBoundaryProvenance\":\"directly-instrumented\"");
         Assert.IsFalse(canonical.Contains("visualizationAdmission", StringComparison.Ordinal));
         Assert.IsFalse(canonical.Contains("warnings", StringComparison.Ordinal));
     }
@@ -187,7 +199,11 @@ public class ResultContractTests
             "algorithm",
             12.5m,
             0,
-            new IterationClassification("measured", "warm", "post-jit", "warm-cache"),
+            new IterationClassification(
+                IterationClassificationTokens.Measured,
+                IterationClassificationTokens.Warm,
+                IterationClassificationTokens.PostJit,
+                IterationClassificationTokens.WarmCache),
             new SampleNodeCounts(1_000, 1_000, 0, null),
             new SampleEdgeCounts(999, null, null),
             new SampleSearchCounts(null, null),
@@ -195,7 +211,9 @@ public class ResultContractTests
             new SampleTransportMeasurements(256, 2_048, 2m, 3m),
             new RuntimeResourceMeasurements(10_000, 1, 0, 0, 11m, "ms", 4_096),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            units);
+            units,
+            TimingBoundaryProvenance.DirectlyInstrumented,
+            new SampleOperationCounters(null, 1_000, 999, 1_000, null, null));
         var item = JsonSerializer.SerializeToElement(new { nodeId = "node-1", score = 0.9m });
         var output = new CompactRunOutput(
             runId,
@@ -239,6 +257,15 @@ public class ResultContractTests
             root.GetProperty("samples")[0].GetProperty("transport").GetProperty("timeToFirstByte").GetDecimal());
         Assert.AreEqual(3m,
             root.GetProperty("samples")[0].GetProperty("transport").GetProperty("fullTransferDuration").GetDecimal());
+        Assert.AreEqual(
+            "directly-instrumented",
+            root.GetProperty("samples")[0].GetProperty("timingBoundaryProvenance").GetString());
+        Assert.AreEqual(
+            1_000m,
+            root.GetProperty("samples")[0]
+                .GetProperty("operationCounters")
+                .GetProperty("visitedNodeCount")
+                .GetDecimal());
         Assert.AreEqual(1, root.GetProperty("outputs").GetArrayLength());
         Assert.AreEqual("robustness-v0",
             root.GetProperty("outputs")[0].GetProperty("algorithmSemanticIdentity").GetString());
