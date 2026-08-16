@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using Backend.Insights.Contracts;
 
@@ -32,6 +33,8 @@ public sealed class IsolatedWorkerRunOptions
 {
     public const int DefaultMaximumProtocolLineBytes = 1_048_576;
     public const int DefaultMaximumStandardErrorCharacters = 8_192;
+    public const string MaximumProtocolLineBytesEnvironmentVariable =
+        "LOGICLIKELY_INSIGHTS_ANALYSIS_WORKER_MAX_PROTOCOL_LINE_BYTES";
 
     public IsolatedWorkerRunOptions(
         TimeSpan timeout,
@@ -107,7 +110,7 @@ public sealed class IsolatedWorkerRunner
 
         using var process = new Process
         {
-            StartInfo = CreateStartInfo(command),
+            StartInfo = CreateStartInfo(command, options.MaximumProtocolLineBytes),
             EnableRaisingEvents = true
         };
 
@@ -284,7 +287,9 @@ public sealed class IsolatedWorkerRunner
         }
     }
 
-    private static ProcessStartInfo CreateStartInfo(WorkerProcessCommand command)
+    private static ProcessStartInfo CreateStartInfo(
+        WorkerProcessCommand command,
+        int maximumProtocolLineBytes)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -303,6 +308,10 @@ public sealed class IsolatedWorkerRunner
         {
             startInfo.WorkingDirectory = command.WorkingDirectory;
         }
+
+        startInfo.Environment[
+            IsolatedWorkerRunOptions.MaximumProtocolLineBytesEnvironmentVariable] =
+            maximumProtocolLineBytes.ToString(CultureInfo.InvariantCulture);
 
         foreach (var argument in command.Arguments)
         {

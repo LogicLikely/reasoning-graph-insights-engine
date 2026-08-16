@@ -63,6 +63,38 @@ public class CanonicalJsonTests
     }
 
     [TestMethod]
+    public void ComputeSha256Sequence_MatchesTheCanonicalCompleteArrayDigest()
+    {
+        var values = new[]
+        {
+            new { nodeId = "b", score = 1.2500m, path = new[] { "b", "root" } },
+            new { nodeId = "a", score = -0.0m, path = new[] { "a", "root" } }
+        };
+
+        Assert.AreEqual(
+            CanonicalJson.ComputeSha256(values),
+            CanonicalJson.ComputeSha256Sequence(values, CancellationToken.None));
+
+        var jsonValues = values
+            .Select(value => JsonSerializer.SerializeToElement(value))
+            .ToArray();
+        Assert.AreEqual(
+            CanonicalJson.ComputeSha256(jsonValues),
+            CanonicalJson.ComputeSha256Sequence(jsonValues, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public void ComputeSha256Sequence_ObservesCancellationWhileEnumeratingItems()
+    {
+        using var cancellation = new CancellationTokenSource();
+
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            CanonicalJson.ComputeSha256Sequence(
+                CancelAfterFirst(cancellation),
+                cancellation.Token));
+    }
+
+    [TestMethod]
     public void Canonicalize_RejectsDuplicateObjectMemberNames()
     {
         using var document = JsonDocument.Parse("""{"same":1,"same":2}""");
@@ -96,5 +128,12 @@ public class CanonicalJsonTests
             JsonSerializer.Deserialize<ExecutionStatus>("\"succeeded\"", options));
         Assert.ThrowsException<JsonException>(() =>
             JsonSerializer.Serialize((ExecutionStatus)999, options));
+    }
+
+    private static IEnumerable<int> CancelAfterFirst(CancellationTokenSource cancellation)
+    {
+        yield return 1;
+        cancellation.Cancel();
+        yield return 2;
     }
 }

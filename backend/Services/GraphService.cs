@@ -1,4 +1,6 @@
 using Backend.Calculation;
+using Backend.Insights.Analysis;
+using Backend.Insights.Contracts;
 using Backend.Insights.Measurement;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
@@ -12,15 +14,21 @@ public class GraphService : IGraphService
     private readonly IGraphRepository _graphRepository;
     private readonly GraphLikelihoodCalculator _calculator;
     private readonly IInsightPhaseTimingCollector _phaseTimings;
+    private readonly EvidenceImpactV0Analysis _evidenceImpactAnalysis;
+    private readonly RobustnessV0Analyzer _robustnessAnalysis;
 
     public GraphService(
         IGraphRepository graphRepository,
         GraphLikelihoodCalculator graphLikelihoodCalculator,
-        IInsightPhaseTimingCollector? phaseTimings = null)
+        IInsightPhaseTimingCollector? phaseTimings = null,
+        EvidenceImpactV0Analysis? evidenceImpactAnalysis = null,
+        RobustnessV0Analyzer? robustnessAnalysis = null)
     {
         _graphRepository = graphRepository;
         _calculator = graphLikelihoodCalculator;
         _phaseTimings = phaseTimings ?? new InsightPhaseTimingCollector();
+        _evidenceImpactAnalysis = evidenceImpactAnalysis ?? new EvidenceImpactV0Analysis();
+        _robustnessAnalysis = robustnessAnalysis ?? new RobustnessV0Analyzer();
     }
 
     public async Task<IReadOnlyList<GraphSummaryDto>> GetSummariesAsync(
@@ -109,8 +117,7 @@ public class GraphService : IGraphService
             return null;
         }
 
-        Console.WriteLine("got here");
-        return await GetMinimalCounterSet(
+        return GetMinimalCounterSet(
             graph,
             targetNodeId,
             graph.Nodes.Select(node => node.Id),
@@ -130,7 +137,12 @@ public class GraphService : IGraphService
 
         var graph = ToDomainGraph(graphContext);
 
-        return await GetMinimalCounterSet(graph, targetNodeId, graph.Nodes.Select(node => node.Id), cancellationToken);
+        return await Task.FromResult(
+            GetMinimalCounterSet(
+                graph,
+                targetNodeId,
+                graph.Nodes.Select(node => node.Id),
+                cancellationToken));
     }
 
     public NodeRobustnessDto? GetLeastRobustNode(
@@ -138,20 +150,17 @@ public class GraphService : IGraphService
         CancellationToken cancellationToken = default
     )
     {
-        var robustnessValues = _calculator.GetAllNodeRobustness(graph, cancellationToken);
-        if (robustnessValues.Count == 0)
+        var result = _robustnessAnalysis.Analyze(graph, cancellationToken);
+        if (result.LeastRobust is null)
         {
             return null;
         }
 
-        var leastRobust = robustnessValues.MinBy(entry => entry.Value);
-        var node = graph.Nodes.First(node => node.Id == leastRobust.Key);
-
         return new NodeRobustnessDto
         {
-            NodeId = node.Id,
-            NodeTitle = node.Title,
-            Robustness = leastRobust.Value
+            NodeId = result.LeastRobust.NodeId,
+            NodeTitle = result.LeastRobust.Title,
+            Robustness = result.LeastRobust.RobustnessScore
         };
     }
 
@@ -159,16 +168,13 @@ public class GraphService : IGraphService
         Graph graph,
         CancellationToken cancellationToken = default)
     {
-        var nodesById = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
-
-        return _calculator.GetAllNodeRobustness(graph, cancellationToken)
-            .OrderBy(entry => entry.Value)
-            .ThenBy(entry => entry.Key, StringComparer.Ordinal)
-            .Select(entry => new NodeRobustnessDto
+        return _robustnessAnalysis.Analyze(graph, cancellationToken)
+            .Ranking
+            .Select(item => new NodeRobustnessDto
             {
-                NodeId = entry.Key,
-                NodeTitle = nodesById[entry.Key].Title,
-                Robustness = entry.Value
+                NodeId = item.NodeId,
+                NodeTitle = item.Title,
+                Robustness = item.RobustnessScore
             })
             .ToList();
     }
@@ -224,7 +230,7 @@ public class GraphService : IGraphService
         var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
         return graph is null
             ? null
-            : _calculator.GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken);
+            : GetLegacyEvidenceImpactRanking(graph, targetNodeId, cancellationToken);
     }
 
     public Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
@@ -240,7 +246,51 @@ public class GraphService : IGraphService
 
         var graph = ToDomainGraph(graphContext);
         return Task.FromResult<EvidenceImpactRankingDto?>(
-            _calculator.GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken));
+            GetLegacyEvidenceImpactRanking(graph, targetNodeId, cancellationToken));
+    }
+
+    private EvidenceImpactRankingDto GetLegacyEvidenceImpactRanking(
+        Graph graph,
+        string targetNodeId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // Preserve the legacy endpoint's exception contract for a missing target
+        // while adapting its compact DTO from the versioned rich result.
+        if (!graph.Nodes.Any(node => string.Equals(node.Id, targetNodeId, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"Target node '{targetNodeId}' does not exist in the calculation context.");
+        }
+
+        // The rich v0 contract makes positive-LR DAG validation explicit. The
+        // pre-Phase3 endpoint did not, so retain its scalar behavior for inputs
+        // outside that richer execution domain instead of narrowing the legacy
+        // route's accepted input set.
+        var richInputValidation = AlgorithmGraphContractValidation
+            .ValidateDirectedAcyclicGraph(graph, cancellationToken);
+        if (!richInputValidation.IsValid)
+        {
+            return _calculator.GetEvidenceImpactRanking(
+                graph,
+                targetNodeId,
+                cancellationToken);
+        }
+
+        var result = _evidenceImpactAnalysis.Analyze(graph, targetNodeId, cancellationToken);
+
+        static EvidenceImpactDto ToLegacyDto(EvidenceImpactV0LegacyItem item) => new()
+        {
+            NodeId = item.NodeId,
+            LogLr = item.AccumulatedPathLogLikelihoodRatio,
+            ProbabilityDifference = item.RawProbabilityDelta
+        };
+
+        return new EvidenceImpactRankingDto
+        {
+            SupportingEvidence = result.LegacySupportingEvidence.Select(ToLegacyDto).ToList(),
+            CounterEvidence = result.LegacyCounterEvidence.Select(ToLegacyDto).ToList()
+        };
     }
 
     public async Task<bool> DeleteNodeAsync(
@@ -427,8 +477,14 @@ public class GraphService : IGraphService
         string changedNodeId,
         CancellationToken cancellationToken)
     {
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
-        var recalculatedLogOdds = _calculator.RecalculateAncestors(context, changedNodeId);
+        var context = GraphCalculationContext.From(
+            graph.Nodes,
+            graph.Edges,
+            cancellationToken);
+        var recalculatedLogOdds = _calculator.RecalculateAncestors(
+            context,
+            changedNodeId,
+            cancellationToken);
 
         if (recalculatedLogOdds.Count > 0)
         {
@@ -443,8 +499,14 @@ public class GraphService : IGraphService
         IEnumerable<string> nodeIds,
         CancellationToken cancellationToken)
     {
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
-        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
+        var context = GraphCalculationContext.From(
+            graph.Nodes,
+            graph.Edges,
+            cancellationToken);
+        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(
+            context,
+            nodeIds,
+            cancellationToken);
 
         if (recalculatedLogOdds.Count > 0)
         {
@@ -454,29 +516,45 @@ public class GraphService : IGraphService
         return recalculatedLogOdds;
     }
 
-    private async Task<List<string>?> GetMinimalCounterSet(
+    private List<string>? GetMinimalCounterSet(
         Graph graph,
         string targetClaimId,
         IEnumerable<string> nodeIds,
         CancellationToken cancellationToken
     )
     {
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        cancellationToken.ThrowIfCancellationRequested();
+        var context = GraphCalculationContext.From(
+            graph.Nodes,
+            graph.Edges,
+            cancellationToken);
 
         // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
-        var registeredNodeIds = ExcludeCounterNodes(context, nodeIds);
+        var registeredNodeIds = ExcludeCounterNodes(context, nodeIds, cancellationToken);
         if (!registeredNodeIds.Contains(targetClaimId, StringComparer.Ordinal))
         {
             registeredNodeIds.Add(targetClaimId);
         }
 
-        PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetClaimId, nodeIds);
+        PriorityQueue<string, decimal> counterQueue = GetCounterQueue(
+            context,
+            targetClaimId,
+            nodeIds,
+            cancellationToken);
 
         //Dictionary mapping log odds to every node (including counters)
-        var normalLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalLogOdds = _calculator.RecalculateNodesAndAncestors(
+            context,
+            nodeIds,
+            cancellationToken);
 
         //Calculates odds without considering counters
-        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registeredNodeIds);
+        cancellationToken.ThrowIfCancellationRequested();
+        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(
+            context,
+            registeredNodeIds,
+            cancellationToken);
         List<string> countersUsed = new List<string>();
         if (!recalculatedLogOdds.TryGetValue(targetClaimId, out var targetClaimLogOdds))
         {
@@ -484,24 +562,22 @@ public class GraphService : IGraphService
         }
 
         //Walk through every counter from queue, ordered by likelihood, and include it in new odds calculation
-        Console.WriteLine($"initial log odds for target node (no counters)'{targetClaimId}': {targetClaimLogOdds}");
         while (counterQueue.Count > 0 && targetClaimLogOdds > -1)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string counterNodeId = counterQueue.Dequeue();
-            Console.WriteLine($"current counter: '{counterNodeId}': {normalLogOdds[counterNodeId]}");
             registeredNodeIds.Add(counterNodeId);
             countersUsed.Add(counterNodeId);
-            Console.WriteLine("------------------------------");
-            double? counterLikelihoodRatio = (double?)_calculator.GetSingleAccumulatedLR(context, counterNodeId, targetClaimId);
-            Console.WriteLine("------------------------------");
+            double? counterLikelihoodRatio = (double?)_calculator.GetSingleAccumulatedLR(
+                context,
+                counterNodeId,
+                targetClaimId,
+                cancellationToken);
             if (!counterLikelihoodRatio.HasValue) continue;
 
             decimal logCounterLikelihoodRatio = (decimal)Math.Log(counterLikelihoodRatio.Value);
-            Console.WriteLine($"counterLikelihood: {counterLikelihoodRatio}");
             targetClaimLogOdds += normalLogOdds[counterNodeId] + logCounterLikelihoodRatio;
         }
-
-        Console.WriteLine($"posterior log odds for target node '{targetClaimId}': {targetClaimLogOdds}");
 
         if (targetClaimLogOdds > -1)
         {
@@ -514,8 +590,10 @@ public class GraphService : IGraphService
     private static PriorityQueue<string, decimal> GetCounterQueue(
         GraphCalculationContext context,
         string targetNodeId,
-        IEnumerable<string> nodeIds)
+        IEnumerable<string> nodeIds,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!context.NodesById.ContainsKey(targetNodeId))
         {
             throw new InvalidOperationException($"Target node '{targetNodeId}' does not exist in the calculation context.");
@@ -526,6 +604,7 @@ public class GraphService : IGraphService
 
         foreach (var nodeId in nodeIds.Distinct(StringComparer.Ordinal))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!context.NodesById.TryGetValue(nodeId, out var node))
             {
                 throw new InvalidOperationException($"Node '{nodeId}' does not exist in the calculation context.");
@@ -536,7 +615,11 @@ public class GraphService : IGraphService
                 continue;
             }
 
-            var multiplier = GetAncestorImportanceMultiplier(context, nodeId, targetNodeId);
+            var multiplier = GetAncestorImportanceMultiplier(
+                context,
+                nodeId,
+                targetNodeId,
+                cancellationToken);
             if (multiplier is null)
             {
                 continue;
@@ -551,14 +634,17 @@ public class GraphService : IGraphService
     private static decimal? GetAncestorImportanceMultiplier(
         GraphCalculationContext context,
         string startNodeId,
-        string targetNodeId)
+        string targetNodeId,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var stack = new Stack<CounterTraversalState>();
         stack.Push(new CounterTraversalState(startNodeId, 1m, [startNodeId]));
 
         decimal? bestMultiplier = null;
         while (stack.Count > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var current = stack.Pop();
             if (current.NodeId == targetNodeId)
             {
@@ -575,6 +661,7 @@ public class GraphService : IGraphService
 
             foreach (var parentEdge in parentEdges)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var parentNodeId = parentEdge.ToNodeId;
                 if (!context.NodesById.ContainsKey(parentNodeId))
                 {
@@ -606,11 +693,13 @@ public class GraphService : IGraphService
 
     private static List<string> ExcludeCounterNodes(
         GraphCalculationContext context,
-        IEnumerable<string> nodeIds)
+        IEnumerable<string> nodeIds,
+        CancellationToken cancellationToken)
     {
         return nodeIds
             .Where(id =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!context.NodesById.TryGetValue(id, out var node))
                 {
                     throw new InvalidOperationException($"Node '{id}' does not exist in the calculation context.");

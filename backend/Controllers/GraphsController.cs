@@ -67,25 +67,21 @@ public class GraphsController : ControllerBase
     public async Task<IActionResult> GetMinimalCounterSet(
         string slug,
         string targetNodeId,
-        [FromBody] GraphDto? graphContext,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] GraphDto? graphContext,
         CancellationToken cancellationToken)
     {
         var counterNodeIds = graphContext is null
             ? await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, cancellationToken)
             : await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, graphContext, cancellationToken);
 
-        Console.WriteLine(
-            $"Minimal counter set for node '{targetNodeId}': " +
-            (counterNodeIds is null ? "null" : $"[{string.Join(", ", counterNodeIds)}]"));
-
         return Ok(new { counterNodeIds });
     }
-    
+
     [HttpPost("{slug}/nodes/{targetNodeId}/evidence-impact-ranking")]
     public async Task<IActionResult> GetEvidenceImpactRanking(
         string slug,
         string targetNodeId,
-        [FromBody] GraphDto? graphContext,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] GraphDto? graphContext,
         CancellationToken cancellationToken)
     {
         var ranking = graphContext is null
@@ -103,7 +99,7 @@ public class GraphsController : ControllerBase
     [HttpPost("{slug}/least-robust-node")]
     public async Task<IActionResult> GetLeastRobustNode(
         string slug,
-        [FromBody] GraphDto? graphContext,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] GraphDto? graphContext,
         CancellationToken cancellationToken)
     {
         var result = graphContext is null
@@ -116,7 +112,7 @@ public class GraphsController : ControllerBase
     [HttpPost("{slug}/node-robustness-ranking")]
     public async Task<IActionResult> GetNodeRobustnessRanking(
         string slug,
-        [FromBody] GraphDto? graphContext,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] GraphDto? graphContext,
         CancellationToken cancellationToken)
     {
         var result = graphContext is null

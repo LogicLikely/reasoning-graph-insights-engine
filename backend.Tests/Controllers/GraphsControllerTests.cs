@@ -127,6 +127,24 @@ public class GraphsControllerTests
         Assert.AreEqual(EmptyBodyBehavior.Allow, bodyAttribute.EmptyBodyBehavior);
     }
 
+    [DataTestMethod]
+    [DataRow(nameof(GraphsController.GetMinimalCounterSet))]
+    [DataRow(nameof(GraphsController.GetEvidenceImpactRanking))]
+    [DataRow(nameof(GraphsController.GetLeastRobustNode))]
+    [DataRow(nameof(GraphsController.GetNodeRobustnessRanking))]
+    public void LegacyAnalysisEndpoints_AllowAnEmptyGraphContextBody(string methodName)
+    {
+        var method = typeof(GraphsController).GetMethod(methodName);
+        Assert.IsNotNull(method);
+        var bodyAttribute = method.GetParameters()
+            .SelectMany(parameter => parameter
+                .GetCustomAttributes(typeof(FromBodyAttribute), inherit: true)
+                .Cast<FromBodyAttribute>())
+            .Single();
+
+        Assert.AreEqual(EmptyBodyBehavior.Allow, bodyAttribute.EmptyBodyBehavior);
+    }
+
     [TestMethod]
     public async Task GetBySlug_ReturnsOk_WhenGraphExists()
     {

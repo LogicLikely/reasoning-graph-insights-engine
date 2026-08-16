@@ -18,9 +18,12 @@ public sealed class AlgorithmGraphContractValidationResult
 
 internal static class AlgorithmGraphContractValidation
 {
-    public static AlgorithmGraphContractValidationResult ValidateDirectedAcyclicGraph(Graph graph)
+    public static AlgorithmGraphContractValidationResult ValidateDirectedAcyclicGraph(
+        Graph graph,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(graph);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var issues = new List<AlgorithmGraphContractIssue>();
         if (graph.Nodes is null)
@@ -43,6 +46,7 @@ internal static class AlgorithmGraphContractValidation
 
         foreach (var node in nodes)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (node is null)
             {
                 issues.Add(new(
@@ -71,6 +75,7 @@ internal static class AlgorithmGraphContractValidation
         var validStructuralEdges = new List<GraphEdge>();
         foreach (var edge in edges)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (edge is null)
             {
                 issues.Add(new(
@@ -121,7 +126,8 @@ internal static class AlgorithmGraphContractValidation
             }
         }
 
-        if (nodeIds.Count == nodes.Count && ContainsDirectedCycle(nodeIds, validStructuralEdges))
+        if (nodeIds.Count == nodes.Count &&
+            ContainsDirectedCycle(nodeIds, validStructuralEdges, cancellationToken))
         {
             issues.Add(new(
                 "directed-cycle",
@@ -133,7 +139,8 @@ internal static class AlgorithmGraphContractValidation
 
     private static bool ContainsDirectedCycle(
         IReadOnlyCollection<string> nodeIds,
-        IEnumerable<GraphEdge> edges)
+        IEnumerable<GraphEdge> edges,
+        CancellationToken cancellationToken)
     {
         var incomingCount = nodeIds.ToDictionary(nodeId => nodeId, _ => 0, StringComparer.Ordinal);
         var targetsBySource = nodeIds.ToDictionary(
@@ -143,6 +150,7 @@ internal static class AlgorithmGraphContractValidation
 
         foreach (var edge in edges)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             targetsBySource[edge.From].Add(edge.To);
             incomingCount[edge.To]++;
         }
@@ -156,12 +164,14 @@ internal static class AlgorithmGraphContractValidation
 
         while (ready.Count > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var nodeId = ready.Min!;
             ready.Remove(nodeId);
             visitedCount++;
 
             foreach (var targetId in targetsBySource[nodeId])
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 incomingCount[targetId]--;
                 if (incomingCount[targetId] == 0)
                 {

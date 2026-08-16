@@ -20,21 +20,33 @@ public sealed class GraphCalculationContext
 
     public Dictionary<string, List<GraphEdgeCalcState>> ChildEdgesByParentId { get; }
 
-    public static GraphCalculationContext From(IEnumerable<GraphNode> nodes, IEnumerable<GraphEdge> edges)
+    public static GraphCalculationContext From(
+        IEnumerable<GraphNode> nodes,
+        IEnumerable<GraphEdge> edges,
+        CancellationToken cancellationToken = default)
     {
         var nodesById = nodes.ToDictionary(
-            node => node.Id,
-            node => new GraphNodeCalcState
+            node =>
             {
-                Id = node.Id,
-                Kind = node.Kind,
-                PriorOdds = node.PriorOdds,
-                PosteriorOdds = node.PosteriorOdds
+                cancellationToken.ThrowIfCancellationRequested();
+                return node.Id;
+            },
+            node =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return new GraphNodeCalcState
+                {
+                    Id = node.Id,
+                    Kind = node.Kind,
+                    PriorOdds = node.PriorOdds,
+                    PosteriorOdds = node.PosteriorOdds
+                };
             });
 
         var edgeStates = edges
             .Select(edge =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!nodesById.ContainsKey(edge.From))
                 {
                     throw new InvalidOperationException(
@@ -56,14 +68,29 @@ public sealed class GraphCalculationContext
             })
             .ToList();
 
-        var parentEdgesByChildId = edgeStates
-            .GroupBy(edge => edge.FromNodeId)
-            .ToDictionary(group => group.Key, group => group.ToList());
-
-        var childEdgesByParentId = edgeStates
-            .GroupBy(edge => edge.ToNodeId)
-            .ToDictionary(group => group.Key, group => group.ToList());
+        var parentEdgesByChildId = new Dictionary<string, List<GraphEdgeCalcState>>();
+        var childEdgesByParentId = new Dictionary<string, List<GraphEdgeCalcState>>();
+        foreach (var edge in edgeStates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            AddEdge(parentEdgesByChildId, edge.FromNodeId, edge);
+            AddEdge(childEdgesByParentId, edge.ToNodeId, edge);
+        }
 
         return new GraphCalculationContext(nodesById, parentEdgesByChildId, childEdgesByParentId);
+    }
+
+    private static void AddEdge(
+        Dictionary<string, List<GraphEdgeCalcState>> edgesByNodeId,
+        string nodeId,
+        GraphEdgeCalcState edge)
+    {
+        if (!edgesByNodeId.TryGetValue(nodeId, out var nodeEdges))
+        {
+            nodeEdges = [];
+            edgesByNodeId[nodeId] = nodeEdges;
+        }
+
+        nodeEdges.Add(edge);
     }
 }

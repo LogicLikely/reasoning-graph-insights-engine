@@ -65,8 +65,10 @@ public static class RobustnessV0Contract
 
     public static decimal TheoreticalMinimumScore => (decimal)Math.Exp(-1d);
 
-    public static AlgorithmGraphContractValidationResult ValidateGraph(Graph graph) =>
-        AlgorithmGraphContractValidation.ValidateDirectedAcyclicGraph(graph);
+    public static AlgorithmGraphContractValidationResult ValidateGraph(
+        Graph graph,
+        CancellationToken cancellationToken = default) =>
+        AlgorithmGraphContractValidation.ValidateDirectedAcyclicGraph(graph, cancellationToken);
 
     public static bool IsRankableNode(GraphNode node)
     {

@@ -2,6 +2,7 @@ using Backend.Configuration;
 using Backend.Calculation;
 using Backend.Data;
 using Backend.Insights.Export;
+using Backend.Insights.Analysis;
 using Backend.Insights.Measurement;
 using Backend.Insights.Persistence;
 using Backend.Insights.Workers;
@@ -30,6 +31,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGraphRepository, GraphRepository>();
         services.AddScoped<IGraphService, GraphService>();
         services.AddSingleton<GraphLikelihoodCalculator>();
+        services.AddSingleton<StrongestPathV1Analysis>();
+        services.AddSingleton<EvidenceImpactV0Analysis>();
+        services.AddSingleton<CriticalCounterV1Analyzer>();
+        services.AddSingleton<RobustnessV0Analyzer>();
         services.AddSingleton<IsolatedWorkerRunner>();
 
         return services;

@@ -237,6 +237,55 @@ public class GraphServiceTests
     }
 
     [TestMethod]
+    [DoNotParallelize]
+    public async Task GetMinimalCounterSetAsync_PreservesLegacyResultWithoutConsoleOutput()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("target"),
+                Node("counter", -2m, "objection")
+            ],
+            [Edge("edge-counter", "counter", "target", "rebut", 0.1m)]);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+        var originalOut = Console.Out;
+        using var capturedOut = new StringWriter();
+
+        try
+        {
+            Console.SetOut(capturedOut);
+            var result = await CreateService(repositoryMock.Object)
+                .GetMinimalCounterSetAsync("sample-medium", "target", CancellationToken.None);
+
+            Assert.IsNotNull(result);
+            Assert.AreEqual(0, result.Count,
+                "The compatibility adapter must retain the characterized v0 baseline defect.");
+            Assert.AreEqual(string.Empty, capturedOut.ToString());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    [TestMethod]
+    public async Task GetMinimalCounterSetAsync_ObservesCancellationBeforeLegacyCalculation()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GraphWith([Node("target")], []));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsExceptionAsync<OperationCanceledException>(() =>
+            CreateService(repositoryMock.Object)
+                .GetMinimalCounterSetAsync("sample-medium", "target", cancellation.Token));
+    }
+
+    [TestMethod]
     public async Task UpdateNodeAsync_PassesUpdateThroughToRepository()
     {
         var repositoryMock = new Mock<IGraphRepository>();

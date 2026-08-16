@@ -133,50 +133,117 @@ public static class CriticalCounterV1Contract
     public static bool IsThresholdAttained(decimal resultingLogOdds, decimal thresholdLogOdds) =>
         resultingLogOdds <= thresholdLogOdds;
 
-    public static AlgorithmGraphContractValidationResult ValidateGraph(Graph graph) =>
-        AlgorithmGraphContractValidation.ValidateDirectedAcyclicGraph(graph);
+    public static AlgorithmGraphContractValidationResult ValidateGraph(
+        Graph graph,
+        CancellationToken cancellationToken = default) =>
+        AlgorithmGraphContractValidation.ValidateDirectedAcyclicGraph(graph, cancellationToken);
 
     public static IReadOnlyList<string> GetEligibleCandidateNodeIds(
         Graph graph,
-        string targetNodeId)
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
     {
-        EnsureValidGraphAndTarget(graph, targetNodeId);
+        EnsureValidGraphAndTarget(graph, targetNodeId, cancellationToken);
 
-        return Array.AsReadOnly(
-            graph.Nodes
-                .Where(node => IsCandidateKind(node.Kind))
-                .Where(node => !string.Equals(node.Id, targetNodeId, StringComparison.Ordinal))
-                .Where(node => HasDirectedStructuralPath(graph, node.Id, targetNodeId))
-                .Select(node => node.Id)
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(nodeId => nodeId, StringComparer.Ordinal)
-                .ToArray());
+        // Reachability to one target is a single reverse traversal, rather
+        // than a fresh O(V + E) search for every candidate.
+        var sourcesByTarget = graph.Nodes.ToDictionary(
+            node => node.Id,
+            _ => new List<string>(),
+            StringComparer.Ordinal);
+        foreach (var edge in graph.Edges)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            sourcesByTarget[edge.To].Add(edge.From);
+        }
+
+        var reachesTarget = new HashSet<string>(StringComparer.Ordinal) { targetNodeId };
+        var pending = new Stack<string>();
+        pending.Push(targetNodeId);
+        while (pending.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var currentNodeId = pending.Pop();
+            foreach (var sourceNodeId in sourcesByTarget[currentNodeId])
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (reachesTarget.Add(sourceNodeId))
+                {
+                    pending.Push(sourceNodeId);
+                }
+            }
+        }
+
+        var candidateNodeIds = new List<string>();
+        foreach (var node in graph.Nodes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsCandidateKind(node.Kind) &&
+                !string.Equals(node.Id, targetNodeId, StringComparison.Ordinal) &&
+                reachesTarget.Contains(node.Id))
+            {
+                candidateNodeIds.Add(node.Id);
+            }
+        }
+
+        candidateNodeIds.Sort(StringComparer.Ordinal);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Array.AsReadOnly(candidateNodeIds.ToArray());
     }
 
     public static bool IsEligibleCandidate(
         Graph graph,
         string targetNodeId,
-        string candidateNodeId)
+        string candidateNodeId,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateNodeId);
 
-        return GetEligibleCandidateNodeIds(graph, targetNodeId)
+        return GetEligibleCandidateNodeIds(graph, targetNodeId, cancellationToken)
             .Contains(candidateNodeId, StringComparer.Ordinal);
     }
 
     public static CriticalCounterActiveProjection BuildActiveProjection(
         Graph immutableInput,
         string targetNodeId,
-        IEnumerable<string> selectedCandidateNodeIds)
+        IEnumerable<string> selectedCandidateNodeIds,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(selectedCandidateNodeIds);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        var eligibleCandidateNodeIds = GetEligibleCandidateNodeIds(immutableInput, targetNodeId);
-        var eligibleCandidateSet = eligibleCandidateNodeIds.ToHashSet(StringComparer.Ordinal);
+        var eligibleCandidateNodeIds = GetEligibleCandidateNodeIds(
+            immutableInput,
+            targetNodeId,
+            cancellationToken);
+        return BuildActiveProjectionFromEligibleCandidates(
+            immutableInput,
+            targetNodeId,
+            selectedCandidateNodeIds,
+            eligibleCandidateNodeIds,
+            cancellationToken);
+    }
+
+    internal static CriticalCounterActiveProjection BuildActiveProjectionFromEligibleCandidates(
+        Graph immutableInput,
+        string targetNodeId,
+        IEnumerable<string> selectedCandidateNodeIds,
+        IEnumerable<string> eligibleCandidateNodeIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(immutableInput);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetNodeId);
+        ArgumentNullException.ThrowIfNull(selectedCandidateNodeIds);
+        ArgumentNullException.ThrowIfNull(eligibleCandidateNodeIds);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var frozenEligibleNodeIds = NormalizeNodeIdSequence(eligibleCandidateNodeIds);
+        var eligibleCandidateSet = frozenEligibleNodeIds.ToHashSet(StringComparer.Ordinal);
         var selectedNodeIds = NormalizeNodeIdSequence(selectedCandidateNodeIds);
 
         foreach (var selectedNodeId in selectedNodeIds)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!eligibleCandidateSet.Contains(selectedNodeId))
             {
                 throw new ArgumentException(
@@ -187,7 +254,11 @@ public static class CriticalCounterV1Contract
 
         var selectedNodeIdSet = selectedNodeIds.ToHashSet(StringComparer.Ordinal);
         var activeNodeIds = immutableInput.Nodes
-            .Where(node => !eligibleCandidateSet.Contains(node.Id) || selectedNodeIdSet.Contains(node.Id))
+            .Where(node =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return !eligibleCandidateSet.Contains(node.Id) || selectedNodeIdSet.Contains(node.Id);
+            })
             .Select(node => node.Id)
             .ToHashSet(StringComparer.Ordinal);
 
@@ -198,18 +269,26 @@ public static class CriticalCounterV1Contract
             Title = immutableInput.Title,
             Description = immutableInput.Description,
             Nodes = immutableInput.Nodes
-                .Where(node => activeNodeIds.Contains(node.Id))
+                .Where(node =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return activeNodeIds.Contains(node.Id);
+                })
                 .Select(CloneNode)
                 .ToList(),
             Edges = immutableInput.Edges
-                .Where(edge => activeNodeIds.Contains(edge.From) && activeNodeIds.Contains(edge.To))
+                .Where(edge =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return activeNodeIds.Contains(edge.From) && activeNodeIds.Contains(edge.To);
+                })
                 .Select(CloneEdge)
                 .ToList()
         };
 
         return new CriticalCounterActiveProjection(
             projection,
-            eligibleCandidateNodeIds,
+            frozenEligibleNodeIds,
             selectedNodeIds);
     }
 
@@ -232,54 +311,15 @@ public static class CriticalCounterV1Contract
         return Array.AsReadOnly(normalized);
     }
 
-    private static bool HasDirectedStructuralPath(Graph graph, string startNodeId, string targetNodeId)
-    {
-        if (string.Equals(startNodeId, targetNodeId, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        var targetsBySource = graph.Edges
-            .GroupBy(edge => edge.From, StringComparer.Ordinal)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(edge => edge.To).Distinct(StringComparer.Ordinal).ToArray(),
-                StringComparer.Ordinal);
-        var pending = new Stack<string>();
-        var visited = new HashSet<string>(StringComparer.Ordinal) { startNodeId };
-        pending.Push(startNodeId);
-
-        while (pending.Count > 0)
-        {
-            var currentNodeId = pending.Pop();
-            if (!targetsBySource.TryGetValue(currentNodeId, out var targetIds))
-            {
-                continue;
-            }
-
-            foreach (var nextNodeId in targetIds)
-            {
-                if (string.Equals(nextNodeId, targetNodeId, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-
-                if (visited.Add(nextNodeId))
-                {
-                    pending.Push(nextNodeId);
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static void EnsureValidGraphAndTarget(Graph graph, string targetNodeId)
+    private static void EnsureValidGraphAndTarget(
+        Graph graph,
+        string targetNodeId,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetNodeId);
 
-        var validation = ValidateGraph(graph);
+        var validation = ValidateGraph(graph, cancellationToken);
         if (!validation.IsValid)
         {
             throw new ArgumentException(

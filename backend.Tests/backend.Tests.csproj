@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\backend\backend.csproj" />
+    <ProjectReference Include="..\backend.AnalysisWorker\backend.AnalysisWorker.csproj" />
     <ProjectReference Include="..\backend.Tests.WorkerFixture\backend.Tests.WorkerFixture.csproj" />
   </ItemGroup>
 

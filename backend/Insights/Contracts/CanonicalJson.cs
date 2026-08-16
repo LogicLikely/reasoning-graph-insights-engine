@@ -50,8 +50,53 @@ public static class CanonicalJson
         return ComputeSha256(element);
     }
 
-    private static byte[] CanonicalizeToUtf8(JsonElement value)
+    /// <summary>
+    /// Hashes a logical JSON array incrementally while preserving the exact
+    /// canonical bytes produced by <see cref="ComputeSha256{T}(T, JsonSerializerOptions?)"/>.
+    /// Cancellation is observed between items and while canonicalizing nested
+    /// arrays and objects, without first materializing the complete array as a
+    /// second JSON document.
+    /// </summary>
+    public static string ComputeSha256Sequence<T>(
+        IEnumerable<T> values,
+        CancellationToken cancellationToken,
+        JsonSerializerOptions? options = null)
     {
+        ArgumentNullException.ThrowIfNull(values);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        incrementalHash.AppendData("["u8);
+        var first = true;
+        foreach (var value in values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!first)
+            {
+                incrementalHash.AppendData(","u8);
+            }
+
+            first = false;
+            var element = value is JsonElement jsonElement
+                ? jsonElement
+                : JsonSerializer.SerializeToElement(
+                    value,
+                    options ?? DefaultSerializerOptions);
+            incrementalHash.AppendData(CanonicalizeToUtf8(element, cancellationToken));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        incrementalHash.AppendData("]"u8);
+        var hash = incrementalHash.GetHashAndReset();
+        cancellationToken.ThrowIfCancellationRequested();
+        return $"sha256:{Convert.ToHexString(hash).ToLowerInvariant()}";
+    }
+
+    private static byte[] CanonicalizeToUtf8(
+        JsonElement value,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         var buffer = new ArrayBufferWriter<byte>();
         using var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
         {
@@ -60,13 +105,18 @@ public static class CanonicalJson
             SkipValidation = false
         });
 
-        WriteCanonicalValue(writer, value);
+        WriteCanonicalValue(writer, value, cancellationToken);
         writer.Flush();
+        cancellationToken.ThrowIfCancellationRequested();
         return buffer.WrittenSpan.ToArray();
     }
 
-    private static void WriteCanonicalValue(Utf8JsonWriter writer, JsonElement value)
+    private static void WriteCanonicalValue(
+        Utf8JsonWriter writer,
+        JsonElement value,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         switch (value.ValueKind)
         {
             case JsonValueKind.Object:
@@ -81,8 +131,9 @@ public static class CanonicalJson
 
                 foreach (var property in properties)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     writer.WritePropertyName(property.Name);
-                    WriteCanonicalValue(writer, property.Value);
+                    WriteCanonicalValue(writer, property.Value, cancellationToken);
                 }
 
                 writer.WriteEndObject();
@@ -92,7 +143,8 @@ public static class CanonicalJson
                 writer.WriteStartArray();
                 foreach (var item in value.EnumerateArray())
                 {
-                    WriteCanonicalValue(writer, item);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    WriteCanonicalValue(writer, item, cancellationToken);
                 }
 
                 writer.WriteEndArray();

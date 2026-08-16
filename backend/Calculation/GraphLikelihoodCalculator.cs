@@ -22,29 +22,40 @@ public sealed class GraphLikelihoodCalculator
 
     public Dictionary<string, decimal> RecalculateAncestors(
         GraphCalculationContext context,
-        string changedNodeId)
+        string changedNodeId,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!context.NodesById.ContainsKey(changedNodeId))
         {
             throw new InvalidOperationException($"Changed node '{changedNodeId}' does not exist in the calculation context.");
         }
 
-        var affectedDistances = CollectAffectedAncestorDistances(context, changedNodeId);
-        return RecalculateAffectedNodes(context, affectedDistances);
+        var affectedDistances = CollectAffectedAncestorDistances(
+            context,
+            changedNodeId,
+            cancellationToken);
+        return RecalculateAffectedNodes(context, affectedDistances, cancellationToken);
     }
 
     public Dictionary<string, decimal> RecalculateNodesAndAncestors(
         GraphCalculationContext context,
-        IEnumerable<string> nodeIds)
+        IEnumerable<string> nodeIds,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         //Sorts nodes by distance so can propogate odds up graph level by level
-        var affectedDistances = CollectAffectedNodeAndAncestorDistances(context, nodeIds);
-        return RecalculateAffectedNodes(context, affectedDistances);
+        var affectedDistances = CollectAffectedNodeAndAncestorDistances(
+            context,
+            nodeIds,
+            cancellationToken);
+        return RecalculateAffectedNodes(context, affectedDistances, cancellationToken);
     }
 
     private Dictionary<string, decimal> RecalculateAffectedNodes(
         GraphCalculationContext context,
-        Dictionary<string, int> affectedDistances)
+        Dictionary<string, int> affectedDistances,
+        CancellationToken cancellationToken)
     {
         var recalculatedValues = new Dictionary<string, decimal>();
         foreach (var nodeId in affectedDistances
@@ -52,7 +63,11 @@ public sealed class GraphLikelihoodCalculator
                      .ThenBy(affected => affected.Key, StringComparer.Ordinal)
                      .Select(affected => affected.Key))
         {
-            var posteriorOdds = CalculateNodeLogPosteriorOdds(context, nodeId);
+            cancellationToken.ThrowIfCancellationRequested();
+            var posteriorOdds = CalculateNodeLogPosteriorOdds(
+                context,
+                nodeId,
+                cancellationToken);
             context.NodesById[nodeId].PosteriorOdds = posteriorOdds;
             recalculatedValues[nodeId] = posteriorOdds;
         }
@@ -62,13 +77,15 @@ public sealed class GraphLikelihoodCalculator
 
     private static Dictionary<string, int> CollectAffectedNodeAndAncestorDistances(
         GraphCalculationContext context,
-        IEnumerable<string> nodeIds)
+        IEnumerable<string> nodeIds,
+        CancellationToken cancellationToken)
     {
         var affectedDistances = new Dictionary<string, int>();
         var stack = new Stack<AncestorTraversalState>();
 
         foreach (var nodeId in nodeIds.Distinct(StringComparer.Ordinal))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!context.NodesById.ContainsKey(nodeId))
             {
                 throw new InvalidOperationException($"Node '{nodeId}' does not exist in the calculation context.");
@@ -78,20 +95,21 @@ public sealed class GraphLikelihoodCalculator
             stack.Push(new AncestorTraversalState(nodeId, 0, [nodeId]));
         }
 
-        CollectAncestorDistances(context, stack, affectedDistances);
+        CollectAncestorDistances(context, stack, affectedDistances, cancellationToken);
 
         return affectedDistances;
     }
 
     private static Dictionary<string, int> CollectAffectedAncestorDistances(
         GraphCalculationContext context,
-        string changedNodeId)
+        string changedNodeId,
+        CancellationToken cancellationToken)
     {
         var affectedDistances = new Dictionary<string, int>();
         var stack = new Stack<AncestorTraversalState>();
         stack.Push(new AncestorTraversalState(changedNodeId, 0, [changedNodeId]));
 
-        CollectAncestorDistances(context, stack, affectedDistances);
+        CollectAncestorDistances(context, stack, affectedDistances, cancellationToken);
 
         return affectedDistances;
     }
@@ -99,10 +117,12 @@ public sealed class GraphLikelihoodCalculator
     private static void CollectAncestorDistances(
         GraphCalculationContext context,
         Stack<AncestorTraversalState> stack,
-        Dictionary<string, int> affectedDistances)
+        Dictionary<string, int> affectedDistances,
+        CancellationToken cancellationToken)
     {
         while (stack.Count > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var current = stack.Pop();
             if (!context.ParentEdgesByChildId.TryGetValue(current.NodeId, out var parentEdges))
             {
@@ -111,6 +131,7 @@ public sealed class GraphLikelihoodCalculator
 
             foreach (var parentEdge in parentEdges)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var parentNodeId = parentEdge.ToNodeId;
                 if (!context.NodesById.ContainsKey(parentNodeId))
                 {
@@ -138,19 +159,39 @@ public sealed class GraphLikelihoodCalculator
     }
 
     // Returns the minimum sum of log edge weights along a path from startNode to targetClaim.
-    public decimal? GetMinLogPath(GraphCalculationContext context, string startNodeId, string targetClaimId)
-        => GetLogPath(context, startNodeId, targetClaimId, LogPathSelection.Minimum);
+    public decimal? GetMinLogPath(
+        GraphCalculationContext context,
+        string startNodeId,
+        string targetClaimId,
+        CancellationToken cancellationToken = default)
+        => GetLogPath(
+            context,
+            startNodeId,
+            targetClaimId,
+            LogPathSelection.Minimum,
+            cancellationToken);
 
     // Returns the maximum sum of log edge weights along a path from startNode to targetClaim.
-    public decimal? GetMaxLogPath(GraphCalculationContext context, string startNodeId, string targetClaimId)
-        => GetLogPath(context, startNodeId, targetClaimId, LogPathSelection.Maximum);
+    public decimal? GetMaxLogPath(
+        GraphCalculationContext context,
+        string startNodeId,
+        string targetClaimId,
+        CancellationToken cancellationToken = default)
+        => GetLogPath(
+            context,
+            startNodeId,
+            targetClaimId,
+            LogPathSelection.Maximum,
+            cancellationToken);
 
     public decimal? GetLogPath(
         GraphCalculationContext context,
         string startNodeId,
         string targetClaimId,
-        LogPathSelection selection)
+        LogPathSelection selection,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!context.NodesById.ContainsKey(startNodeId))
         {
             throw new InvalidOperationException($"Start node '{startNodeId}' does not exist in the calculation context.");
@@ -166,7 +207,13 @@ public sealed class GraphLikelihoodCalculator
             throw new ArgumentOutOfRangeException(nameof(selection), selection, "Unknown log path selection.");
         }
 
-        return FindLogPath(context, startNodeId, targetClaimId, selection, [startNodeId]);
+        return FindLogPath(
+            context,
+            startNodeId,
+            targetClaimId,
+            selection,
+            [startNodeId],
+            cancellationToken);
     }
 
     private static decimal? FindLogPath(
@@ -174,8 +221,10 @@ public sealed class GraphLikelihoodCalculator
         string currentNodeId,
         string targetClaimId,
         LogPathSelection selection,
-        HashSet<string> path)
+        HashSet<string> path,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (currentNodeId == targetClaimId)
         {
             return 0m;
@@ -189,13 +238,20 @@ public sealed class GraphLikelihoodCalculator
         decimal? bestPath = null;
         foreach (var edge in parentEdges)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (edge.ImportanceToParent <= 0m) throw new InvalidOperationException(
                 $"Edge '{edge.Id}' has invalid likelihood ratio '{edge.ImportanceToParent}'. Likelihood ratios must be greater than zero.");
 
             if (!path.Add(edge.ToNodeId)) throw new InvalidOperationException(
                                             $"Cycle detected while calculating minimum log path at node '{edge.ToNodeId}'.");
 
-            var remainingPath = FindLogPath(context, edge.ToNodeId, targetClaimId, selection, path);
+            var remainingPath = FindLogPath(
+                context,
+                edge.ToNodeId,
+                targetClaimId,
+                selection,
+                path,
+                cancellationToken);
             path.Remove(edge.ToNodeId);
 
             if (!remainingPath.HasValue) continue;
@@ -224,10 +280,19 @@ public sealed class GraphLikelihoodCalculator
     private decimal? StrongestLogPath(
         GraphCalculationContext context,
         string startNodeId,
-        string targetClaimId)
+        string targetClaimId,
+        CancellationToken cancellationToken)
     {
-        decimal? minLog = GetMinLogPath(context, startNodeId, targetClaimId);
-        decimal? maxLog = GetMaxLogPath(context, startNodeId, targetClaimId);
+        decimal? minLog = GetMinLogPath(
+            context,
+            startNodeId,
+            targetClaimId,
+            cancellationToken);
+        decimal? maxLog = GetMaxLogPath(
+            context,
+            startNodeId,
+            targetClaimId,
+            cancellationToken);
 
         if (!minLog.HasValue) return maxLog;
         else if (!maxLog.HasValue) return minLog;
@@ -236,21 +301,40 @@ public sealed class GraphLikelihoodCalculator
     }
 
     // Returns the likelihood ratio for the path farthest from neutral (1.0).
-    public decimal? GetSingleAccumulatedLR(GraphCalculationContext context, string startNodeId, string targetClaimId)
+    public decimal? GetSingleAccumulatedLR(
+        GraphCalculationContext context,
+        string startNodeId,
+        string targetClaimId,
+        CancellationToken cancellationToken = default)
     {
-        var strongestLog = StrongestLogPath(context, startNodeId, targetClaimId);
+        var strongestLog = StrongestLogPath(
+            context,
+            startNodeId,
+            targetClaimId,
+            cancellationToken);
         return strongestLog.HasValue
             ? (decimal)Math.Exp((double)strongestLog.Value)
             : null;
     }
 
     //Returns dictionary assigning an LR value to every EVIDENCE node downsteam from a starting node
-    public Dictionary<string, decimal> GetDownstreamEvidenceLogLRs(GraphCalculationContext context, string nodeId)
+    public Dictionary<string, decimal> GetDownstreamEvidenceLogLRs(
+        GraphCalculationContext context,
+        string nodeId,
+        CancellationToken cancellationToken = default)
     {
-        Dictionary<string, decimal> unfilteredPaths = GetStrongestPaths(context, nodeId, PathDirection.Down);
+        Dictionary<string, decimal> unfilteredPaths = GetStrongestPaths(
+            context,
+            nodeId,
+            PathDirection.Down,
+            cancellationToken);
 
         return unfilteredPaths
-            .Where(path => IsEvidenceKind(context.NodesById[path.Key].Kind))
+            .Where(path =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return IsEvidenceKind(context.NodesById[path.Key].Kind);
+            })
             .ToDictionary(path => path.Key, path => path.Value);
     }
 
@@ -261,8 +345,13 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Returns list of nodes reachable from a start node when traversing either up or down the graph
-    private static List<string> GetReachableNodes(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
+    private static List<string> GetReachableNodes(
+        GraphCalculationContext context,
+        string startNodeId,
+        PathDirection pathDirection,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!context.NodesById.ContainsKey(startNodeId))
         {
             throw new InvalidOperationException($"Node '{startNodeId}' does not exist in the calculation context.");
@@ -276,6 +365,7 @@ public sealed class GraphLikelihoodCalculator
 
         while (nodesToVisit.Count > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string currentNodeId = nodesToVisit.Pop();
             if (!visitedNodeIds.Add(currentNodeId)) continue;
 
@@ -288,6 +378,7 @@ public sealed class GraphLikelihoodCalculator
 
             for (int i = connectedEdges.Count - 1; i >= 0; i--)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string neighborId = GetNeighborId(connectedEdges[i], pathDirection);
                 if (!context.NodesById.ContainsKey(neighborId))
                 {
@@ -302,9 +393,18 @@ public sealed class GraphLikelihoodCalculator
     }
 
     //Uses Bellman ford to find all strongest paths upstream or downstream from a node
-    public Dictionary<string, decimal> GetStrongestPaths(GraphCalculationContext context, string startNodeId, PathDirection pathDirection)
+    public Dictionary<string, decimal> GetStrongestPaths(
+        GraphCalculationContext context,
+        string startNodeId,
+        PathDirection pathDirection,
+        CancellationToken cancellationToken = default)
     {
-        List<string> usedNodeIds = GetReachableNodes(context, startNodeId, pathDirection);
+        cancellationToken.ThrowIfCancellationRequested();
+        List<string> usedNodeIds = GetReachableNodes(
+            context,
+            startNodeId,
+            pathDirection,
+            cancellationToken);
         int n = usedNodeIds.Count;
         Dictionary<string, List<GraphEdgeCalcState>> connectedEdgesDict = GetConnectEdgesDict(context, pathDirection);
         var minimumLogPaths = usedNodeIds.ToDictionary(id => id, _ => (decimal?)null);
@@ -315,10 +415,12 @@ public sealed class GraphLikelihoodCalculator
         // A simple path contains at most n - 1 edges.
         for (int k = 0; k < n - 1; k++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             bool changed = false;
 
             foreach (string currentNodeId in usedNodeIds)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 //Checks if currentNode is usable (is not usable if doesn't have existing k-1 hop path or has no neighbors)
                 if (!minimumLogPaths[currentNodeId].HasValue ||
                     !connectedEdgesDict.TryGetValue(currentNodeId, out List<GraphEdgeCalcState>? connectedEdges))
@@ -329,6 +431,7 @@ public sealed class GraphLikelihoodCalculator
                 //Updates k-hop path for nodes neighboring currentNode 
                 foreach (GraphEdgeCalcState edge in connectedEdges)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     string neighborId = GetNeighborId(edge, pathDirection);
                     if (!minimumLogPaths.ContainsKey(neighborId))
                     {
@@ -358,9 +461,13 @@ public sealed class GraphLikelihoodCalculator
 
         return usedNodeIds.ToDictionary(
             id => id,
-            id => Math.Abs(minimumLogPaths[id]!.Value) > Math.Abs(maximumLogPaths[id]!.Value)
-                ? minimumLogPaths[id]!.Value
-                : maximumLogPaths[id]!.Value);
+            id =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Math.Abs(minimumLogPaths[id]!.Value) > Math.Abs(maximumLogPaths[id]!.Value)
+                    ? minimumLogPaths[id]!.Value
+                    : maximumLogPaths[id]!.Value;
+            });
     }
 
     // Returns supporting and counter evidence ranked by their impact (difference in posterior odds when removed vs. present).
@@ -371,7 +478,10 @@ public sealed class GraphLikelihoodCalculator
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        var context = GraphCalculationContext.From(
+            graph.Nodes,
+            graph.Edges,
+            cancellationToken);
 
         if (!context.NodesById.ContainsKey(targetClaimId))
         {
@@ -379,12 +489,19 @@ public sealed class GraphLikelihoodCalculator
                 $"Target node '{targetClaimId}' does not exist in the calculation context.");
         }
 
-        var evidenceLogLrs = GetDownstreamEvidenceLogLRs(context, targetClaimId);
-        var posteriorLogOddsWithAllEvidence = CalculateNodeLogPosteriorOdds(context, targetClaimId);
+        var evidenceLogLrs = GetDownstreamEvidenceLogLRs(
+            context,
+            targetClaimId,
+            cancellationToken);
+        var posteriorLogOddsWithAllEvidence = CalculateNodeLogPosteriorOdds(
+            context,
+            targetClaimId,
+            cancellationToken);
         var probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOddsWithAllEvidence);
 
         EvidenceImpactDto ToImpact(KeyValuePair<string, decimal> entry)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var posteriorLogOddsWithoutEvidence = posteriorLogOddsWithAllEvidence - entry.Value;
             var probabilityWithoutEvidence = LogOddsToProbability(posteriorLogOddsWithoutEvidence);
 
@@ -399,13 +516,21 @@ public sealed class GraphLikelihoodCalculator
         return new EvidenceImpactRankingDto
         {
             SupportingEvidence = evidenceLogLrs
-                .Where(entry => entry.Value > 0m)
+                .Where(entry =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return entry.Value > 0m;
+                })
                 .Select(ToImpact)
                 .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
                 .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
                 .ToList(),
             CounterEvidence = evidenceLogLrs
-                .Where(entry => entry.Value < 0m)
+                .Where(entry =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return entry.Value < 0m;
+                })
                 .Select(ToImpact)
                 .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
                 .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
@@ -434,7 +559,10 @@ public sealed class GraphLikelihoodCalculator
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        var context = GraphCalculationContext.From(
+            graph.Nodes,
+            graph.Edges,
+            cancellationToken);
         var pathExtremesByNodeId = new Dictionary<string, LogPathExtremes>();
         var nodesBeingCalculated = new HashSet<string>();
         var robustnessValues = new Dictionary<string, decimal>(context.NodesById.Count);
@@ -565,8 +693,12 @@ public sealed class GraphLikelihoodCalculator
         else return edge.FromNodeId;
     }
 
-    public decimal CalculateNodeLogPosteriorOdds(GraphCalculationContext context, string nodeId)
+    public decimal CalculateNodeLogPosteriorOdds(
+        GraphCalculationContext context,
+        string nodeId,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!context.NodesById.ContainsKey(nodeId))
         {
             throw new InvalidOperationException($"Node '{nodeId}' does not exist in the calculation context.");
@@ -578,9 +710,17 @@ public sealed class GraphLikelihoodCalculator
         }
 
         decimal priorOdds = context.NodesById[nodeId].PriorOdds;
-        Dictionary<string, decimal> evidenceLRs = GetDownstreamEvidenceLogLRs(context, nodeId);
+        Dictionary<string, decimal> evidenceLRs = GetDownstreamEvidenceLogLRs(
+            context,
+            nodeId,
+            cancellationToken);
 
-        var logPosteriorOdds = priorOdds + evidenceLRs.Values.Sum();
+        decimal logPosteriorOdds = priorOdds;
+        foreach (var evidenceLogLikelihoodRatio in evidenceLRs.Values)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            logPosteriorOdds += evidenceLogLikelihoodRatio;
+        }
 
         return ClampLogOdds(logPosteriorOdds);
     }
