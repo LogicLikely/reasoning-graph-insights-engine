@@ -63,6 +63,45 @@ public class RunExportArtifactContractTests
     }
 
     [TestMethod]
+    public void SchemaAndExample_OmitDroppedGraphMapAdmissionFields()
+    {
+        using var schema = JsonDocument.Parse(
+            File.ReadAllText(ArtifactPath("run-export-v1.schema.json")));
+        using var example = JsonDocument.Parse(
+            File.ReadAllText(ArtifactPath("run-export-v1.example.json")));
+
+        var definitions = schema.RootElement.GetProperty("$defs");
+        Assert.IsFalse(definitions.TryGetProperty("visualizationAdmission", out _));
+
+        foreach (var definitionName in new[] { "runSample", "compactRunOutput" })
+        {
+            var definition = definitions.GetProperty(definitionName);
+            var required = definition.GetProperty("required")
+                .EnumerateArray()
+                .Select(value => value.GetString())
+                .ToArray();
+            CollectionAssert.DoesNotContain(required, "visualizationAdmission");
+            CollectionAssert.DoesNotContain(required, "warnings");
+            Assert.IsFalse(definition.GetProperty("properties")
+                .TryGetProperty("visualizationAdmission", out _));
+            Assert.IsFalse(definition.GetProperty("properties")
+                .TryGetProperty("warnings", out _));
+        }
+
+        foreach (var sample in example.RootElement.GetProperty("samples").EnumerateArray())
+        {
+            Assert.IsFalse(sample.TryGetProperty("visualizationAdmission", out _));
+            Assert.IsFalse(sample.TryGetProperty("warnings", out _));
+        }
+
+        foreach (var output in example.RootElement.GetProperty("outputs").EnumerateArray())
+        {
+            Assert.IsFalse(output.TryGetProperty("visualizationAdmission", out _));
+            Assert.IsFalse(output.TryGetProperty("warnings", out _));
+        }
+    }
+
+    [TestMethod]
     public void Example_DeserializesIntoTypedContractWithAuditedFields()
     {
         var json = File.ReadAllText(ArtifactPath("run-export-v1.example.json"));
@@ -85,8 +124,6 @@ public class RunExportArtifactContractTests
         Assert.IsTrue(export.Outputs.Count > 0);
         Assert.IsFalse(string.IsNullOrWhiteSpace(export.Outputs[0].AlgorithmSemanticIdentity));
         Assert.AreEqual(ExecutionStatus.Succeeded, export.Outputs[0].Execution.Status);
-        Assert.AreEqual(VisualizationAdmission.Allowed, export.Outputs[0].VisualizationAdmission);
-        Assert.AreEqual(0, export.Outputs[0].Warnings.Count);
         Assert.AreEqual(export.Outputs[0].Items.Count, export.Outputs[0].OrderedPaths.Count);
         Assert.IsTrue(export.Outputs[0].Items.All(item =>
             item.TryGetProperty("nodeIds", out _) && item.TryGetProperty("edgeIds", out _)));

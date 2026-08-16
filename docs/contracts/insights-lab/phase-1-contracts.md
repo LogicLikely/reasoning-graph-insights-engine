@@ -1,6 +1,6 @@
 # Insights Lab Phase 1 contracts
 
-**Contract status:** Frozen for Phase 1
+**Contract status:** Frozen for Phase 1; reconciled by Phase 3.5
 
 **Contract family:** `insights-lab-v1`
 
@@ -8,10 +8,9 @@
 versioned run export, and isolated-worker supervision
 
 This record implements Phase 1 of the Insights Lab plan. It preserves the
-Phase 0 operation, algorithm, result, canonical JSON, compatibility, and
-GraphMap contracts. It does not implement GraphMap admission, replacement
-analysis algorithms, benchmark runners, Lab routes, calibration, or an
-authoritative baseline; those remain Phases 2 through 6.
+Phase 0 operation, algorithm, result, canonical JSON, and compatibility
+contracts. It does not implement replacement analysis algorithms, benchmark
+runners, Lab routes, calibration, or an authoritative baseline.
 
 ## 1. Correlation
 
@@ -44,7 +43,7 @@ The registry order is the canonical export order for otherwise equal samples.
 | `backend-service-api` | `dto-mapping`, `validation`, `calculation-context-construction`, `algorithm`, `algorithm.<subphase>`, `ranking`, `result-shaping`, `serialization` |
 | `transport` | `response-bytes`, `time-to-first-byte`, `full-transfer` |
 | `browser-data` | `axios-receipt-parse`, `domain-mapping`, `graph-map-adapter`, `search-index-construction` |
-| `graph-map` | `preflight`, `node-edge-materialization`, `dagre-layout`, `react-commit`, `deferred-edge-commit`, `viewport-fit`, `on-view-lifecycle`, `on-view-ready` |
+| `graph-map` | `node-edge-materialization`, `dagre-layout`, `react-commit`, `deferred-edge-commit`, `viewport-fit` |
 | `end-to-end` | `action-to-stable-result-and-view` |
 
 Algorithm subphases use lowercase dot-separated kebab-case tokens. Phase
@@ -168,8 +167,6 @@ deliberately deferred under the original plan:
 - Any support/counter/path-kind or posterior-recalculation change to robustness
   requires a new semantic identity.
 - The `auto` critical-counter cutoff is calibrated in Phase 6.
-- Any GraphMap edge-density warning or block threshold is evidence-driven in
-  Phase 6; Phase 1 does not guess one.
 - The accepted 100K corpus fingerprint and the first authoritative baseline
   remain Phase 6 gates.
 - Actual browser-observed TTFB/full-transfer boundaries and runner overhead are

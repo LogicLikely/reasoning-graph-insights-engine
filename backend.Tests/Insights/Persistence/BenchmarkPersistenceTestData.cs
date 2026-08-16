@@ -88,8 +88,6 @@ internal static class BenchmarkPersistenceTestData
             new SampleTransportMeasurements(null, null, null, null),
             new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
             execution ?? new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
-            [],
             Units);
     }
 
@@ -115,14 +113,12 @@ internal static class BenchmarkPersistenceTestData
             new GraphTargetIdentifiers("sample-medium", "1", "R1", []),
             parameters,
             execution ?? new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
             JsonSerializer.SerializeToElement(new { nodeCount = 18, edgeCount = 17 }),
             JsonSerializer.SerializeToElement(new { payloadBytes = 4_096 }),
             1,
             [item],
             CanonicalJson.ComputeSha256(new[] { item }),
             null,
-            [],
             []);
     }
 

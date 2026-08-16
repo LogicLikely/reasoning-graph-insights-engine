@@ -147,8 +147,6 @@
         "status": "succeeded",
         "failure": null
       },
-      "visualizationAdmission": "allowed",
-      "warnings": [],
       "measurementUnits": {
         "wallClockDuration": "ms",
         "cpuTime": "ms",
@@ -187,11 +185,8 @@
         "status": "succeeded",
         "failure": null
       },
-      "visualizationAdmission": "allowed",
       "summary": {
-        "pathCount": 3,
-        "projectionRequiredNodeCount": 3,
-        "projectionBlockAboveNodes": 1200
+        "pathCount": 3
       },
       "distribution": {
         "metric": "accumulated-log-lr",
@@ -270,13 +265,12 @@
           "edgeIds": [],
           "accumulatedScore": 0
         }
-      ],
-      "warnings": []
+      ]
     }
   ],
   "digests": {
     "manifestDigest": "sha256:ac284ac6f6177301f56481a03838d8edce714950f7c13f6d325c53824a05f71e",
-    "samplesDigest": "sha256:df48cd436f573daedfcf8bfe17a46e7d6aac64b022940f0c78e5e03800cc520d",
-    "outputsDigest": "sha256:87ea1950be3d12b261366fb83c6005ada1629578758f19c71ac6ed4f90bd8cb5"
+    "samplesDigest": "sha256:f170cb1e2f567b06d65fb7eb2cf71128d3b089f2caffeebef97052aa79ea47cb",
+    "outputsDigest": "sha256:9426e46c29d838d9458b5ba2d862487d6739cde998d94832d5597b00b5e2af95"
   }
 }

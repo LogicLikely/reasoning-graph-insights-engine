@@ -248,15 +248,6 @@ internal static class Program
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var warnings = output.Warnings.Contains(
-            AnalysisWorkerDispatcher.RetainedItemsReducedWarning,
-            StringComparer.Ordinal)
-            ? output.Warnings.ToArray()
-            : output.Warnings
-                .Append(AnalysisWorkerDispatcher.RetainedItemsReducedWarning)
-                .ToArray();
-
-        cancellationToken.ThrowIfCancellationRequested();
         return new CompactRunOutput(
             output.RunId,
             output.SampleId,
@@ -267,15 +258,13 @@ internal static class Program
             output.Identifiers,
             output.CanonicalParameters,
             output.Execution,
-            output.VisualizationAdmission,
             output.Summary.Clone(),
             output.Distribution.Clone(),
             output.TotalResultCardinality,
             retainedItems,
             output.ResultDigest,
             output.FullResultArtifactReference,
-            retainedPaths,
-            warnings);
+            retainedPaths);
     }
 
     private static int ResolveMaximumProtocolLineBytes()

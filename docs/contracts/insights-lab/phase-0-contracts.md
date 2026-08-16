@@ -1,6 +1,6 @@
 # Insights Lab Phase 0 contracts
 
-**Contract status:** Frozen for Phase 0
+**Contract status:** Frozen for Phase 0; reconciled by Phase 3.5
 
 **Contract family:** `insights-lab-v1`
 
@@ -20,11 +20,11 @@ display or serialization order.
 |---:|---|---|---|---|
 | 1 | `graph.catalog` | `graph-catalog-v1` | Benchmark diagnostic | Timing and count summary |
 | 2 | `graph.fetch` | `graph-fetch-v1` | Benchmark diagnostic | Graph and payload summary |
-| 3 | `graph.search` | `graph-search-v1` | Benchmark diagnostic | Counts, admission status, optional safe projection |
-| 4 | `path.strongest` | `strongest-path-v1` | Analysis and benchmark | Summary, ranked ordered paths, GraphMap focus |
+| 3 | `graph.search` | `graph-search-v1` | Benchmark diagnostic | Match/union counts and optional projection |
+| 4 | `path.strongest` | `strongest-path-v1` | Analysis and benchmark | Summary, ranked ordered paths, optional graph context |
 | 5 | `path.single-pair` | `single-pair-path-v0` | Benchmark diagnostic | Diagnostic result and timing |
 | 6 | `evidence.impact-ranking` | `evidence-impact-v0` | Analysis and benchmark | Summary, distribution, deterministic top 100 |
-| 7 | `counter.critical-set` | `critical-counter-v1` | Analysis and benchmark | Selected counters, quality, GraphMap focus |
+| 7 | `counter.critical-set` | `critical-counter-v1` | Analysis and benchmark | Selected counters, quality, optional graph context |
 | 8 | `node.robustness` | `robustness-v0` | Analysis and benchmark | Least-robust summary, distribution, deterministic top 100 |
 | 9 | `likelihood.recalculate` | `likelihood-recalculate-v0` | Benchmark diagnostic | Before/after likelihood summary |
 
@@ -203,14 +203,11 @@ authoritative performance baseline.
 ### Status and failure
 
 Execution status is exactly one of `queued`, `running`, `succeeded`, `failed`,
-`timed-out`, `cancelled`, `crashed`, or `skipped`. Visualization admission is
-independent and is exactly one of `not-requested`, `allowed`, `warned`, or
-`blocked`.
+`timed-out`, `cancelled`, `crashed`, or `skipped`.
 
 Validation failure is represented by execution status `failed` and failure kind
 `validation`. Other failure kinds distinguish execution failure, timeout,
-cancellation, crash, and skip. A successful algorithm result may have a blocked
-visualization; that combination must serialize without coercion.
+cancellation, crash, and skip.
 
 ### Retention and paths
 
@@ -221,7 +218,7 @@ visualization; that combination must serialize without coercion.
 - Summary and distribution data are compact. A full-result artifact reference
   is optional.
 - An ordered path stores node IDs and edge IDs in traversal order plus its
-  accumulated score. No path is silently truncated to satisfy GraphMap.
+  accumulated score. Ordered paths are not silently truncated.
 
 ### Canonical JSON and digests
 
@@ -274,65 +271,12 @@ No Phase 0 output is an authoritative performance baseline. Promotion still
 requires the accepted 100K corpus fingerprint, `ll-arm64-mac-primary`, and the
 later authoritative profile.
 
-## 6. GraphMap render-budget contract
-
-Defaults are `warnAtNodes = 1000` (inclusive) and `blockAboveNodes = 1200`
-(`1200` remains admitted). Settings must be finite positive integers and
-`warnAtNodes <= blockAboveNodes`. Any invalid consumer configuration resets the
-whole pair to the safe defaults and emits one structured configuration error;
-invalid values never disable the safeguard.
-
-The candidate total is the count of distinct canonical graph nodes plus
-synthetic materialized nodes such as “More” controls.
-
-| Candidate materialized nodes | Decision |
-|---:|---|
-| 0–999 | `allow` |
-| 1,000–1,200 | `warn` |
-| 1,201 or more | `block` |
-
-The source is one of `initial`, `graph-update`, `node-toggle`, `show-more`,
-`expand-all`, `search`, or `controlled-view`. A decision event records source,
-decision, current/candidate graph nodes, candidate synthetic and total nodes,
-available current/candidate edge counts, exact-versus-lower-bound count state,
-thresholds, preflight duration, and block reason. It fires once per admission
-decision, not per React render.
-
-A lower-bound count is sufficient only to block: preflight stops once at least
-1,201 materialized nodes is established. Admitted counts are exact. Edges and
-density are computed only after node admission. There is no edge warning or
-block threshold in v1.
-
-The later Phase 2 preflight must be iterative, cycle-safe, shared-DAG-aware, and
-atomic, and it must run for every source above before presenters, Dagre,
-ReactFlow state changes, or viewport fitting. This Phase 0 slice defines and
-tests the classifier and public event shapes but does not integrate them.
-
-- A same-graph block preserves expansion, selection, canvas nodes, and viewport.
-- A blocked replacement clears the old graph identity and attempts the new
-  graph's canonical collapsed projection through its own admission decision;
-  if that cannot be admitted, the canvas shows an explicit empty blocked state.
-- Blocked search retains query, match count, and required-node count. Copy says
-  “required to visualize,” and Fit View is disabled.
-- Blocked controlled results retain complete textual/tabular results and
-  ordered paths. They are never silently truncated.
-- Node-reducing actions remain available and need no admission callback when
-  they only reduce the current materialized set.
-- Warnings are persistent, non-modal, and accessible. There is no end-user
-  bypass.
-
-Lifecycle phases are search/preflight completed, layout completed, React nodes
-committed, deferred edges committed, viewport fitting completed, and view
-warned or blocked. `onViewReady` is terminal only for an admitted stable view,
-including a warned view. A rejected projection never emits `onViewReady`.
-
-## 7. Deferred questions and gates
+## 6. Deferred questions and gates
 
 The following are deliberately unresolved by Phase 0 and must not be guessed
 or used to widen this implementation:
 
 - the calibrated `auto` candidate cutoff (Phase 6);
-- any GraphMap edge-density warning or block threshold (Phase 6);
 - the accepted 100K dataset/corpus fingerprint and first authoritative baseline
   (Phase 6);
 - whether a future robustness version should restrict ranked kinds, endpoints,

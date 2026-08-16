@@ -225,8 +225,6 @@ public sealed partial class RunExportValidator
             ValidateTransport(sample.Transport, $"{path}.transport", issues);
             ValidateResources(sample.Resources, $"{path}.resources", issues);
             ValidateExecution(sample.Execution, $"{path}.execution", issues);
-            ValidateAdmission(sample.VisualizationAdmission, $"{path}.visualizationAdmission", issues);
-            ValidateStringArray(sample.Warnings, $"{path}.warnings", allowEmpty: true, issues);
             ValidateUnits(sample.MeasurementUnits, $"{path}.measurementUnits", issues);
             if (sample.MeasurementUnits is not null &&
                 export.Manifest.MeasurementUnits is not null &&
@@ -275,7 +273,6 @@ public sealed partial class RunExportValidator
 
             ValidateSemanticIdentity(output.AlgorithmSemanticIdentity, $"{path}.algorithmSemanticIdentity", issues);
             ValidateExecution(output.Execution, $"{path}.execution", issues);
-            ValidateAdmission(output.VisualizationAdmission, $"{path}.visualizationAdmission", issues);
 
             if (output.Strategy is null)
             {
@@ -359,7 +356,6 @@ public sealed partial class RunExportValidator
             }
 
             ValidateOrderedPaths(output.OrderedPaths, $"{path}.orderedPaths", issues);
-            ValidateStringArray(output.Warnings, $"{path}.warnings", allowEmpty: true, issues);
         }
     }
 
@@ -705,14 +701,6 @@ public sealed partial class RunExportValidator
             Required(value?.Code, $"{path}.failure.validationFailures[{index}].code", issues);
             Required(value?.Message, $"{path}.failure.validationFailures[{index}].message", issues);
         }
-    }
-
-    private static void ValidateAdmission(
-        VisualizationAdmission admission,
-        string path,
-        ICollection<RunExportValidationIssue> issues)
-    {
-        if (!Enum.IsDefined(admission)) Add(issues, path, "enum", "Unknown visualization admission.");
     }
 
     private static void ValidateIdentifiers(

@@ -133,7 +133,6 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             wall_clock_duration,
             status,
             failure_kind,
-            visualization_admission,
             sample_json
         )
         SELECT
@@ -147,7 +146,6 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             @WallClockDuration,
             @Status,
             @FailureKind,
-            @VisualizationAdmission,
             @SampleJson::jsonb
         FROM benchmark.runs AS run
         WHERE run.run_id = @RunId
@@ -165,7 +163,6 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             algorithm_semantic_identity,
             status,
             failure_kind,
-            visualization_admission,
             total_result_cardinality,
             result_digest,
             output_json
@@ -178,7 +175,6 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             @AlgorithmSemanticIdentity,
             @Status,
             @FailureKind,
-            @VisualizationAdmission,
             @TotalResultCardinality,
             @ResultDigest,
             @OutputJson::jsonb
@@ -320,7 +316,6 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
                 sample.WallClockDuration,
                 Status = EnumToken(sample.Execution.Status),
                 FailureKind = NullableEnumToken(sample.Execution.Failure?.Kind),
-                VisualizationAdmission = EnumToken(sample.VisualizationAdmission),
                 MeasurementUnitsJson = SerializeJson(sample.MeasurementUnits),
                 SampleJson = SerializeJson(sample)
             },
@@ -353,7 +348,6 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
                 output.AlgorithmSemanticIdentity,
                 Status = EnumToken(output.Execution.Status),
                 FailureKind = NullableEnumToken(output.Execution.Failure?.Kind),
-                VisualizationAdmission = EnumToken(output.VisualizationAdmission),
                 output.TotalResultCardinality,
                 output.ResultDigest,
                 GraphSlug = output.Identifiers.GraphSlug,

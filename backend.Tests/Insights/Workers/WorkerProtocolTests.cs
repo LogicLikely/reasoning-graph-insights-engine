@@ -158,8 +158,6 @@ public class WorkerProtocolTests
             new SampleTransportMeasurements(null, null, null, null),
             new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
-            Array.Empty<string>(),
             units);
     }
 }

@@ -156,6 +156,76 @@ public class BenchmarkResetPreservationPostgreSqlTests
         }
     }
 
+    [TestMethod]
+    public async Task Phase35SchemaReconciliation_PreservesRowsAndUnrelatedOutputData()
+    {
+        var connectionString = RequireDisposablePostgreSql();
+        await EnsurePostgreSqlIsAvailable(connectionString);
+
+        var repositoryRoot = BenchmarkSchemaSqlTests.FindRepositoryRoot();
+        var backendRoot = Path.Combine(repositoryRoot, "backend");
+        var options = Options.Create(new DatabaseOptions
+        {
+            ConnectionString = connectionString
+        });
+        var connectionFactory = new DbConnectionFactory(options);
+        var initializer = new BenchmarkSchemaInitializer(
+            connectionFactory,
+            CreateHostEnvironment(backendRoot));
+        var benchmarkRepository = new BenchmarkRunRepository(connectionFactory);
+        var intent = ExplicitBenchmarkRunIntent.ForRun(BenchmarkPersistenceTestData.RunId);
+
+        await initializer.InitializeAsync(CancellationToken.None);
+        await DeleteFixtureRun(connectionString);
+
+        try
+        {
+            await benchmarkRepository.CreateRunAsync(
+                intent,
+                BenchmarkPersistenceTestData.Manifest(),
+                CancellationToken.None);
+            await benchmarkRepository.AppendSampleAsync(
+                intent,
+                BenchmarkPersistenceTestData.Sample(),
+                CancellationToken.None);
+            await benchmarkRepository.AppendOutputAsync(
+                intent,
+                BenchmarkPersistenceTestData.Output(),
+                CancellationToken.None);
+
+            var before = await benchmarkRepository.GetSnapshotAsync(
+                BenchmarkPersistenceTestData.RunId,
+                CancellationToken.None);
+            Assert.IsNotNull(before);
+            var manifestDigest = CanonicalJson.ComputeSha256(before.Manifest);
+            var sampleDigest = CanonicalJson.ComputeSha256(before.Samples);
+            var resultDigest = before.Outputs.Single().ResultDigest;
+            var itemsDigest = CanonicalJson.ComputeSha256(before.Outputs.Single().Items);
+
+            await SimulatePrePhase35Store(connectionString);
+            await initializer.InitializeAsync(CancellationToken.None);
+
+            var after = await benchmarkRepository.GetSnapshotAsync(
+                BenchmarkPersistenceTestData.RunId,
+                CancellationToken.None);
+            Assert.IsNotNull(after);
+            Assert.AreEqual(manifestDigest, CanonicalJson.ComputeSha256(after.Manifest));
+            Assert.AreEqual(sampleDigest, CanonicalJson.ComputeSha256(after.Samples));
+            Assert.AreEqual(1, after.Outputs.Count);
+            Assert.AreEqual(resultDigest, after.Outputs[0].ResultDigest);
+            Assert.AreEqual(itemsDigest, CanonicalJson.ComputeSha256(after.Outputs[0].Items));
+            Assert.AreEqual(
+                "kept",
+                after.Outputs[0].Summary.GetProperty("phase35Preserved").GetString());
+            Assert.AreEqual(0, await CountRetiredColumns(connectionString));
+            Assert.AreEqual(0, await CountRetiredJsonMembers(connectionString));
+        }
+        finally
+        {
+            await DeleteFixtureRun(connectionString);
+        }
+    }
+
     private static string RequireDisposablePostgreSql()
     {
         var connectionString = Environment.GetEnvironmentVariable(
@@ -219,6 +289,99 @@ public class BenchmarkResetPreservationPostgreSqlTests
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
             "SELECT count(*) FROM public.graphs;",
+            connection);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task SimulatePrePhase35Store(string connectionString)
+    {
+        const string sql = """
+            ALTER TABLE benchmark.samples
+                DROP CONSTRAINT ck_benchmark_samples_payload_identity;
+            ALTER TABLE benchmark.outputs
+                DROP CONSTRAINT ck_benchmark_outputs_payload_identity;
+
+            ALTER TABLE benchmark.samples
+                ADD COLUMN visualization_admission text NOT NULL DEFAULT 'not-requested';
+            ALTER TABLE benchmark.outputs
+                ADD COLUMN visualization_admission text NOT NULL DEFAULT 'allowed';
+
+            UPDATE benchmark.samples
+            SET sample_json = jsonb_set(
+                jsonb_set(
+                    sample_json,
+                    '{visualizationAdmission}',
+                    '"not-requested"'::jsonb,
+                    true
+                ),
+                '{warnings}',
+                '["legacy sample notice"]'::jsonb,
+                true
+            );
+
+            UPDATE benchmark.outputs
+            SET output_json = jsonb_set(
+                jsonb_set(
+                    jsonb_set(
+                        output_json,
+                        '{visualizationAdmission}',
+                        '"allowed"'::jsonb,
+                        true
+                    ),
+                    '{warnings}',
+                    '["legacy output notice"]'::jsonb,
+                    true
+                ),
+                '{summary,phase35Preserved}',
+                '"kept"'::jsonb,
+                true
+            );
+
+            ALTER TABLE benchmark.samples
+                ADD CONSTRAINT ck_benchmark_samples_payload_identity CHECK (
+                    sample_json->>'visualizationAdmission' = visualization_admission
+                );
+            ALTER TABLE benchmark.outputs
+                ADD CONSTRAINT ck_benchmark_outputs_payload_identity CHECK (
+                    output_json->>'visualizationAdmission' = visualization_admission
+                );
+            """;
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<int> CountRetiredColumns(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT count(*)
+            FROM information_schema.columns
+            WHERE table_schema = 'benchmark'
+              AND table_name IN ('samples', 'outputs')
+              AND column_name = 'visualization_admission';
+            """,
+            connection);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<int> CountRetiredJsonMembers(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT
+                (SELECT count(*) FROM benchmark.samples
+                 WHERE sample_json ? 'visualizationAdmission' OR sample_json ? 'warnings')
+                +
+                (SELECT count(*) FROM benchmark.outputs
+                 WHERE output_json ? 'visualizationAdmission' OR output_json ? 'warnings');
+            """,
             connection);
         return Convert.ToInt32(await command.ExecuteScalarAsync());
     }

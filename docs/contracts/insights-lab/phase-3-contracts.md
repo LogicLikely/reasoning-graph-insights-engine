@@ -1,6 +1,6 @@
 # Insights Lab Phase 3 contracts
 
-**Contract status:** Frozen for Phase 3
+**Contract status:** Frozen for Phase 3; reconciled by Phase 3.5
 
 **Contract family:** `insights-lab-v1`
 
@@ -9,9 +9,8 @@ cancellation/isolation, and compatibility adapters for the pre-Lab graph API
 
 This record implements Phase 3 of the Insights Lab plan. It preserves the
 Phase 0 semantic identities and canonical-result rules and consumes the Phase 1
-worker protocol. It does not implement GraphMap admission, benchmark suites,
-the performance CLI or queue, Lab routes, calibration, or authoritative
-baselines. Those remain in Phase 2 or Phases 4 through 6.
+worker protocol. It does not modify GraphMap or implement benchmark suites, the
+performance CLI or queue, Lab routes, calibration, or authoritative baselines.
 
 ## 1. Common result materialization
 
@@ -22,7 +21,7 @@ before applying retention:
   places with midpoint-to-even rounding.
 - The result digest is SHA-256 over the canonical JSON representation of the
   complete ordered item array. Operation identity, correlation IDs, timing,
-  resource data, and visualization state are not digest material.
+  resource data, and presentation state are not digest material.
 - At most the first 100 items are retained in a compact output. Total result
   cardinality describes the complete logical array.
 - Worker transport retention begins from that deterministic top-100 prefix. If
@@ -36,8 +35,7 @@ before applying retention:
   paths remain aligned with retained items; paths belonging only to omitted
   items are omitted.
 - Byte-bounded retention does not change total result cardinality or the digest
-  of the complete logical item array. A reduced prefix appends the exact stable
-  warning token `retained-items-reduced-to-fit-worker-protocol-line`.
+  of the complete logical item array.
 - An ordered path contains one more node ID than edge IDs, is never silently
   truncated, and records its accumulated log likelihood ratio.
 - Summary and distribution values are deterministic projections, but the item
@@ -261,5 +259,4 @@ Phase 5, or Phase 6 work:
   recomputation, formula change, or iterative implementation that changes the
   robustness digest requires a new semantic version.
 - Deep-chain robustness equivalence, authoritative cutoff calibration, corpus
-  fingerprint acceptance, edge-budget calibration, and baseline promotion
-  remain Phase 6 checkpoints.
+  fingerprint acceptance, and baseline promotion remain Phase 6 checkpoints.

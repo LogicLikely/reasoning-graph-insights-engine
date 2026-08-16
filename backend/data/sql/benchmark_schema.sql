@@ -132,9 +132,6 @@ CREATE TABLE IF NOT EXISTS benchmark.samples (
             'skip'
         )
     ),
-    visualization_admission text NOT NULL CHECK (
-        visualization_admission IN ('not-requested', 'allowed', 'warned', 'blocked')
-    ),
     sample_json jsonb NOT NULL CHECK (jsonb_typeof(sample_json) = 'object'),
     inserted_at timestamp with time zone NOT NULL DEFAULT now(),
     CONSTRAINT fk_benchmark_samples_run
@@ -146,19 +143,6 @@ CREATE TABLE IF NOT EXISTS benchmark.samples (
         OR (status = 'cancelled' AND failure_kind = 'cancellation')
         OR (status = 'crashed' AND failure_kind = 'crash')
         OR (status = 'skipped' AND failure_kind = 'skip')
-    ),
-    CONSTRAINT ck_benchmark_samples_payload_identity CHECK (
-        (sample_json->>'runId')::uuid = run_id
-        AND (sample_json->>'sampleId')::uuid = sample_id
-        AND sample_json->>'scenarioKey' = scenario_key
-        AND sample_json->>'operationKey' = operation_key
-        AND (sample_json->>'iteration')::integer = iteration
-        AND sample_json->>'layer' = layer
-        AND sample_json->>'phase' = phase
-        AND (sample_json->>'wallClockDuration')::numeric = wall_clock_duration
-        AND sample_json#>>'{execution,status}' = status
-        AND sample_json#>>'{execution,failure,kind}' IS NOT DISTINCT FROM failure_kind
-        AND sample_json->>'visualizationAdmission' = visualization_admission
     )
 );
 
@@ -193,9 +177,6 @@ CREATE TABLE IF NOT EXISTS benchmark.outputs (
             'skip'
         )
     ),
-    visualization_admission text NOT NULL CHECK (
-        visualization_admission IN ('not-requested', 'allowed', 'warned', 'blocked')
-    ),
     total_result_cardinality bigint NOT NULL CHECK (total_result_cardinality >= 0),
     result_digest text NOT NULL CHECK (result_digest ~ '^sha256:[0-9a-f]{64}$'),
     output_json jsonb NOT NULL CHECK (jsonb_typeof(output_json) = 'object'),
@@ -209,8 +190,48 @@ CREATE TABLE IF NOT EXISTS benchmark.outputs (
         OR (status = 'cancelled' AND failure_kind = 'cancellation')
         OR (status = 'crashed' AND failure_kind = 'crash')
         OR (status = 'skipped' AND failure_kind = 'skip')
-    ),
-    CONSTRAINT ck_benchmark_outputs_payload_identity CHECK (
+    )
+);
+
+-- Phase 3.5 revises the pre-baseline v1 contract in place. Reconcile stores
+-- initialized by the earlier v1 DDL without deleting runs, samples, outputs,
+-- or any unrelated JSON data. These statements are safe to repeat.
+ALTER TABLE benchmark.samples
+    DROP CONSTRAINT IF EXISTS ck_benchmark_samples_payload_identity;
+
+ALTER TABLE benchmark.outputs
+    DROP CONSTRAINT IF EXISTS ck_benchmark_outputs_payload_identity;
+
+UPDATE benchmark.samples
+SET sample_json = sample_json - 'visualizationAdmission' - 'warnings'
+WHERE sample_json ? 'visualizationAdmission' OR sample_json ? 'warnings';
+
+UPDATE benchmark.outputs
+SET output_json = output_json - 'visualizationAdmission' - 'warnings'
+WHERE output_json ? 'visualizationAdmission' OR output_json ? 'warnings';
+
+ALTER TABLE benchmark.samples
+    DROP COLUMN IF EXISTS visualization_admission;
+
+ALTER TABLE benchmark.outputs
+    DROP COLUMN IF EXISTS visualization_admission;
+
+ALTER TABLE benchmark.samples
+    ADD CONSTRAINT ck_benchmark_samples_payload_identity CHECK (
+        (sample_json->>'runId')::uuid = run_id
+        AND (sample_json->>'sampleId')::uuid = sample_id
+        AND sample_json->>'scenarioKey' = scenario_key
+        AND sample_json->>'operationKey' = operation_key
+        AND (sample_json->>'iteration')::integer = iteration
+        AND sample_json->>'layer' = layer
+        AND sample_json->>'phase' = phase
+        AND (sample_json->>'wallClockDuration')::numeric = wall_clock_duration
+        AND sample_json#>>'{execution,status}' = status
+        AND sample_json#>>'{execution,failure,kind}' IS NOT DISTINCT FROM failure_kind
+    );
+
+ALTER TABLE benchmark.outputs
+    ADD CONSTRAINT ck_benchmark_outputs_payload_identity CHECK (
         (output_json->>'runId')::uuid = run_id
         AND (output_json->>'sampleId')::uuid = sample_id
         AND output_json->>'scenarioKey' = scenario_key
@@ -218,14 +239,12 @@ CREATE TABLE IF NOT EXISTS benchmark.outputs (
         AND output_json->>'algorithmSemanticIdentity' = algorithm_semantic_identity
         AND output_json#>>'{execution,status}' = status
         AND output_json#>>'{execution,failure,kind}' IS NOT DISTINCT FROM failure_kind
-        AND output_json->>'visualizationAdmission' = visualization_admission
         AND (output_json->>'totalResultCardinality')::bigint = total_result_cardinality
         AND output_json->>'resultDigest' = result_digest
         AND jsonb_typeof(output_json->'items') = 'array'
         AND jsonb_array_length(output_json->'items') <= 100
         AND jsonb_array_length(output_json->'items') <= total_result_cardinality
-    )
-);
+    );
 
 CREATE INDEX IF NOT EXISTS ix_benchmark_runs_comparison
     ON benchmark.runs (

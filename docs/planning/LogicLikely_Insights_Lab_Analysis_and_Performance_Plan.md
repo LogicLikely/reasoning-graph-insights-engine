@@ -1,6 +1,6 @@
 # LogicLikely Insights Lab Analysis and Performance Plan
 
-**Status:** Phases 0, 1, and 3 are implemented and committed; Phase 2 was dropped; Phase 3.5 is next; Phases 4–6 have not started
+**Status:** Phases 0, 1, and 3 are implemented and committed; Phase 2 was dropped; Phase 3.5 is implemented and verified with its commit left to the user; Phases 4–6 have not started
 
 **Last updated:** 2026-08-16
 
@@ -45,6 +45,7 @@ This plan complements the original [Structural Insights Engine Implementation Pl
 - Phase 0 froze the initial operation, result, identity, and failure contracts.
 - Phase 1 implemented the correlation, timing, persistence, export, and worker-isolation foundation.
 - Phase 3 implemented the versioned analysis operations and compatibility surfaces.
+- Phase 3.5 reconciled those artifacts with the unchanged GraphMap integration boundary.
 - GraphMap is responsive with compact projections of large source graphs.
 - GraphMap search is fast when the union of matches and required ancestor chains is compact.
 - Full expansion is a designated small-dataset benchmark scenario.
@@ -57,7 +58,6 @@ This plan complements the original [Structural Insights Engine Implementation Pl
 - Existing algorithm requests may still pay complete graph retrieval and mapping costs that need separate measurement.
 - Browser, result-panel, and GraphMap phases are not yet measured consistently by a controlled harness.
 - Deep recursive operations can fail from call-stack depth before their asymptotic runtime becomes the limiting factor.
-- Phase 3.5 must reconcile the completed work with the decision to drop Phase 2 before further implementation begins.
 
 ## 4. Target Architecture
 
@@ -542,7 +542,7 @@ These fixtures test result presentation and measurement; they do not define algo
 
 ### Phase 0 — Freeze contracts
 
-**Status:** Completed and committed. Phase 3.5 will reconcile affected artifacts with the current plan.
+**Status:** Completed and committed. Active contracts were reconciled by Phase 3.5.
 
 Implementation record: [Phase 0 frozen contracts](../contracts/insights-lab/phase-0-contracts.md).
 
@@ -568,7 +568,7 @@ Acceptance:
 
 ### Phase 1 — Measurement and persistence foundation
 
-**Status:** Completed and committed. Phase 3.5 will reconcile affected artifacts with the current plan.
+**Status:** Completed and committed. Active contracts were reconciled by Phase 3.5.
 
 Implementation record: [Phase 1 frozen contracts](../contracts/insights-lab/phase-1-contracts.md).
 
@@ -602,7 +602,7 @@ The proposed GraphMap node-limit and associated package/API expansion will not b
 
 ### Phase 3 — Versioned analysis operations
 
-**Status:** Completed and committed. Phase 3.5 will reconcile affected artifacts with the current plan.
+**Status:** Completed and committed. Active contracts were reconciled by Phase 3.5.
 
 Implementation record: [Phase 3 frozen contracts](../contracts/insights-lab/phase-3-contracts.md).
 
@@ -632,7 +632,14 @@ Acceptance:
 
 ### Phase 3.5 — Remove dropped GraphMap node-limit artifacts
 
-**Status:** Not started. This is the next phase and is required before Phase 4.
+**Status:** Implemented and verified on 2026-08-16; commit left to the user. Phase 4 has not started.
+
+Completion record:
+
+- The user confirmed that no durable v1 export corpus exists outside this project, so the pre-baseline `insights-run-export-v1` schema and example were revised in place.
+- Existing in-project benchmark rows are reconciled without deleting runs, samples, outputs, or unrelated JSON data. Retired identifiers remain only in the idempotent migration statements and migration tests that remove them from stores initialized by the earlier v1 DDL.
+- The shared warning member was removed as required, including the Phase 3 worker prefix-reduction notice. Prefix reduction remains observable from retained item count versus total cardinality; ordered paths and the complete-result digest remain unchanged.
+- The accepted vendored GraphMap `0.2.0` artifact, dependency declaration, lockfile entry, and public API remain unchanged.
 
 Purpose: remove all work related to the abandoned feature that entered the repository through Phases 0, 1, and 3, while preserving the analysis, measurement, and result contracts those phases otherwise delivered.
 
@@ -669,7 +676,7 @@ Acceptance:
 
 ### Phase 4 — Benchmark runners
 
-**Status:** Not started. Depends on Phase 3.5.
+**Status:** Not started. The Phase 3.5 prerequisite is complete.
 
 Execution constraints:
 
@@ -759,7 +766,7 @@ Phase 0 → Phase 1 → Phase 3 → Phase 3.5 → Phase 4 → Phase 5 → Phase 
 Phase 2: dropped; no dependency edges and no implementation work
 ```
 
-Phase 3.5 is the only cleanup prerequisite. No later phase depends on Phase 2.
+Phase 3.5 completed the only cleanup prerequisite. No later phase depends on Phase 2.
 
 ## 14. Verification Matrix
 
@@ -870,7 +877,7 @@ The initiative is complete when:
 
 ## 19. Pre-Implementation Checkpoints
 
-Phase 3.5 is the next required implementation phase. After it is complete:
+Phase 3.5 is complete. Before the corresponding later baseline and presentation work:
 
 1. Confirm `robustness-v0` semantics with the algorithm partner before calling its baseline authoritative.
 2. Confirm candidate eligibility/removal semantics for critical counters against the frozen golden cases.
@@ -878,4 +885,4 @@ Phase 3.5 is the next required implementation phase. After it is complete:
 4. Calibrate the auto-strategy candidate cutoff on the authoritative host.
 5. Establish the named browser/result-render scenarios used for authoritative comparison.
 
-This revision authorizes only the planning-document update. Phase 3.5 and Phases 4–6 remain unstarted until the user explicitly starts them. All implementation commits are left for the user to make.
+Phase 3.5 is implemented and verified. Phases 4–6 remain unstarted until the user explicitly starts them. All implementation commits are left for the user to make.

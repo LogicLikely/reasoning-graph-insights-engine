@@ -12,11 +12,11 @@ public enum OperationResultSurface
 {
     TimingAndCountSummary,
     GraphAndPayloadSummary,
-    CountsAdmissionStatusAndOptionalSafeProjection,
-    SummaryRankedOrderedPathsAndGraphMapFocus,
+    MatchAndAncestorUnionCountsAndOptionalProjection,
+    SummaryRankedOrderedPathsAndOptionalGraphContext,
     DiagnosticResultAndTiming,
     SummaryDistributionAndDeterministicTop100,
-    SelectedCountersQualityAndGraphMapFocus,
+    SelectedCountersQualityAndOptionalGraphContext,
     LeastRobustSummaryDistributionAndDeterministicTop100,
     BeforeAndAfterLikelihoodSummary
 }
@@ -158,15 +158,15 @@ public static class InsightOperationRegistry
             AlgorithmSemanticIdentities.GraphFetchV1),
         new OperationContract(
             OperationKeys.GraphSearch,
-            "Find matches and the complete ancestor union, then admit or reject visualization.",
+            "Find matches and the complete required ancestor union.",
             OperationExposure.BenchmarkDiagnostic,
-            OperationResultSurface.CountsAdmissionStatusAndOptionalSafeProjection,
+            OperationResultSurface.MatchAndAncestorUnionCountsAndOptionalProjection,
             AlgorithmSemanticIdentities.GraphSearchV1),
         new OperationContract(
             OperationKeys.PathStrongest,
             "Find strongest paths in the requested direction.",
             OperationExposure.AnalysisAndBenchmark,
-            OperationResultSurface.SummaryRankedOrderedPathsAndGraphMapFocus,
+            OperationResultSurface.SummaryRankedOrderedPathsAndOptionalGraphContext,
             AlgorithmSemanticIdentities.StrongestPathV1),
         new OperationContract(
             OperationKeys.PathSinglePair,
@@ -185,7 +185,7 @@ public static class InsightOperationRegistry
             OperationKeys.CounterCriticalSet,
             "Find a threshold-reaching counter set with exact, greedy, or auto strategy.",
             OperationExposure.AnalysisAndBenchmark,
-            OperationResultSurface.SelectedCountersQualityAndGraphMapFocus,
+            OperationResultSurface.SelectedCountersQualityAndOptionalGraphContext,
             AlgorithmSemanticIdentities.CriticalCounterV1,
             [OperationStrategyNames.Exact, OperationStrategyNames.Greedy, OperationStrategyNames.Auto],
             [OperationStrategyNames.Exact, OperationStrategyNames.Greedy]),

@@ -8,7 +8,7 @@ public class BenchmarkSchemaSqlTests
     [TestMethod]
     public void Schema_IsIdempotentResetSafeAndContainsOnlyInternalRelationships()
     {
-        var sql = ReadRepositoryFile("backend", "Data", "Sql", "benchmark_schema.sql");
+        var sql = ReadRepositoryFile("backend", "data", "sql", "benchmark_schema.sql");
 
         StringAssert.Contains(sql, "CREATE SCHEMA IF NOT EXISTS benchmark;");
         Assert.AreEqual(
@@ -24,7 +24,7 @@ public class BenchmarkSchemaSqlTests
         Assert.IsFalse(
             Regex.IsMatch(
                 sql,
-                @"^\s*(DROP|TRUNCATE|DELETE)\b",
+                @"^\s*(DROP\s+(TABLE|SCHEMA)|TRUNCATE|DELETE\s+FROM)\b",
                 RegexOptions.IgnoreCase | RegexOptions.Multiline),
             "Idempotent initialization must not delete existing history.");
     }
@@ -32,7 +32,7 @@ public class BenchmarkSchemaSqlTests
     [TestMethod]
     public void Schema_PreservesCanonicalPayloadsNormalizedSelectorsAndAppendOrder()
     {
-        var sql = ReadRepositoryFile("backend", "Data", "Sql", "benchmark_schema.sql");
+        var sql = ReadRepositoryFile("backend", "data", "sql", "benchmark_schema.sql");
 
         StringAssert.Contains(sql, "manifest_json jsonb NOT NULL");
         StringAssert.Contains(sql, "sample_json jsonb NOT NULL");
@@ -53,9 +53,38 @@ public class BenchmarkSchemaSqlTests
     }
 
     [TestMethod]
+    public void Schema_ReconcilesDroppedGraphMapAdmissionDataWithoutDeletingHistory()
+    {
+        var sql = ReadRepositoryFile("backend", "data", "sql", "benchmark_schema.sql");
+
+        Assert.IsFalse(Regex.IsMatch(
+            sql,
+            @"\bvisualization_admission\s+text\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
+        StringAssert.Contains(
+            sql,
+            "SET sample_json = sample_json - 'visualizationAdmission' - 'warnings'");
+        StringAssert.Contains(
+            sql,
+            "SET output_json = output_json - 'visualizationAdmission' - 'warnings'");
+        StringAssert.Contains(
+            sql,
+            "ALTER TABLE benchmark.samples\n    DROP COLUMN IF EXISTS visualization_admission;");
+        StringAssert.Contains(
+            sql,
+            "ALTER TABLE benchmark.outputs\n    DROP COLUMN IF EXISTS visualization_admission;");
+        Assert.AreEqual(
+            2,
+            Regex.Matches(
+                sql,
+                @"DROP\s+COLUMN\s+IF\s+EXISTS\s+visualization_admission",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Count);
+    }
+
+    [TestMethod]
     public void GraphResetSql_DoesNotMentionOrMutateBenchmarkStorage()
     {
-        var resetSql = ReadRepositoryFile("backend", "Data", "Sql", "insights_seed.sql");
+        var resetSql = ReadRepositoryFile("backend", "data", "sql", "insights_seed.sql");
 
         Assert.IsFalse(
             resetSql.Contains("benchmark", StringComparison.OrdinalIgnoreCase),

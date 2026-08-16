@@ -229,8 +229,6 @@ internal static class WorkerFixture
             new SampleTransportMeasurements(null, null, null, null),
             new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
-            Array.Empty<string>(),
             StandardUnits());
     }
 
@@ -247,15 +245,13 @@ internal static class WorkerFixture
             new GraphTargetIdentifiers("worker-fixture", null, null, Array.Empty<string>()),
             request.CanonicalParameters,
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
             JsonSerializer.SerializeToElement(new { accepted = true }),
             JsonSerializer.SerializeToElement(new { }),
             1,
             [item],
             CanonicalJson.ComputeSha256(new[] { item }),
             null,
-            Array.Empty<OrderedPathProjection>(),
-            Array.Empty<string>());
+            Array.Empty<OrderedPathProjection>());
     }
 
     private static ExecutionOutcome Failure(

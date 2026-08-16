@@ -15,14 +15,6 @@ public enum ExecutionStatus
     Skipped
 }
 
-public enum VisualizationAdmission
-{
-    NotRequested,
-    Allowed,
-    Warned,
-    Blocked
-}
-
 public enum FailureKind
 {
     Validation,
@@ -185,25 +177,16 @@ public sealed record OperationResultEnvelope
         GraphTargetIdentifiers identifiers,
         CanonicalParameters canonicalParameters,
         ExecutionOutcome execution,
-        VisualizationAdmission visualizationAdmission,
         IReadOnlyDictionary<string, JsonElement> summaryMetrics,
         long totalResultCardinality,
         IReadOnlyList<JsonElement> items,
         string? resultDigest,
         IReadOnlyList<OrderedPathProjection> orderedPaths,
         IReadOnlyList<PhaseTimingMeasurement> phaseTimings,
-        RuntimeResourceMeasurements resources,
-        IReadOnlyList<string> warnings)
+        RuntimeResourceMeasurements resources)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationKey);
         _ = SemanticIdentity.Parse(algorithmSemanticIdentity);
-        if (!Enum.IsDefined(visualizationAdmission))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(visualizationAdmission),
-                visualizationAdmission,
-                "Unknown visualization admission value.");
-        }
 
         InsightOperationRegistry.ValidateResultStrategySelection(
             operationKey,
@@ -232,7 +215,6 @@ public sealed record OperationResultEnvelope
         Identifiers = identifiers;
         CanonicalParameters = canonicalParameters;
         Execution = execution;
-        VisualizationAdmission = visualizationAdmission;
         SummaryMetrics = new ReadOnlyDictionary<string, JsonElement>(
             new Dictionary<string, JsonElement>(summaryMetrics, StringComparer.Ordinal));
         TotalResultCardinality = totalResultCardinality;
@@ -241,7 +223,6 @@ public sealed record OperationResultEnvelope
         OrderedPaths = Array.AsReadOnly(orderedPaths.ToArray());
         PhaseTimings = Array.AsReadOnly(phaseTimings.ToArray());
         Resources = resources;
-        Warnings = Array.AsReadOnly(warnings.ToArray());
     }
 
     public Guid RunId { get; }
@@ -252,7 +233,6 @@ public sealed record OperationResultEnvelope
     public GraphTargetIdentifiers Identifiers { get; }
     public CanonicalParameters CanonicalParameters { get; }
     public ExecutionOutcome Execution { get; }
-    public VisualizationAdmission VisualizationAdmission { get; }
     public IReadOnlyDictionary<string, JsonElement> SummaryMetrics { get; }
     public long TotalResultCardinality { get; }
     public IReadOnlyList<JsonElement> Items { get; }
@@ -260,5 +240,4 @@ public sealed record OperationResultEnvelope
     public IReadOnlyList<OrderedPathProjection> OrderedPaths { get; }
     public IReadOnlyList<PhaseTimingMeasurement> PhaseTimings { get; }
     public RuntimeResourceMeasurements Resources { get; }
-    public IReadOnlyList<string> Warnings { get; }
 }

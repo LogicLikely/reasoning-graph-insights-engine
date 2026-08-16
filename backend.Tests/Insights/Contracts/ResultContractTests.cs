@@ -13,34 +13,16 @@ public class ResultContractTests
             new[] { "Queued", "Running", "Succeeded", "Failed", "TimedOut", "Cancelled", "Crashed", "Skipped" },
             Enum.GetNames<ExecutionStatus>());
         CollectionAssert.AreEqual(
-            new[] { "NotRequested", "Allowed", "Warned", "Blocked" },
-            Enum.GetNames<VisualizationAdmission>());
-        CollectionAssert.AreEqual(
             new[] { "Validation", "Execution", "Timeout", "Cancellation", "Crash", "Skip" },
             Enum.GetNames<FailureKind>());
 
         Assert.AreEqual(
-            """{"execution":["queued","running","succeeded","failed","timed-out","cancelled","crashed","skipped"],"failure":["validation","execution","timeout","cancellation","crash","skip"],"visualization":["not-requested","allowed","warned","blocked"]}""",
+            """{"execution":["queued","running","succeeded","failed","timed-out","cancelled","crashed","skipped"],"failure":["validation","execution","timeout","cancellation","crash","skip"]}""",
             CanonicalJson.Canonicalize(new
             {
                 Execution = Enum.GetValues<ExecutionStatus>(),
-                Failure = Enum.GetValues<FailureKind>(),
-                Visualization = Enum.GetValues<VisualizationAdmission>()
+                Failure = Enum.GetValues<FailureKind>()
             }));
-    }
-
-    [TestMethod]
-    public void ExecutionAndVisualizationStates_AreOrthogonalAndSerializeAsContractValues()
-    {
-        var value = new
-        {
-            Execution = new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission = VisualizationAdmission.Blocked
-        };
-
-        Assert.AreEqual(
-            """{"execution":{"failure":null,"status":"succeeded"},"visualizationAdmission":"blocked"}""",
-            CanonicalJson.Canonicalize(value));
     }
 
     [TestMethod]
@@ -96,7 +78,7 @@ public class ResultContractTests
     }
 
     [TestMethod]
-    public void ResultEnvelope_CarriesEveryCommonResultSectionAndAllowsSucceededBlocked()
+    public void ResultEnvelope_CarriesEveryCommonResultSection()
     {
         var parameterValue = JsonSerializer.SerializeToElement(new { direction = "down" });
         var item = JsonSerializer.SerializeToElement(new { nodeId = "target", score = 2m });
@@ -109,7 +91,6 @@ public class ResultContractTests
             new GraphTargetIdentifiers("balanced-1k", "graph-1", "target", ["path-1"]),
             new CanonicalParameters(parameterValue, CanonicalJson.ComputeSha256(parameterValue)),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.Blocked,
             new Dictionary<string, JsonElement>
             {
                 ["maximumScore"] = JsonSerializer.SerializeToElement(2m)
@@ -119,23 +100,21 @@ public class ResultContractTests
             CanonicalJson.ComputeSha256(new[] { item }),
             [new OrderedPathProjection(["leaf", "target"], ["edge"], 2m)],
             [new PhaseTimingMeasurement("backend-service", "ranking", 1.25m, "ms")],
-            new RuntimeResourceMeasurements(1_024, 1, 0, 0, 1m, "ms", 512),
-            ["Projection exceeded the render budget."]);
+            new RuntimeResourceMeasurements(1_024, 1, 0, 0, 1m, "ms", 512));
 
         Assert.AreEqual(ExecutionStatus.Succeeded, envelope.Execution.Status);
-        Assert.AreEqual(VisualizationAdmission.Blocked, envelope.VisualizationAdmission);
         Assert.AreEqual(1, envelope.SummaryMetrics.Count);
         Assert.AreEqual(1, envelope.Items.Count);
         Assert.AreEqual(1, envelope.OrderedPaths.Count);
         Assert.AreEqual(1, envelope.PhaseTimings.Count);
         Assert.AreEqual(1_024, envelope.Resources.AllocatedBytes);
-        Assert.AreEqual(1, envelope.Warnings.Count);
 
         var canonical = CanonicalJson.Canonicalize(envelope);
         StringAssert.Contains(canonical, "\"algorithmSemanticIdentity\":\"strongest-path-v1\"");
-        StringAssert.Contains(canonical, "\"visualizationAdmission\":\"blocked\"");
         StringAssert.Contains(canonical, "\"orderedPaths\"");
         StringAssert.Contains(canonical, "\"phaseTimings\"");
+        Assert.IsFalse(canonical.Contains("visualizationAdmission", StringComparison.Ordinal));
+        Assert.IsFalse(canonical.Contains("warnings", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -153,14 +132,12 @@ public class ResultContractTests
                 JsonSerializer.SerializeToElement(new { }),
                 CanonicalJson.ComputeSha256(new { })),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
             JsonSerializer.SerializeToElement(new { count = 1 }),
             JsonSerializer.SerializeToElement(new { minimum = 1 }),
             0,
             [],
             "sha256:result",
             "artifacts/run-1/full-result.json",
-            [],
             []);
 
         Assert.AreEqual("artifacts/run-1/full-result.json", output.FullResultArtifactReference);
@@ -218,8 +195,6 @@ public class ResultContractTests
             new SampleTransportMeasurements(256, 2_048, 2m, 3m),
             new RuntimeResourceMeasurements(10_000, 1, 0, 0, 11m, "ms", 4_096),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
-            ["Warm sample."],
             units);
         var item = JsonSerializer.SerializeToElement(new { nodeId = "node-1", score = 0.9m });
         var output = new CompactRunOutput(
@@ -232,15 +207,13 @@ public class ResultContractTests
             new GraphTargetIdentifiers("stress-balanced-1k", "graph-10", "target", ["path-1"]),
             parameters,
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.Blocked,
             JsonSerializer.SerializeToElement(new { leastRobustNodeId = "node-1" }),
             JsonSerializer.SerializeToElement(new { minimum = 0.9m, maximum = 1m }),
             1,
             [item],
             CanonicalJson.ComputeSha256(new[] { item }),
             null,
-            [new OrderedPathProjection(["leaf", "node-1"], ["edge-1"], 0.5m)],
-            ["Projection was blocked without truncating the result."]);
+            [new OrderedPathProjection(["leaf", "node-1"], ["edge-1"], 0.5m)]);
         var export = new VersionedRunExport(
             VersionedRunExport.CurrentSchemaIdentity,
             VersionedRunExport.CurrentSchemaVersion,
@@ -269,9 +242,10 @@ public class ResultContractTests
         Assert.AreEqual(1, root.GetProperty("outputs").GetArrayLength());
         Assert.AreEqual("robustness-v0",
             root.GetProperty("outputs")[0].GetProperty("algorithmSemanticIdentity").GetString());
-        Assert.AreEqual("blocked",
-            root.GetProperty("outputs")[0].GetProperty("visualizationAdmission").GetString());
-        Assert.AreEqual(1, root.GetProperty("outputs")[0].GetProperty("warnings").GetArrayLength());
+        Assert.IsFalse(root.GetProperty("samples")[0].TryGetProperty("visualizationAdmission", out _));
+        Assert.IsFalse(root.GetProperty("samples")[0].TryGetProperty("warnings", out _));
+        Assert.IsFalse(root.GetProperty("outputs")[0].TryGetProperty("visualizationAdmission", out _));
+        Assert.IsFalse(root.GetProperty("outputs")[0].TryGetProperty("warnings", out _));
         Assert.AreEqual(JsonValueKind.Null,
             root.GetProperty("outputs")[0].GetProperty("fullResultArtifactReference").ValueKind);
         Assert.AreEqual("sha256:outputs", root.GetProperty("digests").GetProperty("outputsDigest").GetString());
@@ -289,15 +263,13 @@ public class ResultContractTests
             new GraphTargetIdentifiers("all", null, null, []),
             new CanonicalParameters(parametersValue, CanonicalJson.ComputeSha256(parametersValue)),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
             new Dictionary<string, JsonElement>(),
             cardinality,
             items,
             "sha256:result",
             [],
             [],
-            new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
-            []);
+            new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null));
     }
 
     private static FailureDetails Failure(FailureKind kind)

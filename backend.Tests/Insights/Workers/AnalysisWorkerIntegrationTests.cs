@@ -56,7 +56,6 @@ public sealed class AnalysisWorkerIntegrationTests
         Assert.AreEqual("worker-critical", output.Identifiers.GraphSlug);
         Assert.AreEqual("42", output.Identifiers.GraphId);
         Assert.AreEqual("target", output.Identifiers.TargetNodeId);
-        Assert.AreEqual(VisualizationAdmission.NotRequested, output.VisualizationAdmission);
         Assert.AreEqual(1L, output.TotalResultCardinality);
         Assert.AreEqual(1, output.Items.Count);
         Assert.AreEqual(2, output.OrderedPaths.Count);
@@ -195,9 +194,6 @@ public sealed class AnalysisWorkerIntegrationTests
         Assert.IsTrue(output.Items.Count > 0);
         Assert.IsTrue(output.Items.Count < complete.Items.Count);
         Assert.AreEqual(output.Items.Count, output.OrderedPaths.Count);
-        CollectionAssert.Contains(
-            output.Warnings.ToArray(),
-            AnalysisWorkerDispatcher.RetainedItemsReducedWarning);
 
         for (var index = 0; index < output.Items.Count; index++)
         {
@@ -273,9 +269,6 @@ public sealed class AnalysisWorkerIntegrationTests
         Assert.AreEqual(0, output.OrderedPaths.Count);
         Assert.AreEqual(complete.TotalResultCardinality, output.TotalResultCardinality);
         Assert.AreEqual(complete.ResultDigest, output.ResultDigest);
-        CollectionAssert.Contains(
-            output.Warnings.ToArray(),
-            AnalysisWorkerDispatcher.RetainedItemsReducedWarning);
         var retainedFrame = WorkerProtocolJson.Serialize(
             WorkerEventFrame.ForOutput(0, output));
         Assert.IsTrue(
@@ -482,15 +475,13 @@ public sealed class AnalysisWorkerIntegrationTests
         output.Identifiers,
         output.CanonicalParameters,
         output.Execution,
-        output.VisualizationAdmission,
         output.Summary.Clone(),
         output.Distribution.Clone(),
         output.TotalResultCardinality,
         items.ToArray(),
         output.ResultDigest,
         output.FullResultArtifactReference,
-        orderedPaths.ToArray(),
-        output.Warnings);
+        orderedPaths.ToArray());
 
     private static WorkerRequestFrame CreateRequest<TInput, TParameters>(
         string operationKey,

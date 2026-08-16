@@ -19,9 +19,9 @@
                       LogicalName="Backend.Insights.Export.run-export-v1.schema.json" />
     <Content Include="data/sql/insights_seed.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="data/sql/insights_stress_seed.sql" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Data/Sql/benchmark_schema.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="data/sql/benchmark_schema.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="data/seed/insights_stress_corpus.json"
-             TargetPath="Data/Seed/insights_stress_corpus.json"
+             TargetPath="data/seed/insights_stress_corpus.json"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

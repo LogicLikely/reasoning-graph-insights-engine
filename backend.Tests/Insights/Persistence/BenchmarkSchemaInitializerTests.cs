@@ -98,7 +98,7 @@ public class BenchmarkSchemaInitializerTests
             $"benchmark-schema-tests-{Guid.NewGuid():N}");
         if (sql is not null)
         {
-            var sqlDirectory = Path.Combine(root, "Data", "Sql");
+            var sqlDirectory = Path.Combine(root, "data", "sql");
             Directory.CreateDirectory(sqlDirectory);
             File.WriteAllText(Path.Combine(sqlDirectory, "benchmark_schema.sql"), sql);
         }

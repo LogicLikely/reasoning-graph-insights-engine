@@ -5,7 +5,7 @@ namespace Backend.Insights.Persistence;
 
 public sealed class BenchmarkSchemaInitializer : IBenchmarkSchemaInitializer
 {
-    public static readonly string[] SchemaPathSegments = ["Data", "Sql", "benchmark_schema.sql"];
+    public static readonly string[] SchemaPathSegments = ["data", "sql", "benchmark_schema.sql"];
 
     private const int InitializationCommandTimeoutSeconds = 30;
 

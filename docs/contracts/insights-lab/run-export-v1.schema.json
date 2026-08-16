@@ -101,14 +101,6 @@
         "skipped"
       ]
     },
-    "visualizationAdmission": {
-      "enum": [
-        "not-requested",
-        "allowed",
-        "warned",
-        "blocked"
-      ]
-    },
     "failureKind": {
       "enum": [
         "validation",
@@ -1304,8 +1296,6 @@
         "transport",
         "resources",
         "execution",
-        "visualizationAdmission",
-        "warnings",
         "measurementUnits"
       ],
       "properties": {
@@ -1368,15 +1358,6 @@
         "execution": {
           "$ref": "#/$defs/executionOutcome"
         },
-        "visualizationAdmission": {
-          "$ref": "#/$defs/visualizationAdmission"
-        },
-        "warnings": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
         "measurementUnits": {
           "$ref": "#/$defs/measurementUnitContract"
         }
@@ -1395,15 +1376,13 @@
         "identifiers",
         "canonicalParameters",
         "execution",
-        "visualizationAdmission",
         "summary",
         "distribution",
         "totalResultCardinality",
         "items",
         "resultDigest",
         "fullResultArtifactReference",
-        "orderedPaths",
-        "warnings"
+        "orderedPaths"
       ],
       "properties": {
         "runId": {
@@ -1436,9 +1415,6 @@
         "execution": {
           "$ref": "#/$defs/executionOutcome"
         },
-        "visualizationAdmission": {
-          "$ref": "#/$defs/visualizationAdmission"
-        },
         "summary": {
           "$ref": "#/$defs/jsonValue"
         },
@@ -1470,12 +1446,6 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/orderedPathProjection"
-          }
-        },
-        "warnings": {
-          "type": "array",
-          "items": {
-            "type": "string"
           }
         }
       },

@@ -53,9 +53,6 @@ public sealed record RobustnessV0WorkerParameters;
 /// </summary>
 public sealed class AnalysisWorkerDispatcher
 {
-    public const string RetainedItemsReducedWarning =
-        "retained-items-reduced-to-fit-worker-protocol-line";
-
     private static readonly JsonSerializerOptions SerializerOptions =
         CanonicalJson.CreateSerializerOptions();
 
@@ -322,15 +319,13 @@ public sealed class AnalysisWorkerDispatcher
             CreateIdentifiers(graph, targetNodeId),
             request.CanonicalParameters,
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
             JsonSerializer.SerializeToElement(summary, SerializerOptions),
             JsonSerializer.SerializeToElement(distribution, SerializerOptions),
             totalResultCardinality,
             retainedItems,
             resultDigest,
             null,
-            paths,
-            Array.Empty<string>());
+            paths);
         cancellationToken.ThrowIfCancellationRequested();
         return output;
     }

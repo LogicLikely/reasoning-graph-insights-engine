@@ -356,8 +356,6 @@ public sealed class RunExportServiceTests
             new SampleTransportMeasurements(null, null, null, null),
             new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
             outcome,
-            VisualizationAdmission.NotRequested,
-            [],
             Units());
     }
 
@@ -374,14 +372,12 @@ public sealed class RunExportServiceTests
             new GraphTargetIdentifiers("fixture-graph", "fixture-1", null, []),
             Parameters(),
             new ExecutionOutcome(ExecutionStatus.Succeeded),
-            VisualizationAdmission.NotRequested,
             JsonSerializer.SerializeToElement(new { graphCount = 1 }),
             JsonSerializer.SerializeToElement(new { }),
             totalCardinality,
             [item],
             resultDigest ?? CanonicalJson.ComputeSha256(new[] { item }),
             null,
-            [],
             []);
     }
 
@@ -397,15 +393,13 @@ public sealed class RunExportServiceTests
             value.Identifiers,
             value.CanonicalParameters,
             value.Execution,
-            value.VisualizationAdmission,
             value.Summary,
             value.Distribution,
             value.TotalResultCardinality,
             value.Items,
             value.ResultDigest,
             value.FullResultArtifactReference,
-            value.OrderedPaths,
-            value.Warnings);
+            value.OrderedPaths);
     }
 
     private static CanonicalParameters Parameters(string? digest = null)

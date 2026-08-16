@@ -520,18 +520,18 @@ public class GraphRepository : IGraphRepository
     {
         var seedSqlPath = Path.Combine(
             _hostEnvironment.ContentRootPath,
-            "Data",
-            "Sql",
+            "data",
+            "sql",
             "insights_seed.sql");
         var stressSeedSqlPath = Path.Combine(
             _hostEnvironment.ContentRootPath,
-            "Data",
-            "Sql",
+            "data",
+            "sql",
             "insights_stress_seed.sql");
         var stressCorpusPath = Path.Combine(
             _hostEnvironment.ContentRootPath,
-            "Data",
-            "Seed",
+            "data",
+            "seed",
             "insights_stress_corpus.json");
 
         if (!File.Exists(seedSqlPath))

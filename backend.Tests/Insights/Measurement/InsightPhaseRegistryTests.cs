@@ -36,14 +36,11 @@ public sealed class InsightPhaseRegistryTests
                 "browser-data/domain-mapping/False/False",
                 "browser-data/graph-map-adapter/False/False",
                 "browser-data/search-index-construction/False/False",
-                "graph-map/preflight/False/False",
                 "graph-map/node-edge-materialization/False/False",
                 "graph-map/dagre-layout/False/False",
                 "graph-map/react-commit/False/False",
                 "graph-map/deferred-edge-commit/False/False",
                 "graph-map/viewport-fit/False/False",
-                "graph-map/on-view-lifecycle/False/False",
-                "graph-map/on-view-ready/False/False",
                 "end-to-end/action-to-stable-result-and-view/False/False"
             },
             actual);

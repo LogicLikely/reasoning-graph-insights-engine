@@ -536,7 +536,7 @@ public class GraphRepositoryTests
 
             StringAssert.EndsWith(
                 exception.FileName!,
-                Path.Combine("Data", "Seed", "insights_stress_corpus.json"));
+                Path.Combine("data", "seed", "insights_stress_corpus.json"));
             connectionFactoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
         }
         finally
@@ -577,7 +577,7 @@ public class GraphRepositoryTests
         var seedRoot = Path.Combine(
             Path.GetTempPath(),
             $"reasoning-graph-seed-tests-{Guid.NewGuid():N}");
-        var sqlDirectory = Path.Combine(seedRoot, "Data", "Sql");
+        var sqlDirectory = Path.Combine(seedRoot, "data", "sql");
         Directory.CreateDirectory(sqlDirectory);
         File.WriteAllText(Path.Combine(sqlDirectory, "insights_seed.sql"), "BASE SEED");
 
@@ -590,7 +590,7 @@ public class GraphRepositoryTests
 
         if (includeStressCorpus)
         {
-            var seedDirectory = Path.Combine(seedRoot, "Data", "Seed");
+            var seedDirectory = Path.Combine(seedRoot, "data", "seed");
             Directory.CreateDirectory(seedDirectory);
             File.WriteAllText(
                 Path.Combine(seedDirectory, "insights_stress_corpus.json"),

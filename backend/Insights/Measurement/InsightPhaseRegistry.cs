@@ -39,14 +39,11 @@ public static class InsightMeasurementPhases
     public const string GraphMapAdapter = "graph-map-adapter";
     public const string SearchIndexConstruction = "search-index-construction";
 
-    public const string Preflight = "preflight";
     public const string NodeEdgeMaterialization = "node-edge-materialization";
     public const string DagreLayout = "dagre-layout";
     public const string ReactCommit = "react-commit";
     public const string DeferredEdgeCommit = "deferred-edge-commit";
     public const string ViewportFit = "viewport-fit";
-    public const string OnViewLifecycle = "on-view-lifecycle";
-    public const string OnViewReady = "on-view-ready";
 
     public const string ActionToStableResultAndView = "action-to-stable-result-and-view";
 
@@ -101,14 +98,11 @@ public static partial class InsightPhaseRegistry
             Phase(InsightMeasurementLayers.BrowserData, InsightMeasurementPhases.GraphMapAdapter, false),
             Phase(InsightMeasurementLayers.BrowserData, InsightMeasurementPhases.SearchIndexConstruction, false),
 
-            Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.Preflight, false),
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.NodeEdgeMaterialization, false),
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.DagreLayout, false),
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.ReactCommit, false),
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.DeferredEdgeCommit, false),
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.ViewportFit, false),
-            Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.OnViewLifecycle, false),
-            Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.OnViewReady, false),
 
             Phase(InsightMeasurementLayers.EndToEnd, InsightMeasurementPhases.ActionToStableResultAndView, false)
         ]);

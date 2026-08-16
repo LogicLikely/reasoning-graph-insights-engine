@@ -140,8 +140,6 @@ public sealed record RunSample(
     SampleTransportMeasurements Transport,
     RuntimeResourceMeasurements Resources,
     ExecutionOutcome Execution,
-    VisualizationAdmission VisualizationAdmission,
-    IReadOnlyList<string> Warnings,
     MeasurementUnitContract MeasurementUnits);
 
 public sealed record CompactRunOutput
@@ -156,26 +154,17 @@ public sealed record CompactRunOutput
         GraphTargetIdentifiers identifiers,
         CanonicalParameters canonicalParameters,
         ExecutionOutcome execution,
-        VisualizationAdmission visualizationAdmission,
         JsonElement summary,
         JsonElement distribution,
         long totalResultCardinality,
         IReadOnlyList<JsonElement> items,
         string resultDigest,
         string? fullResultArtifactReference,
-        IReadOnlyList<OrderedPathProjection> orderedPaths,
-        IReadOnlyList<string> warnings)
+        IReadOnlyList<OrderedPathProjection> orderedPaths)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scenarioKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(operationKey);
         _ = SemanticIdentity.Parse(algorithmSemanticIdentity);
-        if (!Enum.IsDefined(visualizationAdmission))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(visualizationAdmission),
-                visualizationAdmission,
-                "Unknown visualization admission value.");
-        }
 
         InsightOperationRegistry.ValidateResultStrategySelection(
             operationKey,
@@ -206,7 +195,6 @@ public sealed record CompactRunOutput
         Identifiers = identifiers;
         CanonicalParameters = canonicalParameters;
         Execution = execution;
-        VisualizationAdmission = visualizationAdmission;
         Summary = summary;
         Distribution = distribution;
         TotalResultCardinality = totalResultCardinality;
@@ -214,7 +202,6 @@ public sealed record CompactRunOutput
         ResultDigest = resultDigest;
         FullResultArtifactReference = fullResultArtifactReference;
         OrderedPaths = Array.AsReadOnly(orderedPaths.ToArray());
-        Warnings = Array.AsReadOnly(warnings.ToArray());
     }
 
     public Guid RunId { get; }
@@ -226,7 +213,6 @@ public sealed record CompactRunOutput
     public GraphTargetIdentifiers Identifiers { get; }
     public CanonicalParameters CanonicalParameters { get; }
     public ExecutionOutcome Execution { get; }
-    public VisualizationAdmission VisualizationAdmission { get; }
     public JsonElement Summary { get; }
     public JsonElement Distribution { get; }
     public long TotalResultCardinality { get; }
@@ -234,7 +220,6 @@ public sealed record CompactRunOutput
     public string ResultDigest { get; }
     public string? FullResultArtifactReference { get; }
     public IReadOnlyList<OrderedPathProjection> OrderedPaths { get; }
-    public IReadOnlyList<string> Warnings { get; }
 }
 
 public sealed record RunExportDigests(
