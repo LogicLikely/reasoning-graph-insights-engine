@@ -111,7 +111,7 @@ describe('graphService', () => {
     expect(getDefaultGraphDataSource()).toBe('fixture')
   })
 
-  it('passes all edge weights when adding a node with a parent', async () => {
+  it('passes both edge probabilities when adding a node with a parent', async () => {
     const postSpy = vi.fn().mockResolvedValue({})
 
     vi.doMock('./httpClient', () => ({
@@ -129,7 +129,6 @@ describe('graphService', () => {
     }
     const edge = {
       kind: 'support' as const,
-      importanceToParent: 4,
       probabilityGivenParent: 0.8,
       probabilityGivenNotParent: 0.2,
     }
@@ -140,7 +139,6 @@ describe('graphService', () => {
       params: {
         parentID: 'C1',
         edgeKind: 'support',
-        importanceToParent: 4,
         probabilityGivenParent: 0.8,
         probabilityGivenNotParent: 0.2,
       },
@@ -159,7 +157,6 @@ describe('graphService', () => {
       from: 'E1',
       to: 'C1',
       kind: 'support' as const,
-      importanceToParent: 4,
       probabilityGivenParent: 0.8,
       probabilityGivenNotParent: 0.2,
     }
@@ -169,7 +166,7 @@ describe('graphService', () => {
     expect(postSpy).toHaveBeenCalledWith('/api/graphs/sample-medium/edges', edge)
   })
 
-  it('patches importance and both conditional probabilities together', async () => {
+  it('patches both conditional probabilities together', async () => {
     const patchSpy = vi.fn().mockResolvedValue({})
 
     vi.doMock('./httpClient', () => ({
@@ -178,7 +175,6 @@ describe('graphService', () => {
 
     const { updateEdge } = await import('./graphService')
     const update = {
-      importanceToParent: 6,
       probabilityGivenParent: 0.7,
       probabilityGivenNotParent: 0.3,
     }
@@ -203,7 +199,6 @@ describe('graphService', () => {
         from: 'O1',
         to: 'R1',
         kind: 'rebut',
-        importanceToParent: 10,
         probabilityGivenParent: 0.5,
         probabilityGivenNotParent: 0.5,
       }],

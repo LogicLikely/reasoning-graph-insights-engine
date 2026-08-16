@@ -32,7 +32,8 @@ export interface GraphFixtureEdge {
   from: string
   to: string
   kind: 'support' | 'rebut'
-  importanceToParent: number
+  probabilityGivenParent: number
+  probabilityGivenNotParent: number
 }
 
 export interface GraphFixture {
@@ -159,63 +160,72 @@ export const sampleGraph: GraphFixture = {
       from: 'C1',
       to: 'R1',
       kind: 'support',
-      importanceToParent: 8,
+      probabilityGivenParent: 0.8,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-R-C2',
       from: 'C2',
       to: 'R1',
       kind: 'support',
-      importanceToParent: 7,
+      probabilityGivenParent: 0.7,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-R-C3',
       from: 'C3',
       to: 'R1',
       kind: 'support',
-      importanceToParent: 6,
+      probabilityGivenParent: 0.6,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-C1-P1',
       from: 'P1',
       to: 'C1',
       kind: 'support',
-      importanceToParent: 7,
+      probabilityGivenParent: 0.7,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-C1-E1',
       from: 'E1',
       to: 'C1',
       kind: 'support',
-      importanceToParent: 5,
+      probabilityGivenParent: 0.5,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-C2-P2',
       from: 'P2',
       to: 'C2',
       kind: 'support',
-      importanceToParent: 8,
+      probabilityGivenParent: 0.8,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-C2-E2',
       from: 'E2',
       to: 'C2',
       kind: 'support',
-      importanceToParent: 6,
+      probabilityGivenParent: 0.6,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-O1-P1',
       from: 'O1',
       to: 'P1',
       kind: 'rebut',
-      importanceToParent: 8,
+      probabilityGivenParent: 0.8,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-O2-C3',
       from: 'O2',
       to: 'C3',
       kind: 'rebut',
-      importanceToParent: 9,
+      probabilityGivenParent: 0.9,
+      probabilityGivenNotParent: 0.1,
     },
   ],
 }

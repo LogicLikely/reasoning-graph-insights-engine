@@ -37,7 +37,6 @@ export async function addNode(
   edge?: Pick<
     GraphFixtureEdge,
     | 'kind'
-    | 'importanceToParent'
     | 'probabilityGivenParent'
     | 'probabilityGivenNotParent'
   >,
@@ -46,7 +45,6 @@ export async function addNode(
     params: {
       parentID: parentId,
       edgeKind: edge?.kind,
-      importanceToParent: edge?.importanceToParent,
       probabilityGivenParent: edge?.probabilityGivenParent,
       probabilityGivenNotParent: edge?.probabilityGivenNotParent,
     },
@@ -155,7 +153,6 @@ export async function updateEdge(
   edgeId: string,
   data: Partial<Pick<
     GraphFixtureEdge,
-    | 'importanceToParent'
     | 'probabilityGivenParent'
     | 'probabilityGivenNotParent'
   >>,

@@ -59,7 +59,7 @@ describe('Insights GraphMap presentation', () => {
     })
   })
 
-  it('styles and labels importance edges while preserving their semantic arrow direction', () => {
+  it('styles and labels derived likelihood ratios while preserving their semantic arrow direction', () => {
     const graphEdge = insightsGraphAdapter(sampleGraph).edges[0]
     const context: GraphMapEdgeRenderContext<(typeof graphEdge)['raw']> = {
       edge: graphEdge.raw,
@@ -71,7 +71,7 @@ describe('Insights GraphMap presentation', () => {
 
     expect(presentation).toMatchObject({
       className: 'insights-graphmap-edge insights-graphmap-edge--support',
-      label: 'Support · 8',
+      label: 'Support · LR 8.000',
       markerStart: { type: MarkerType.ArrowClosed },
     })
     expect(presentation).not.toHaveProperty('markerEnd')

@@ -4,7 +4,6 @@ import './GraphDetailsPanel.css'
 
 type EditableEdgeWeights = Pick<
   GraphFixtureEdge,
-  | 'importanceToParent'
   | 'probabilityGivenParent'
   | 'probabilityGivenNotParent'
 >
@@ -34,7 +33,6 @@ type PanelModeState = {
 }
 
 const neutralEdgeWeightFormData: EdgeWeightFormData = {
-  importanceToParent: '1',
   probabilityGivenParent: '0.5',
   probabilityGivenNotParent: '0.5',
 }
@@ -48,7 +46,6 @@ function createEmptyParentEdgeFormData() {
 
 function getEdgeWeightFormData(edge: GraphFixtureEdge): EdgeWeightFormData {
   return {
-    importanceToParent: String(edge.importanceToParent),
     probabilityGivenParent: String(edge.probabilityGivenParent),
     probabilityGivenNotParent: String(edge.probabilityGivenNotParent),
   }
@@ -56,24 +53,22 @@ function getEdgeWeightFormData(edge: GraphFixtureEdge): EdgeWeightFormData {
 
 function parseEdgeWeightFormData(data: EdgeWeightFormData): EditableEdgeWeights {
   return {
-    importanceToParent: Number(data.importanceToParent),
     probabilityGivenParent: Number(data.probabilityGivenParent),
     probabilityGivenNotParent: Number(data.probabilityGivenNotParent),
   }
 }
 
-function isImportanceValid(value: number) {
-  return Number.isFinite(value) && value > 0 && value <= 10
-}
-
 function isProbabilityValid(value: number) {
-  return Number.isFinite(value) && value >= 0 && value <= 1
+  return Number.isFinite(value) && value > 0 && value <= 1
 }
 
 function areEdgeWeightsValid(weights: EditableEdgeWeights) {
-  return isImportanceValid(weights.importanceToParent)
-    && isProbabilityValid(weights.probabilityGivenParent)
+  return isProbabilityValid(weights.probabilityGivenParent)
     && isProbabilityValid(weights.probabilityGivenNotParent)
+}
+
+function getDerivedLikelihoodRatio(edge: EditableEdgeWeights) {
+  return edge.probabilityGivenParent / edge.probabilityGivenNotParent
 }
 
 function isEdgeWeightFormDataValid(data: EdgeWeightFormData) {
@@ -225,9 +220,6 @@ export function GraphDetailsPanel({
         )
         const update: Partial<EditableEdgeWeights> = {}
 
-        if (nextWeights.importanceToParent !== relation.edge.importanceToParent) {
-          update.importanceToParent = nextWeights.importanceToParent
-        }
         if (nextWeights.probabilityGivenParent !== relation.edge.probabilityGivenParent) {
           update.probabilityGivenParent = nextWeights.probabilityGivenParent
         }
@@ -393,21 +385,6 @@ export function GraphDetailsPanel({
                         <p>
                           This node {formatEdgeVerb(relation.edge.kind)} <strong>{relation.parent.title}</strong>
                         </p>
-                        <label htmlFor={`edge-importance-${relation.edge.id}`}>Importance to that claim</label>
-                        <input
-                          id={`edge-importance-${relation.edge.id}`}
-                          className="form-input"
-                          max="10"
-                          min="0.001"
-                          onChange={(event) => setExistingEdgeWeight(
-                            relation.edge,
-                            'importanceToParent',
-                            event.target.value,
-                          )}
-                          step="0.001"
-                          type="number"
-                          value={weights.importanceToParent}
-                        />
                         <label htmlFor={`edge-probability-given-parent-${relation.edge.id}`}>
                           P(this node | parent claim)
                         </label>
@@ -415,7 +392,7 @@ export function GraphDetailsPanel({
                           id={`edge-probability-given-parent-${relation.edge.id}`}
                           className="form-input"
                           max="1"
-                          min="0"
+                          min="0.000000001"
                           onChange={(event) => setExistingEdgeWeight(
                             relation.edge,
                             'probabilityGivenParent',
@@ -432,7 +409,7 @@ export function GraphDetailsPanel({
                           id={`edge-probability-given-not-parent-${relation.edge.id}`}
                           className="form-input"
                           max="1"
-                          min="0"
+                          min="0.000000001"
                           onChange={(event) => setExistingEdgeWeight(
                             relation.edge,
                             'probabilityGivenNotParent',
@@ -469,22 +446,6 @@ export function GraphDetailsPanel({
                     </select>
                   </div>
                   <div className="form-group">
-                    <label htmlFor="new-parent-importance">Importance to that claim</label>
-                    <input
-                      id="new-parent-importance"
-                      className="form-input"
-                      max="10"
-                      min="0.001"
-                      onChange={(event) => setNewParentEdge({
-                        ...newParentEdge,
-                        importanceToParent: event.target.value,
-                      })}
-                      step="0.001"
-                      type="number"
-                      value={newParentEdge.importanceToParent}
-                    />
-                  </div>
-                  <div className="form-group">
                     <label htmlFor="new-parent-probability-given-parent">
                       P(this node | parent claim)
                     </label>
@@ -492,7 +453,7 @@ export function GraphDetailsPanel({
                       id="new-parent-probability-given-parent"
                       className="form-input"
                       max="1"
-                      min="0"
+                      min="0.000000001"
                       onChange={(event) => setNewParentEdge({
                         ...newParentEdge,
                         probabilityGivenParent: event.target.value,
@@ -510,7 +471,7 @@ export function GraphDetailsPanel({
                       id="new-parent-probability-given-not-parent"
                       className="form-input"
                       max="1"
-                      min="0"
+                      min="0.000000001"
                       onChange={(event) => setNewParentEdge({
                         ...newParentEdge,
                         probabilityGivenNotParent: event.target.value,
@@ -526,25 +487,6 @@ export function GraphDetailsPanel({
           ) : (
             <section className="node-section node-edge-form">
               <h4>Relation to selected node: {derivedEdgeKindLabel}</h4>
-              <div className="form-group">
-                <label htmlFor="parent-edge-importance">Importance to that claim</label>
-                <input
-                  id="parent-edge-importance"
-                  className="form-input"
-                  max="10"
-                  min="0.001"
-                  onChange={(event) => setFormData({
-                    ...formData,
-                    parentEdgeWeights: {
-                      ...formData.parentEdgeWeights,
-                      importanceToParent: event.target.value,
-                    },
-                  })}
-                  step="0.001"
-                  type="number"
-                  value={formData.parentEdgeWeights.importanceToParent}
-                />
-              </div>
               <div className="form-group">
                 <label htmlFor="parent-edge-probability-given-parent">
                   P(new node | selected node)
@@ -672,7 +614,7 @@ export function GraphDetailsPanel({
                 <p>
                   This node {formatEdgeVerb(relation.edge.kind)} <strong>{relation.parent.title}</strong>
                 </p>
-                <span>Importance to that claim: {relation.edge.importanceToParent}/10</span>
+                <span>Derived likelihood ratio: {getDerivedLikelihoodRatio(relation.edge).toFixed(3)}</span>
                 <span>P(this node | parent claim): {relation.edge.probabilityGivenParent}</span>
                 <span>P(this node | not parent claim): {relation.edge.probabilityGivenNotParent}</span>
               </article>

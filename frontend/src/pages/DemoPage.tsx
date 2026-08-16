@@ -42,14 +42,12 @@ const DB_RESET_ERROR_MESSAGE = 'The database reset failed or could not be confir
 type EdgeCreateFields = Pick<
   GraphFixtureEdge,
   | 'kind'
-  | 'importanceToParent'
   | 'probabilityGivenParent'
   | 'probabilityGivenNotParent'
 >
 
 type EdgeUpdateFields = Partial<Pick<
   GraphFixtureEdge,
-  | 'importanceToParent'
   | 'probabilityGivenParent'
   | 'probabilityGivenNotParent'
 >>
@@ -292,7 +290,6 @@ export function DemoPage() {
     data: Partial<GraphFixtureNode> = {},
     edge: EdgeCreateFields = {
       kind: 'support',
-      importanceToParent: 1,
       probabilityGivenParent: 0.5,
       probabilityGivenNotParent: 0.5,
     },
