@@ -1,65 +1,63 @@
 # LogicLikely Insights Lab Analysis and Performance Plan
 
-**Status:** Phases 0–3 implemented; Phases 4–6 have not started
+**Status:** Phases 0, 1, and 3 are implemented and committed; Phase 2 was dropped; Phase 3.5 is next; Phases 4–6 have not started
 
-**Last updated:** 2026-08-15
+**Last updated:** 2026-08-16
 
-**Scope:** Analysis algorithms, repeatable performance measurement, historical comparison, results UX, and safe GraphMap visualization
+**Scope:** Analysis algorithms, repeatable performance measurement, historical comparison, results UX, and optional GraphMap result visualization
 
 ## 1. Purpose
 
 Build an internal Insights Lab that can:
 
 - Run and explain the graph engine's analysis algorithms.
-- Measure database, REST API, algorithm, browser, and GraphMap work independently.
+- Measure database, REST API, algorithm, browser, result-panel, and GraphMap work independently.
 - Compare compatible results over time as algorithms and infrastructure change.
-- Exercise deterministic graphs from 1,000 through 100,000 nodes without asking GraphMap to render an unsafe view.
+- Exercise deterministic graphs from 1,000 through 100,000 nodes.
 - Preserve correctness evidence alongside performance data.
+- Present complete, useful results without making a canvas visualization part of algorithm correctness.
 
 This plan complements the original [Structural Insights Engine Implementation Plan](./LogicLikely_Structural_Insights_Engine_Implementation_Plan.md). It turns those algorithm goals into a versioned, measurable, and inspectable workflow.
 
 ## 2. Locked Decisions
 
-| Area              | Decision                                                                                                                                                          |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lab routes        | Add internal `/lab/analyze` and `/lab/performance` routes, separate from the existing demo.                                                                       |
-| Execution         | Support explicit UI-queued runs and repeatable CLI suites. Ordinary navigation and search are not persisted as benchmark runs.                                    |
-| History           | Store benchmark history in a reset-safe PostgreSQL `benchmark` schema and support versioned JSON export.                                                          |
-| Comparison host   | The current stable ARM64 Mac, profile ID `ll-arm64-mac-primary`, is the authoritative performance host. Hosted CI timing is informational only.                   |
-| Dataset matrix    | Balanced, wide, deep, and shared-diamond graphs at 1K, 10K, and 100K nodes.                                                                                       |
-| Critical counters | Implement `exact`, `greedy`, and `auto` strategies in v1.                                                                                                         |
-| Counter objective | Find the fewest eligible counters that move the target to or below the configured probability threshold.                                                          |
-| Counter threshold | Configurable; default log-odds `-1`, approximately `26.9%` probability.                                                                                           |
-| Auto strategy     | Select by a deterministic candidate-count cutoff calibrated to about two seconds on the authoritative host.                                                       |
-| Robustness        | Preserve the merged behavior as `robustness-v0` until its semantics are deliberately revised and versioned.                                                       |
-| Result retention  | Store compact summaries, distributions, canonical digests, and at most the top 100 ranked items in PostgreSQL. Full output is an optional external JSON artifact. |
-| GraphMap package  | Make narrow source changes, package GraphMap `0.3.0` locally, and update the vendored immutable tarball dependency.                                               |
-| GraphMap warning  | A prospective view with 1,000 through 1,200 materialized nodes is allowed and shows a non-modal warning.                                                          |
-| GraphMap block    | A prospective view above 1,200 materialized nodes is rejected before expensive rendering work.                                                                    |
-| GraphMap override | No end-user “render anyway” action. A developer may deliberately change the configured budget in code or a controlled test profile.                               |
-| CI policy         | Correctness remains required. Performance runs are manual or scheduled, named, artifact-producing, and non-blocking.                                              |
-| Baseline timing   | Authoritative historical baselines begin after the accepted 100K dataset/corpus commit is available.                                                              |
+| Area | Decision |
+| --- | --- |
+| Lab routes | Add internal `/lab/analyze` and `/lab/performance` routes, separate from the existing demo. |
+| Execution | Support explicit UI-queued runs and repeatable CLI suites. Ordinary navigation and search are not persisted as benchmark runs. |
+| History | Store benchmark history in a reset-safe PostgreSQL `benchmark` schema and support versioned JSON export. |
+| Comparison host | The current stable ARM64 Mac, profile ID `ll-arm64-mac-primary`, is the authoritative performance host. Hosted CI timing is informational only. |
+| Dataset matrix | Balanced, wide, deep, and shared-diamond graphs at 1K, 10K, and 100K nodes. |
+| Critical counters | Implement and compare `exact`, `greedy`, and `auto` strategies. |
+| Counter objective | Find the fewest eligible counters that move the target to or below the configured probability threshold. |
+| Counter threshold | Configurable; default log-odds `-1`, approximately `26.9%` probability. |
+| Auto strategy | Select by a deterministic candidate-count cutoff calibrated to about two seconds on the authoritative host. |
+| Robustness | Preserve the merged behavior as `robustness-v0` until its semantics are deliberately revised and versioned. |
+| Result retention | Store compact summaries, distributions, canonical digests, and at most the top 100 ranked items in PostgreSQL. Full output is an optional external JSON artifact. |
+| GraphMap boundary | Retain the currently accepted GraphMap dependency. This initiative does not require GraphMap source, package, or public-API changes. |
+| CI policy | Correctness remains required. Performance runs are manual or scheduled, named, artifact-producing, and non-gating. |
+| Baseline timing | Authoritative historical baselines begin after the accepted 100K dataset/corpus commit is available. |
 
 ## 3. Current Baseline and Constraints
 
-### 3.1 Proven behavior
+### 3.1 Completed foundation
 
-- GraphMap is responsive with compact projections of 10K-node graphs.
-- GraphMap search is fast when the union of matches and required ancestor chains is small.
-- Full expansion is acceptable around the 1K dataset scale.
-- A large source graph is not itself a reason to block GraphMap; the prospective visible projection is what matters.
+- Phase 0 froze the initial operation, result, identity, and failure contracts.
+- Phase 1 implemented the correlation, timing, persistence, export, and worker-isolation foundation.
+- Phase 3 implemented the versioned analysis operations and compatibility surfaces.
+- GraphMap is responsive with compact projections of large source graphs.
+- GraphMap search is fast when the union of matches and required ancestor chains is compact.
+- Full expansion is a designated small-dataset benchmark scenario.
 - Graph fetches and current REST operations are fast at 10K, but 100K must be measured rather than assumed.
 
-### 3.2 Current gaps
+### 3.2 Remaining gaps
 
-- Analysis responses are mostly logged to the browser console rather than presented as durable, explainable results.
-- The Phase 1 benchmark tables, correlation/timing seams, export validation, and worker isolation foundation exist; repeatable performance harnesses and historical comparison UI do not yet exist.
-- Existing algorithm endpoints load and map the complete graph for each request.
-- Strongest-path calculations return scalar scores without the ordered node/edge chain needed for visualization.
-- The current minimal-counter endpoint is a one-shot heuristic, not the planned exact/greedy pair.
-- Current GraphMap search warns about large results only after search nodes have been materialized and laid out.
-- Expand All, branch expansion, Show More, and future controlled result focus have no shared render budget.
+- The existing application does not yet provide the intended durable, explainable Lab result UI.
+- Repeatable benchmark runners and the historical comparison UI do not yet exist.
+- Existing algorithm requests may still pay complete graph retrieval and mapping costs that need separate measurement.
+- Browser, result-panel, and GraphMap phases are not yet measured consistently by a controlled harness.
 - Deep recursive operations can fail from call-stack depth before their asymptotic runtime becomes the limiting factor.
+- Phase 3.5 must reconcile the completed work with the decision to drop Phase 2 before further implementation begins.
 
 ## 4. Target Architecture
 
@@ -76,7 +74,7 @@ Serial run queue / orchestrator
         |
         +----> REST + PostgreSQL journey
         |
-        +----> Playwright browser + GraphMap journey
+        +----> Playwright browser + result-render journey
         |
         v
 Correlated samples + canonical result digest
@@ -91,21 +89,23 @@ Correlated samples + canonical result digest
 
 The operation registry, run identity, phase names, result digest rules, and JSON schema are shared across the UI, API, CLI, and benchmark harnesses.
 
+GraphMap is an optional consumer of selected analysis results. An algorithm result remains complete when it is shown only as a summary, table, distribution, or ordered textual path.
+
 ## 5. Operation and Measurement Registry
 
 Use one extensible registry rather than one-off buttons and result handlers. Core analysis operations appear in both the Lab and benchmarks; supporting diagnostics are benchmark-only in v1.
 
-| Operation key             | Purpose                                                                           | v1 exposure            | Initial result surface                      |
-| ------------------------- | --------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------- |
-| `graph.catalog`           | Measure catalog retrieval/count aggregation with all stress graphs installed.     | Benchmark diagnostic   | Timing and count summary                    |
-| `graph.fetch`             | Fetch, transfer, parse, and adapt a complete graph.                               | Benchmark diagnostic   | Graph/payload summary                       |
-| `graph.search`            | Find matches and the complete ancestor union, then admit or reject visualization. | Benchmark diagnostic   | Counts, status, optional safe projection    |
-| `path.strongest`          | Find strongest paths in the requested direction.                                  | Analysis and benchmark | Summary, ranked paths, GraphMap focus       |
-| `path.single-pair`        | Exercise the current min/max single-pair path diagnostic.                         | Benchmark diagnostic   | Diagnostic result and timing                |
-| `evidence.impact-ranking` | Rank supporting and counter evidence by target probability impact.                | Analysis and benchmark | Summary, distribution, top 100              |
-| `counter.critical-set`    | Find a threshold-reaching counter set with exact, greedy, or auto strategy.       | Analysis and benchmark | Selected counters, quality, GraphMap focus  |
-| `node.robustness`         | Rank nodes by the versioned robustness calculation.                               | Analysis and benchmark | Least robust summary, distribution, top 100 |
-| `likelihood.recalculate`  | Recalculate a selected node/ancestor chain after a defined change.                | Benchmark diagnostic   | Before/after likelihood summary             |
+| Operation key | Purpose | v1 exposure | Initial result surface |
+| --- | --- | --- | --- |
+| `graph.catalog` | Measure catalog retrieval/count aggregation with all stress graphs installed. | Benchmark diagnostic | Timing and count summary |
+| `graph.fetch` | Fetch, transfer, parse, and adapt a complete graph. | Benchmark diagnostic | Graph/payload summary |
+| `graph.search` | Find matches and the complete required ancestor union. | Benchmark diagnostic | Match/union counts and optional projection |
+| `path.strongest` | Find strongest paths in the requested direction. | Analysis and benchmark | Summary, ranked paths, optional graph context |
+| `path.single-pair` | Exercise the current min/max single-pair path diagnostic. | Benchmark diagnostic | Diagnostic result and timing |
+| `evidence.impact-ranking` | Rank supporting and counter evidence by target probability impact. | Analysis and benchmark | Summary, distribution, top 100 |
+| `counter.critical-set` | Find a threshold-reaching counter set with exact, greedy, or auto strategy. | Analysis and benchmark | Selected counters, quality, optional graph context |
+| `node.robustness` | Rank nodes by the versioned robustness calculation. | Analysis and benchmark | Least robust summary, distribution, top 100 |
+| `likelihood.recalculate` | Recalculate a selected node/ancestor chain after a defined change. | Benchmark diagnostic | Before/after likelihood summary |
 
 Every operation returns a common envelope containing:
 
@@ -114,16 +114,15 @@ Every operation returns a common envelope containing:
 - Graph and target identifiers.
 - Canonical parameters and parameter digest.
 - Execution status: `queued`, `running`, `succeeded`, `failed`, `timed-out`, `cancelled`, `crashed`, or `skipped`.
-- Visualization admission: `not-requested`, `allowed`, `warned`, or `blocked`.
 - Summary metrics.
 - Total result cardinality.
 - Up to 100 deterministic result items.
 - Canonical result digest.
-- Optional ordered path projections.
+- Optional ordered path data.
 - Phase timings and resource measurements.
-- Warnings, validation failures, and error details.
+- Validation notices and error details.
 
-Execution and visualization status are independent. For example, a strongest-path calculation can succeed while GraphMap blocks its path projection.
+Presentation state is not part of algorithm identity or result-digest material.
 
 ## 6. Algorithm Contracts
 
@@ -137,7 +136,7 @@ Execution and visualization status are independent. For example, a strongest-pat
   - Deepest leaf/upstream.
   - Selected pair where the existing single-pair implementation is being measured.
 - Separate graph-context construction from traversal, result reconstruction, sorting, and response shaping in timings.
-- A path over the GraphMap budget remains a valid algorithm result even when its canvas projection is blocked.
+- Treat the ordered path as the authoritative result whether or not the UI also presents graph context.
 
 ### 6.2 Evidence impact ranking
 
@@ -234,296 +233,251 @@ Compute the graph-wide ranking once. “Least robust” is the first ranked item
 
 Run v0 in an isolated worker on deep graphs. If recursion fails, first implement an iterative DAG/topological equivalent that preserves the frozen result digest. A behavior change requires a new semantic version.
 
-## 7. GraphMap Render-Budget Contract
+## 7. GraphMap Integration Boundary
 
-### 7.1 Exact thresholds
+GraphMap remains useful as a visual aid, but it is not the result system and it is not part of algorithm correctness.
 
-The decision is based on the prospective materialized view, not the total source graph:
+- Keep the currently accepted GraphMap dependency unchanged.
+- Do not modify, repackage, or introduce a new GraphMap public API for this initiative.
+- Use existing presentation hooks for node and edge emphasis when they add explanatory value.
+- Use existing search and view behavior without making it an algorithm-result transport.
+- Make summaries, ranked tables, distributions, and ordered paths complete on their own.
+- Treat a graph projection as optional presentation attached to a result, not as the result itself.
+- Measure GraphMap from the consumer and browser harness through performance marks, React Profiler, and Playwright observations.
+- Label consumer-observed layout or settling boundaries as estimates when GraphMap does not expose an exact internal callback.
 
-| Prospective materialized nodes | Decision                                       |
-| -----------------------------: | ---------------------------------------------- |
-|                          0–999 | Allow without a budget warning                 |
-|                    1,000–1,200 | Allow and show a persistent, non-modal warning |
-|                  1,201 or more | Block before materialization/layout/rendering  |
+This boundary keeps the Lab free to improve result presentation without coupling later phases to GraphMap internals.
 
-The safety count includes every node ReactFlow would materialize, including GraphMap's synthetic “More” controls. Telemetry also breaks out canonical graph nodes, synthetic nodes, and projected edges so the user-facing message remains explainable.
+## 8. Results UX
 
-Node count is the initial hard safety policy. Projected edge count and density are recorded for admitted views; a node-blocked view may stop before calculating edges. A separate edge warning/block threshold will be calibrated on representative dense graphs rather than guessed before measurement.
+### 8.1 Analyze route
 
-The legacy search-only warning above 400 nodes is removed and replaced by this shared contract; otherwise it would contradict the 0–999 no-warning range.
+`/lab/analyze` provides:
 
-### 7.2 Public package contract
+- Graph and operation selection.
+- Target, direction, threshold, strategy, timeout, and operation-specific parameters.
+- A queued/running/completed state model.
+- Cancellation where the operation supports it.
+- A result header containing operation version, actual strategy, graph identity, elapsed time, and execution status.
+- An operation-specific result body.
+- Optional GraphMap context using only the accepted package capabilities.
 
-GraphMap `0.3.0` should expose a typed contract similar to:
+Operation result bodies:
 
-```ts
-type GraphMapRenderBudget = {
-  warnAtNodes?: number; // default: 1000, inclusive
-  blockAboveNodes?: number; // default: 1200; 1200 is allowed
-};
+| Operation | Primary presentation |
+| --- | --- |
+| Strongest path | Path score, ordered node/edge steps, ranked alternatives, and optional emphasized path |
+| Evidence impact | Baseline, distribution, supporting/counter tabs, top-100 table, and optional selected-item context |
+| Critical counters | Threshold result, exact/greedy comparison, selected set, quality metrics, and optional selected-set context |
+| Node robustness | Metric definition, least-robust summary, distribution, top-100 table, raw deltas, and optional selected-path context |
 
-type RenderBudgetSource =
-  | "initial"
-  | "graph-update"
-  | "node-toggle"
-  | "show-more"
-  | "expand-all"
-  | "search"
-  | "controlled-view";
+The result panel must handle success with zero items, validation failure, timeout, cancellation, crash, and explicit skip without treating them as the same state.
 
-type RenderBudgetDecision = "allow" | "warn" | "block";
-```
+### 8.2 Performance route
 
-Node settings accept finite positive integers and must satisfy `warnAtNodes <= blockAboveNodes`. Invalid consumer configuration must never disable the safeguard: use the safe defaults and emit a structured configuration error. Edge thresholds are not part of the initial `0.3.0` contract; add them only after Phase 6 calibration demonstrates a need.
+`/lab/performance` provides:
 
-Expose the budget through GraphMap, CanonicalGraphMap, and AdaptedGraphMap. Emit a structured callback containing:
-
-- Source and decision.
-- Current and candidate graph-node counts.
-- Candidate synthetic-node and total-node counts.
-- Current edge count and candidate edge count when computed.
-- Whether candidate counts are exact or an “at least” lower bound.
-- Warning and blocking thresholds.
-- Preflight duration.
-- Block reason.
-
-Callbacks fire once per decision, not on every React render.
-
-### 7.3 Admission behavior
-
-Use one shared, pure admission decision for:
-
-- Initial and replacement graph projections.
-- Node toggle.
-- Show More and Show Fewer.
-- Expand All and Collapse All.
-- Search match-plus-ancestor projection.
-- Controlled strongest-path, critical-counter, evidence-impact, and robustness focus.
-- Future consumer-supplied result projections.
-
-The preflight must:
-
-1. Derive prospective distinct nodes iteratively and cycle-safely, stopping as soon as 1,201 is established when an exact count is not otherwise needed.
-2. Count shared-DAG nodes once.
-3. Include synthetic controls in the materialized total.
-4. Classify the node request as allow, warn, or block.
-5. If node-admitted, compute projected edges without invoking presentation callbacks and record density.
-6. Commit render-affecting expansion/canvas-view state atomically only when admitted. Search intent and result metadata may update while the canvas retains its safe projection.
-7. Invoke Dagre, node presenters, ReactFlow state changes, and viewport fitting only for an admitted projection.
-
-The existing recursive expansion traversal must not be used to preflight a 100K-deep chain. A node-blocked projection may omit its exact edge count rather than scanning or materializing edges unnecessarily.
-
-### 7.4 User behavior
-
-- Warning is non-modal, accessible, and does not require confirmation.
-- Blocked expansion leaves expansion state, selection, and viewport unchanged.
-- Collapse, Show Fewer, clearing search, and other node-reducing actions always remain available.
-- Expand All is disabled or safely rejected when its prospective view exceeds the budget.
-- Blocked search retains the query, match count, and required-node count while leaving the last safe ordinary graph visible.
-- Blocked search copy says “required to visualize,” not “total shown,” and Fit View is disabled.
-- A blocked controlled algorithm path leaves the complete textual/tabular result available.
-- No path is silently truncated; that would misrepresent the reasoning chain.
-- No end-user bypass is provided.
-- A blocked replacement graph must not display the previous graph as though it were the new one. Use the new graph's safe collapsed projection or an explicit empty blocked state.
-
-Compressed, windowed, or paged path visualization may be designed later. It is not part of the first release.
-
-### 7.5 View readiness
-
-Add an `onViewLifecycle` phase callback so the consumer can observe:
-
-- Search/preflight completed.
-- Layout completed.
-- React nodes committed.
-- Deferred edges committed.
-- Viewport fitting completed.
-- View warned or blocked.
-
-Reserve `onViewReady` for the terminal stable state of an admitted projection, whether allowed normally or admitted with a warning. A blocked view emits the lifecycle/render-budget event and never emits `onViewReady` for the rejected projection.
-
-### 7.6 Package delivery
-
-- Implement and test changes in the GraphMap source repository.
-- Bump the package to `0.3.0`.
-- Add a new immutable `0.3.0` npm tarball; do not overwrite the `0.2.0` artifact.
-- Record its checksum/provenance.
-- Update the vendor README/checksum metadata, `.gitignore` rules if needed, `package.json`, and the lockfile to the exact new tarball.
-- Verify `npm ci`, package type exposure, unit tests, consumer tests, and production build.
-
-## 8. Results and Visualization UX
-
-### 8.1 `/lab/analyze`
-
-Provide:
-
-- Graph and target selectors.
-- Operation registry and version display.
-- Operation-specific parameters.
-- Exact/greedy/auto strategy control where applicable.
-- Configurable counter probability threshold.
-- Run, cancel, and status controls.
-- Summary cards.
-- Distribution and compact quality metrics.
-- Deterministic top-100 table with total count.
-- Raw JSON export for the current result.
-- GraphMap result focus after render-budget admission.
-
-GraphMap presentation should use restrained outlines, badges, or card accents without overwriting the established support/rebut edge language. Selecting a result row may focus:
-
-- A strongest path.
-- Critical counters and their relevant chains.
-- Evidence-impact context.
-- The path responsible for a robustness score.
-
-If focus is blocked, the selected row, ordered textual path, counts, and reason remain visible.
-
-### 8.2 `/lab/performance`
-
-Provide:
-
-- Named suite selection.
-- Serial queue with pending/running/completed states.
-- Cancellation.
-- Per-run environment and dataset identity.
-- Phase timeline.
-- Sample distributions and percentile summaries.
-- Execution failure/timeout/crash inspection alongside independent visualization-admission inspection.
-- Historical trend and compatible-run comparison.
+- Scenario/profile selection.
+- Serial queue status and cancellation.
+- Current run phase and progress.
+- Median, p95, min/max, sample count, bytes, allocations, and other available resource metrics.
+- Phase waterfall or stacked timing view.
+- Compatible-run comparison over time.
+- Algorithm quality comparison where exact and approximate results overlap.
+- Failure, timeout, crash, and skip history.
+- Dataset, code, runtime, database, browser, and machine identity.
 - Versioned JSON export.
-- Explicit baseline promotion on the authoritative host.
 
-Do not mount unbounded result tables. History and ranked outputs are paged or limited to the retained top 100.
+### 8.3 Large result handling
+
+- Persist and render summaries, distributions, and deterministic top-100 rows by default.
+- Page or virtualize larger retained lists.
+- Keep the complete result cardinality and digest even when the full item list is external.
+- Never require the complete source graph or complete result list to be mounted in the browser to inspect an analysis.
+- Keep ordered textual paths available when an operation returns path data.
+- Make optional graph context a progressive enhancement.
 
 ## 9. Instrumentation Model
 
 ### 9.1 Correlation
 
-Assign a run ID and sample ID at the orchestrator. Propagate them through HTTP, server phases, worker execution, browser marks, persisted rows, and exported JSON.
+Assign one run ID to an explicit Lab or CLI run. Propagate it through:
 
-### 9.2 Required phases
+- Browser request headers.
+- ASP.NET request handling.
+- Repository calls.
+- Algorithm worker messages.
+- Benchmark samples.
+- Persisted outputs.
+- Exported artifacts.
 
-| Layer                 | Phases                                                                                                                                 |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| PostgreSQL/repository | Connection/open wait, graph lookup, node query, edge query, evidence JSON materialization, catalog aggregation                         |
-| Backend service/API   | DTO mapping, validation, calculation-context construction, algorithm subphases, ranking, result shaping, serialization                 |
-| Transport             | Response bytes, time to first byte, full transfer                                                                                      |
-| Browser data          | Axios receipt/parse, domain mapping, GraphMap adapter, search-index construction                                                       |
-| GraphMap              | Preflight, node/edge materialization, Dagre layout, React commit, deferred edge commit, viewport fit, `onViewLifecycle`, `onViewReady` |
-| End to end            | User/runner action through stable result and stable visual state                                                                       |
+### 9.2 Server phases
 
-Server phases should be available to the controlled Lab journey through structured timing data or `Server-Timing` headers while also being persisted with the sample.
+Record separate timings for:
 
-### 9.3 Required measurements
+- Graph metadata lookup.
+- Node query.
+- Edge query.
+- Evidence JSON materialization.
+- Graph/context construction.
+- Service DTO mapping.
+- Algorithm core phases.
+- Result reconstruction and sorting.
+- Result digest generation.
+- Persistence.
+- Response serialization and payload bytes.
 
-- Wall-clock duration in a named unit.
-- Iteration and warm/cold/JIT/cache classification.
-- Requested, canonical, synthetic, and rendered node counts.
-- Requested and rendered edge counts and density when computed.
-- Search match count and complete required ancestor-union count.
-- Result cardinality.
-- Request/response bytes.
-- Allocations, GC counts, CPU time, and working-set change where practical.
-- Execution outcome plus the independent visualization-admission outcome.
-- Exception/error classification without sensitive data.
+Do not use one “API time” value to stand in for all server work.
 
-Console output inside measured loops must be removed or disabled in benchmark execution because it distorts results.
+### 9.3 Algorithm phases
 
-## 10. Run Identity, Persistence, and Export
+At minimum:
 
-### 10.1 Reset-safe storage
+- Context build.
+- Candidate discovery.
+- Traversal or dynamic programming.
+- Exact subset search or greedy iterations.
+- Path reconstruction.
+- Scoring.
+- Sorting/top-N selection.
+- Output shaping and digest.
 
-Create an idempotently initialized PostgreSQL `benchmark` schema that is deliberately untouched by graph seed/reset scripts.
+Capture candidate count, visited nodes/edges, iteration count, result count, threshold attainment, timeout/cancellation checks, and operation-specific counters.
 
-Minimum tables:
+### 9.4 Browser and presentation phases
 
-- `benchmark.runs`: immutable identity/manifest fields plus mutable lifecycle status and completion fields.
-- `benchmark.samples`: per-iteration operation/phase measurements.
-- `benchmark.outputs`: compact result summary, top-100 payload, distribution, digest, and optional artifact reference.
+Capture where applicable:
 
-Prove with integration coverage that resetting graph data does not delete benchmark history.
+- Request start to response headers.
+- Full transfer.
+- JSON parse.
+- API-to-domain adaptation.
+- Search computation.
+- Node/edge model creation.
+- Consumer-observed GraphMap layout/render interval.
+- React commit.
+- Viewport settling.
+- Lab result-panel rendering.
 
-### 10.2 Run manifest
+Use the existing package as a black-box dependency. Consumer performance marks, React Profiler, browser timing, and Playwright observations provide the measurement seams. Document any phase that is approximate.
 
-Capture:
+### 9.5 Sample policy
 
-- Run ID, name, status, start/end time, and runner type.
-- Scenario and operation keys.
-- Graph slug, shape, actual node/edge counts, and maximum depth.
+- Separate setup from measured work.
+- Separate cold, warmup, and measured iterations.
+- Preserve raw samples; derive medians and percentiles afterward.
+- Record failures and partial phase data rather than discarding the run.
+- Never combine samples whose scenario, dataset, algorithm, parameters, environment profile, or units are incompatible.
+
+## 10. Persistence, Identity, and Export
+
+Use a dedicated PostgreSQL `benchmark` schema initialized idempotently and untouched by graph reset.
+
+### 10.1 Run identity
+
+Persist:
+
+- Run ID, scenario ID, status, timestamps, and profile.
+- Graph slug, shape, actual node/edge counts, and depth.
 - Dataset generator version.
 - Corpus ID and fingerprint.
 - Topology/input fingerprint.
-- Algorithm key and semantic version.
-- Requested/used strategy.
+- Operation key and semantic version.
+- Requested and actual strategy.
 - Canonical parameters and digest.
-- Target node/path IDs.
-- Git commit SHA and dirty-worktree flag.
+- Git SHA and dirty-worktree flag.
 - Build configuration.
-- .NET, Node, browser, GraphMap, PostgreSQL, and relevant dependency versions.
-- OS, architecture, CPU, logical core count, and memory.
-- Environment profile name.
-- Warmup/sample/cache policy.
-- Timeout/cancellation policy.
+- .NET, Node, browser, GraphMap, PostgreSQL, OS, CPU, and memory identity.
+- Warm/cold mode, warmup policy, and sample policy.
 
-The graph slug alone is not a sufficient dataset identity.
+Graph slug alone is not enough to establish comparability.
 
-### 10.3 Compatibility rules
+### 10.2 Samples
 
-Default comparison requires matching:
+Persist one row per operation phase and iteration with:
 
-- Scenario and operation.
+- Layer and phase.
+- Duration and units.
+- Warm/cold classification.
+- Allocations and GC counts where available.
+- Bytes and graph/result counts.
+- Success state and structured failure data.
+
+### 10.3 Outputs
+
+Persist:
+
+- Compact summary.
+- Distribution buckets.
+- Total cardinality.
+- Top 100 deterministic items.
+- Canonical result digest.
+- Quality/oracle metrics.
+- Optional external artifact URI and content digest.
+
+### 10.4 Compatibility
+
+Default comparisons require matching:
+
+- Scenario and profile.
 - Dataset/input fingerprint.
-- Algorithm semantic version.
+- Operation semantic version.
 - Canonical parameter digest.
-- Environment profile.
-- Build mode and measurement units.
+- Actual strategy where it changes behavior.
+- Build/runtime environment class.
+- Units and sample mode.
 
-The UI rejects or visibly labels incompatible comparisons. It never silently presents them as a regression/improvement pair.
+The UI may display incompatible runs together only with an explicit explanation; it must not calculate a regression percentage between them by default.
 
-### 10.4 JSON format
+### 10.5 Export policy
 
-- Version the export schema.
-- Include the complete manifest, samples, compact outputs, and digests.
-- Validate exported JSON against its versioned schema and canonical digests.
-- Upload raw run JSON as manual/scheduled CI artifacts.
-- Do not commit every noisy run to the repository.
-- Commit only deliberately promoted compact baseline metadata when desired.
+- Use a versioned common JSON schema.
+- Export the manifest, raw samples, summaries, output digest, and failure details.
+- Upload raw run JSON as local/manual/scheduled workflow artifacts.
+- Commit only deliberately promoted compact baselines, with provenance and hashes.
+- Do not make runtime code depend on a developer-local artifact path.
 
-## 11. Harnesses and Execution Policy
+## 11. Benchmark Harnesses
 
-### 11.1 Backend algorithm harness
+### 11.1 Pure algorithm harness
 
-Add a dedicated BenchmarkDotNet project for pure calculation-context and algorithm benchmarks:
+Add a dedicated BenchmarkDotNet project for:
 
-- Release build.
-- Deterministic immutable input per invocation.
-- Derived state cloned or recalculated per iteration when mutation is possible.
-- Allocation and GC diagnostics.
-- Parameterized operation, graph, target, and strategy.
+- Graph-context construction.
+- Strongest paths.
+- Evidence-impact ranking.
+- Robustness ranking.
+- Critical-counter exact/greedy/auto.
+- Likelihood recalculation.
 
-### 11.2 Orchestrator and CLI
+Use in-memory immutable fixtures derived from canonical stress specs. Exclude database, HTTP, and JSON work from core algorithm timings.
 
-Add a `tools/performance` runner that:
+Risky recursive or combinatorial scenarios run in a child process with timeout and crash capture.
 
-- Uses the common scenario registry and JSON schema.
-- Seeds/validates required graphs outside measured samples.
-- Runs suites serially by default.
-- Starts isolated workers for risky algorithms.
-- Applies timeout and cancellation.
-- Captures partial samples if a worker crashes.
-- Imports successful and failed outcomes into benchmark storage.
+### 11.2 REST and database harness
 
-### 11.3 API and browser harness
+Exercise the real PostgreSQL repository and API:
 
-Use Playwright for controlled API/UI journeys:
+- Catalog query with all stress graphs installed.
+- Complete graph fetch.
+- Analysis endpoint with database-loaded graph.
+- Analysis endpoint with supplied graph context where supported.
+- Response serialization and payload size.
+
+Seed/install time is setup, not graph-fetch or algorithm time.
+
+### 11.3 Browser harness
+
+Use Playwright for controlled journeys:
 
 - Actual REST graph fetch.
 - Browser parse and adaptation.
-- Search and preflight.
-- Safe GraphMap layout/render.
-- Warned and blocked render-budget outcomes.
-- Lab result rendering and result focus.
+- Search computation and result metadata.
+- Representative GraphMap render measurement using existing capabilities.
+- Lab result rendering.
+- Optional selected-result graph context.
 
-Use React Profiler/performance marks, `onViewLifecycle`, and terminal `onViewReady` for controlled phase boundaries. DOM settling alone is only a fallback approximation.
+Use React Profiler and consumer performance marks where stable. Treat DOM settling as an approximation and identify it as such in the recorded phase.
 
 ### 11.4 Run modes
 
@@ -540,74 +494,91 @@ Never mix cold and warm samples in one percentile series. Benchmark setup and se
 
 The canonical matrix comes from [`StressGraphSeedCatalog.cs`](../../backend/Seeding/StressGraphSeedCatalog.cs):
 
-| Shape              |  1K | 10K | 100K | Primary stress                                                |
-| ------------------ | --: | --: | ---: | ------------------------------------------------------------- |
-| Balanced tree      | Yes | Yes |  Yes | Breadth and ordinary depth                                    |
-| Wide star          | Yes | Yes |  Yes | Fan-out, payload, ranking, and layout width                   |
-| Deep chain         | Yes | Yes |  Yes | Recursion, path length, and oversized search/path projection  |
-| Shared-diamond DAG | Yes | Yes |  Yes | Shared ancestry, unique counting, and roughly 2x edge density |
+| Shape | 1K | 10K | 100K | Primary stress |
+| --- | ---: | ---: | ---: | --- |
+| Balanced tree | Yes | Yes | Yes | Breadth and ordinary depth |
+| Wide star | Yes | Yes | Yes | Fan-out, payload, ranking, and layout width |
+| Deep chain | Yes | Yes | Yes | Recursion and path length |
+| Shared-diamond DAG | Yes | Yes | Yes | Shared ancestry, unique counting, and roughly 2x edge density |
 
 Persist generator version, corpus ID/fingerprint, and topology fingerprint for every run.
 
 ### 12.1 Canonical scenarios
 
-| Scenario                                | 1K expectation                                       | 10K expectation                                                  | 100K expectation                                                 |
-| --------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Catalog fetch with all graphs installed | Measure                                              | Measure                                                          | Measure                                                          |
-| Full graph REST fetch                   | Measure                                              | Measure                                                          | Measure                                                          |
-| Initial collapsed GraphMap projection   | Render                                               | Render                                                           | Render                                                           |
-| Full expansion                          | Render with warning at the actual materialized count | Stop at the blocking boundary before layout and record preflight | Stop at the blocking boundary before layout and record preflight |
-| Search: no hit                          | Compute, no result view                              | Compute, no result view                                          | Compute, no result view                                          |
-| Search: single shallow hit              | Render if admitted                                   | Render if admitted                                               | Render if admitted                                               |
-| Search: known multi-hit such as `999`   | Render or warn by count                              | Admit or block by required union                                 | Admit or block by required union                                 |
-| Search: deepest-chain hit               | Render through budget                                | Expected block when over budget                                  | Expected block when over budget                                  |
-| Strongest path                          | Compute and focus if admitted                        | Compute; focus subject to budget                                 | Compute; focus subject to budget                                 |
-| Evidence-impact ranking                 | Compute                                              | Compute                                                          | Compute or record timeout/failure                                |
-| Node robustness ranking                 | Compute                                              | Isolated compute                                                 | Isolated compute                                                 |
-| Likelihood recalculation                | Compute                                              | Compute                                                          | Compute                                                          |
-| Critical counter exact                  | Candidate-limited                                    | Candidate-limited                                                | Candidate-limited                                                |
-| Critical counter greedy/auto            | Compute                                              | Compute                                                          | Compute or record timeout/failure                                |
+| Scenario | 1K | 10K | 100K |
+| --- | --- | --- | --- |
+| Catalog fetch with all graphs installed | Measure | Measure | Measure |
+| Full graph REST fetch | Measure | Measure | Measure |
+| Initial collapsed GraphMap projection | Measure | Measure | Measure |
+| Full expansion | Measure | Not scheduled | Not scheduled |
+| Search: no hit | Compute and report counts | Compute and report counts | Compute and report counts |
+| Search: single shallow hit | Compute; optional representative graph context | Compute; optional representative graph context | Compute; result metadata is sufficient |
+| Search: known multi-hit such as `999` | Compute matches and required ancestor union | Compute matches and required ancestor union | Compute matches and required ancestor union |
+| Search: deepest-chain hit | Compute and validate ordered ancestry | Compute and validate ordered ancestry | Compute and validate ordered ancestry |
+| Strongest path | Compute; optional graph context | Compute; graph context is scenario-specific | Compute; textual/tabular result required |
+| Evidence-impact ranking | Compute | Compute | Compute or record timeout/failure |
+| Node robustness ranking | Compute | Isolated compute | Isolated compute |
+| Likelihood recalculation | Compute | Compute | Compute |
+| Critical counter exact | Candidate-limited | Candidate-limited | Candidate-limited |
+| Critical counter greedy/auto | Compute | Compute | Compute or record timeout/failure |
 
-Search scenarios record both match count and complete required-node union. A blocked render is an expected successful safety outcome, not an algorithm failure.
+Search scenarios record both match count and the complete required-node union. Algorithm scenarios record complete result identity even when the browser journey presents only summaries, top items, or an ordered path.
 
-### 12.2 Boundary fixtures
+### 12.2 Presentation fixtures
 
-Add deterministic projection fixtures for:
+Maintain deterministic browser fixtures for:
 
-- 999 materialized nodes: allow, no warning.
-- 1,000 materialized nodes: allow and warn.
-- 1,200 materialized nodes: allow and warn.
-- 1,201 materialized nodes: block.
+- Collapsed graph rendering at each dataset scale.
+- Compact search results with known match and ancestor-union counts.
+- Full expansion of the designated small dataset.
+- Strongest-path result presentation.
+- Critical-counter result presentation.
+- Evidence-impact and robustness rankings.
+- Empty, failed, timed-out, cancelled, crashed, and skipped result states.
 
-Cover trees, shared DAGs, cycles, synthetic More controls, graph replacement, and controlled algorithm views.
+These fixtures test result presentation and measurement; they do not define algorithm semantics.
 
 ## 13. Phased Implementation Plan
 
 ### Phase 0 — Freeze contracts
 
+**Status:** Completed and committed. Phase 3.5 will reconcile affected artifacts with the current plan.
+
 Implementation record: [Phase 0 frozen contracts](../contracts/insights-lab/phase-0-contracts.md).
 
-Deliver:
+Execution constraints for any reconciliation work:
+
+- Do not use `orchestrate-bounded-goals`.
+- Do not use `curate-review-artifacts`.
+- Do not create, stage, amend, or otherwise manage commits. Leave all commits for the user to make.
+
+Delivered:
 
 - Operation registry and semantic-version rules.
 - Critical-counter candidate/removal contract and deterministic tie rules.
 - `robustness-v0` characterization and partner semantic checkpoint.
 - Run manifest, sample, output, failure-state, and JSON contracts.
-- GraphMap render-budget contract.
 - Golden fixtures for current algorithm behavior.
 
 Acceptance:
 
-- The 999/1,000/1,200/1,201 render decisions are unambiguous.
 - Current algorithm outputs have canonical digests on small fixtures.
 - Incompatible-run rules are executable specifications.
-- No benchmark history is declared authoritative before these contracts are frozen.
+- No benchmark history is declared authoritative before the contracts are frozen.
 
 ### Phase 1 — Measurement and persistence foundation
 
+**Status:** Completed and committed. Phase 3.5 will reconcile affected artifacts with the current plan.
+
 Implementation record: [Phase 1 frozen contracts](../contracts/insights-lab/phase-1-contracts.md).
 
-Deliver:
+Execution constraints for any reconciliation work:
+
+- Do not use `orchestrate-bounded-goals`.
+- Do not use `curate-review-artifacts`.
+- Do not create, stage, amend, or otherwise manage commits. Leave all commits for the user to make.
+
+Delivered:
 
 - Correlation IDs and common phase names.
 - Repository/API/transport timing seams.
@@ -623,32 +594,25 @@ Acceptance:
 - Exported JSON validates without digest changes.
 - Graph reset demonstrably preserves benchmark history.
 
-### Phase 2 — GraphMap 0.3.0 safety and lifecycle
+### Phase 2 — Dropped: GraphMap package expansion
 
-Deliver:
+**Status:** Dropped after review. No Phase 2 work is required or carried forward.
 
-- Shared iterative render-budget preflight.
-- Atomic expansion state transitions.
-- Search, expansion, graph-update, and controlled-view admission.
-- Warning and blocked UX.
-- Structured render-budget events.
-- Controlled result focus.
-- `onViewLifecycle`.
-- `onViewReady`.
-- Versioned package/tarball integration.
-
-Acceptance:
-
-- All entry paths pass boundary tests at 999, 1,000, 1,200, and 1,201.
-- A rejected projection does not invoke node presenters, Dagre, ReactFlow state updates, or viewport fitting. An independently admitted collapsed fallback for a replacement graph may render.
-- A 100K-deep candidate establishes the 1,201-node block without recursion failure or work proportional to layout of the complete chain.
-- Blocked same-graph actions preserve the last safe state; graph replacement never leaves stale prior-graph content labeled as current.
-- Node-reducing actions remain available.
-- GraphMap `0.3.0` installs cleanly from the vendored tarball and exposes the new public types.
+The proposed GraphMap node-limit and associated package/API expansion will not be integrated, packaged, vendored, or used as a dependency. The currently accepted GraphMap package remains the baseline. Cleanup of related artifacts introduced elsewhere belongs exclusively to Phase 3.5.
 
 ### Phase 3 — Versioned analysis operations
 
-Deliver:
+**Status:** Completed and committed. Phase 3.5 will reconcile affected artifacts with the current plan.
+
+Implementation record: [Phase 3 frozen contracts](../contracts/insights-lab/phase-3-contracts.md).
+
+Execution constraints for any reconciliation work:
+
+- Do not use `orchestrate-bounded-goals`.
+- Do not use `curate-review-artifacts`.
+- Do not create, stage, amend, or otherwise manage commits. Leave all commits for the user to make.
+
+Delivered:
 
 - Rich strongest-path output with ordered paths.
 - Versioned evidence-impact result contract.
@@ -666,7 +630,52 @@ Acceptance:
 - Result summaries, top 100, totals, paths, and digests are deterministic.
 - No measured operation writes Console output inside its hot loop.
 
+### Phase 3.5 — Remove dropped GraphMap node-limit artifacts
+
+**Status:** Not started. This is the next phase and is required before Phase 4.
+
+Purpose: remove all work related to the abandoned feature that entered the repository through Phases 0, 1, and 3, while preserving the analysis, measurement, and result contracts those phases otherwise delivered.
+
+Execution constraints:
+
+- Do not use `orchestrate-bounded-goals`.
+- Do not use `curate-review-artifacts`.
+- Do not create, stage, amend, or otherwise manage commits. Leave all commits for the user to make.
+
+Deliver:
+
+- Remove limit, budget, preflight, warning, rejection, and visualization-status language and fields from the Phase 0 operation and result contracts.
+- Remove related persistence columns, domain fields, timing names, export-schema properties, examples, repository mappings, and tests introduced in Phase 1.
+- Remove related request/response fields, analysis DTO mappings, adapters, digest inputs, and tests introduced in Phase 3.
+- Update the Phase 0, Phase 1, and Phase 3 contract records so their active contracts match this plan.
+- Retain the last accepted GraphMap artifact and remove every dependency on the dropped package work.
+- Remove threshold-specific fixtures and UI/CI expectations.
+- Preserve neutral graph, node, edge, search, adaptation, layout, React, viewport, and result-render measurements.
+- Preserve ordered paths, ranked results, operation semantic versions, canonical algorithm digests, benchmark history, and unrelated export data.
+- Before changing the export contract, determine whether any v1 benchmark data must remain readable:
+  - If no durable v1 data exists, revise the pre-baseline v1 schema and example in place.
+  - If durable v1 data exists, introduce an explicit compatible reader or schema revision and document the conversion.
+- Update tests and documentation to prove the cleanup without changing unrelated algorithm behavior.
+
+Acceptance:
+
+- No active runtime, database, export, UI, public contract, or test expectation contains the abandoned feature.
+- This Phase 3.5 cleanup record and the Phase 2 decision record are the only remaining mentions of it in this plan.
+- The currently accepted GraphMap dependency installs and builds without any new package API.
+- Phase 0/1/3 correctness, persistence, export, compatibility, and algorithm-digest tests pass after cleanup.
+- Consumer-side GraphMap and result-render timing remains measurable.
+- No unrelated benchmark history or result data is lost.
+- Phase 4 does not begin until this phase is complete.
+
 ### Phase 4 — Benchmark runners
+
+**Status:** Not started. Depends on Phase 3.5.
+
+Execution constraints:
+
+- Do not use `orchestrate-bounded-goals`.
+- Do not use `curate-review-artifacts`.
+- Do not create, stage, amend, or otherwise manage commits. Leave all commits for the user to make.
 
 Deliver:
 
@@ -676,15 +685,25 @@ Deliver:
 - Playwright API/browser suites.
 - Warm/cold/named profile support.
 - Artifact production and benchmark-store persistence.
+- Consumer-side GraphMap and Lab result-render measurement.
 
 Acceptance:
 
 - A failed or stack-overflowing worker cannot terminate the API or lose prior samples.
 - Dataset digests make repeated runs reproducible.
 - DB/API/algorithm/browser phases reconcile within documented overhead.
-- Warned and blocked GraphMap outcomes are captured as first-class measurements.
+- GraphMap and result-render timings identify any approximate browser-observed boundaries.
+- Repeated runs produce valid persisted records and portable JSON.
 
 ### Phase 5 — Insights Lab UI
+
+**Status:** Not started. Depends on Phase 4.
+
+Execution constraints:
+
+- Do not use `orchestrate-bounded-goals`.
+- Do not use `curate-review-artifacts`.
+- Do not create, stage, amend, or otherwise manage commits. Leave all commits for the user to make.
 
 Deliver:
 
@@ -692,44 +711,55 @@ Deliver:
 - `/lab/performance`.
 - Parameter controls and queued run status.
 - Summary, distribution, top-100, history, and compatibility-aware comparison views.
-- Safe GraphMap result focus.
+- Ordered textual path presentation.
+- Optional result context through the existing GraphMap integration.
 - Versioned JSON export.
 
 Acceptance:
 
 - Every registered analysis displays its operation/version, execution status, summary or empty state, and total count.
-- A 100K analysis can be inspected without mounting thousands of rows or invoking an unsafe GraphMap layout.
-- Over-budget results display the admission status/reason and an ordered textual path when the operation returns one.
-- Warning and block messages are accessible.
+- A 100K analysis can be inspected through summaries, distributions, top rows, and ordered paths without rendering the complete graph.
+- Strongest-path and other path-bearing results remain understandable without GraphMap.
+- Existing GraphMap capabilities can add context to a selected result without changing the package.
 - Stale responses cannot replace newer graph/target selections.
+- Result states and controls meet accessibility expectations.
 
 ### Phase 6 — Calibration and authoritative baselines
+
+**Status:** Not started. Depends on Phase 5.
+
+Execution constraints:
+
+- Do not use `orchestrate-bounded-goals`.
+- Do not use `curate-review-artifacts`.
+- Do not create, stage, amend, or otherwise manage commits. Leave all commits for the user to make.
 
 Deliver:
 
 - Auto-strategy candidate cutoff calibrated as the largest count whose median exact core runtime is at most two seconds for every required calibration scenario under the authoritative `standard` profile.
-- Edge-density evidence and, if needed, GraphMap edge thresholds.
-- Deep-chain robustness validation and iterative equivalent if required.
+- Deep-chain robustness validation and an iterative equivalent if required.
 - Named authoritative baseline suite on `ll-arm64-mac-primary`.
 - Manual/scheduled informational workflow and artifacts.
+- Documented browser and result-render baselines for the designated scenarios.
 
 Acceptance:
 
 - The accepted 100K dataset/corpus has stable identity fingerprints.
-- One named baseline covers every supported operation, shape, and size or records an explicit skip/timeout/failure.
-- Full expansion succeeds only in the supported range; 10K/100K rejection establishes the blocking boundary without invoking presenters, layout, or the rejected ReactFlow update, and records preflight duration.
+- One named baseline covers every supported operation, shape, and size or records an explicit skip, timeout, failure, or crash.
 - Every baseline has complete environment, code, dataset, algorithm, and parameter identity.
+- Algorithm quality and performance comparisons follow the compatibility rules.
+- Browser scenarios clearly distinguish source-graph work, result-panel work, and optional graph presentation.
 - Performance remains informational and does not gate ordinary pull requests.
 
 ### Dependency order
 
 ```text
-Phase 0 ──┬──> Phase 1 ──> Phase 3 ──> Phase 4 ──┐
-          └──> Phase 2 ──────────────────────────┼──> Phase 5 ──> Phase 6
-                                                 ┘
+Phase 0 → Phase 1 → Phase 3 → Phase 3.5 → Phase 4 → Phase 5 → Phase 6
+
+Phase 2: dropped; no dependency edges and no implementation work
 ```
 
-GraphMap admission safety must land before algorithm-driven canvas focus is enabled.
+Phase 3.5 is the only cleanup prerequisite. No later phase depends on Phase 2.
 
 ## 14. Verification Matrix
 
@@ -758,35 +788,31 @@ GraphMap admission safety must land before algorithm-driven canvas focus is enab
 - Paging/top-100 behavior.
 - Empty-body model binding where supported.
 
-### 14.3 GraphMap
+### 14.3 GraphMap integration
 
-- Every admission source at 999, 1,000, 1,200, and 1,201.
-- Unique counting in shared DAGs.
-- Cycle-safe and deep iterative preflight.
-- Synthetic More-node accounting.
-- Atomic rejected expansion.
-- Search retains query/counts and skips layout.
-- Graph replacement cannot display stale graph identity.
-- Reducing actions remain enabled.
-- One callback per decision.
-- Accessible warning/live-region behavior.
-- `onViewLifecycle` ordering and terminal `onViewReady` behavior.
-- Package tarball public-type consumer test.
+- The currently accepted package installs and builds unchanged.
+- Existing search behavior continues to return correct match and ancestor-union metadata.
+- Existing graph adaptation preserves node and edge identity.
+- Existing presentation hooks emphasize selected result nodes and edges correctly where used.
+- Consumer-side timing marks and Playwright measurements are correlated to the run.
+- Browser-observed timing boundaries are labeled as approximate.
+- Existing GraphMap regression tests remain green.
 
 ### 14.4 Frontend Lab
 
 - Operation-specific controls and validation.
 - Queue, cancellation, and status transitions.
 - Summary/top-100/distribution rendering.
+- Ordered path rendering.
 - Compatible and incompatible history comparisons.
-- Safe row-to-GraphMap focus.
-- Blocked results show execution status, admission reason, counts, and an ordered textual path when applicable.
+- Optional row-to-graph context using existing capabilities.
 - Stale response suppression.
+- Empty, failed, timed-out, cancelled, crashed, and skipped states.
 - Storybook states, accessibility, Vitest, Cucumber, and Playwright journeys.
 
 ## 15. CI and Baseline Policy
 
-- Keep deterministic correctness, contract, digest, and GraphMap safety tests in ordinary CI.
+- Keep deterministic correctness, contract, digest, and result-rendering tests in ordinary CI.
 - Add PostgreSQL integration coverage using a controlled real database fixture.
 - Keep performance runs out of pull-request pass/fail decisions.
 - Provide manual and optional scheduled performance workflows.
@@ -797,29 +823,27 @@ GraphMap admission safety must land before algorithm-driven canvas focus is enab
 
 ## 16. Risks and Mitigations
 
-| Risk                                           | Mitigation                                                                                                |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Full graph loading dominates every algorithm   | Time graph retrieval/context separately; enable future reuse only after baseline semantics are preserved. |
-| Exact counter search explodes                  | Candidate cutoff, timeout, cancellation, isolated process, and explicit skipped/timed-out outcomes.       |
-| Greedy result is mislabeled minimal            | Report strategy and threshold attainment; reserve optimal/minimal language for proven exact output.       |
-| Robustness semantics are misunderstood         | Freeze `robustness-v0`, expose raw components/path, complete partner checkpoint, and version revisions.   |
-| Deep recursion terminates a process            | Isolated workers, deep scenarios, iterative equivalents, and crash recording.                             |
-| GraphMap freezes before showing a warning      | Shared pre-layout admission, atomic state, hard block above 1,200.                                        |
-| A dense graph defeats the node ceiling         | Record edges/density from day one and calibrate a separate edge budget.                                   |
-| Search/path truncation misrepresents reasoning | Block visualization and retain full textual result; never silently truncate.                              |
-| Benchmark reset deletes history                | Separate reset-safe schema and integration test.                                                          |
-| Seed or corpus changes invalidate trends       | Persist generator, corpus, topology, and input fingerprints.                                              |
-| Hosted runner noise looks like regression      | Authoritative named host; hosted results informational only.                                              |
-| Large outputs overwhelm DB/UI                  | Top 100, summaries/distributions, digest, paging, optional external artifact.                             |
-| Instrumentation changes measured behavior      | Keep phases lightweight, measure overhead, and preserve raw samples.                                      |
+| Risk | Mitigation |
+| --- | --- |
+| Full graph loading dominates every algorithm | Time graph retrieval/context separately; enable future reuse only after baseline semantics are preserved. |
+| Exact counter search explodes | Candidate cutoff, timeout, cancellation, isolated process, and explicit skipped/timed-out outcomes. |
+| Greedy result is mislabeled minimal | Report strategy and threshold attainment; reserve optimal/minimal language for proven exact output. |
+| Robustness semantics are misunderstood | Freeze `robustness-v0`, expose raw components/path, complete partner checkpoint, and version revisions. |
+| Deep recursion terminates a process | Isolated workers, deep scenarios, iterative equivalents, and crash recording. |
+| Canvas presentation obscures the real result | Make summaries, tables, distributions, and ordered paths authoritative; use graph context only as an optional aid. |
+| GraphMap core changes create disproportionate risk | Keep the accepted dependency unchanged and instrument it from the consumer. |
+| Benchmark reset deletes history | Separate reset-safe schema and integration test. |
+| Seed or corpus changes invalidate trends | Persist generator, corpus, topology, and input fingerprints. |
+| Hosted runner noise looks like regression | Authoritative named host; hosted results informational only. |
+| Large outputs overwhelm DB/UI | Top 100, summaries/distributions, digest, paging, optional external artifact. |
+| Instrumentation changes measured behavior | Keep phases lightweight, measure overhead, and preserve raw samples. |
 
 ## 17. Non-Goals
 
+- Modifying, repackaging, or versioning GraphMap source or its public API.
 - Rendering or virtualizing complete 10K/100K graphs.
 - Replacing ReactFlow or Dagre.
-- A user-facing unsafe render override.
-- Silent path truncation.
-- Compressed/windowed GraphMap paths in the first release.
+- Making canvas presentation necessary to understand an analysis result.
 - Guaranteeing greedy optimality.
 - Unbounded exact counter execution.
 - Redefining `robustness-v0` without a new semantic version.
@@ -834,25 +858,24 @@ The initiative is complete when:
 
 - Every registered analysis returns an explainable, versioned result in `/lab/analyze`.
 - Exact/greedy/auto critical-counter behavior is implemented and compared on tractable cases.
-- Robustness has a frozen semantic contract, rich path/result output, and safe deep-graph behavior.
-- Database, API, algorithm, transport, browser, and GraphMap phases are independently measurable.
+- Robustness has a frozen semantic contract, rich path/result output, and contained deep-graph behavior.
+- Database, API, algorithm, transport, browser, result-panel, and GraphMap phases are independently measurable to the precision documented for each phase.
 - Explicit runs persist across graph resets and export portably.
 - Compatible historical runs can be compared without conflating dataset, algorithm, parameter, or environment changes.
-- GraphMap warns at 1,000, allows through 1,200, and blocks 1,201+ consistently at every view entry point.
-- No rejected projection invokes expensive layout/render work. Same-graph rejection preserves the last safe state; replacement uses the new graph's safe fallback or explicit blocked state.
-- 1K full expansion is covered; 10K/100K visualization is safely partial or rejected.
 - The 12-graph deterministic matrix has a named authoritative baseline or an explicit recorded outcome.
-- Correctness and safety tests run in normal CI; performance suites remain named and informational.
-- The GraphMap `0.3.0` tarball, frontend integration, CLI, UI, storage, tests, and operational documentation are verified from a clean checkout.
+- Full expansion is benchmarked for the designated small dataset; large datasets retain complete algorithm and textual/tabular result coverage.
+- Optional GraphMap result context works through the unchanged accepted dependency.
+- Correctness tests run in normal CI; performance suites remain named and informational.
+- The frontend integration, CLI, UI, storage, tests, and operational documentation are verified from a clean checkout.
 
 ## 19. Pre-Implementation Checkpoints
 
-No further user decision is required before implementation begins. The following are execution checkpoints already contained in the plan:
+Phase 3.5 is the next required implementation phase. After it is complete:
 
 1. Confirm `robustness-v0` semantics with the algorithm partner before calling its baseline authoritative.
-2. Freeze candidate eligibility/removal semantics for critical counters in golden cases.
+2. Confirm candidate eligibility/removal semantics for critical counters against the frozen golden cases.
 3. Complete and fingerprint the accepted 100K dataset/corpus before promoting historical baselines.
 4. Calibrate the auto-strategy candidate cutoff on the authoritative host.
-5. Measure dense views and set an edge budget if the evidence requires one.
+5. Establish the named browser/result-render scenarios used for authoritative comparison.
 
-Implementation authorization currently extends through Phase 1 only. Phases 2–6 remain unstarted until separately authorized.
+This revision authorizes only the planning-document update. Phase 3.5 and Phases 4–6 remain unstarted until the user explicitly starts them. All implementation commits are left for the user to make.
