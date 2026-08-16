@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<GraphLikelihoodCalculator>();
         services.AddSingleton<GraphBayesFactorPruner>();
         services.AddSingleton<GraphBayesFactorCalculator>();
+        services.AddSingleton<GraphPosteriorOddsCalculator>();
 
         return services;
     }

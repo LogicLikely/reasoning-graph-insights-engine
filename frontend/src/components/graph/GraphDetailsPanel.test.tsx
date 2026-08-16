@@ -69,6 +69,10 @@ describe('GraphDetailsPanel', () => {
     const submittedData = onUpdate.mock.calls[0][1]
     expect(submittedData.kind).toBeUndefined()
     expect(submittedData.priorOdds).toBeCloseTo(Math.log(0.245 / 0.755), 5)
+    expect(submittedData.posteriorOdds - submittedData.priorOdds).toBeCloseTo(
+      node!.posteriorOdds - node!.priorOdds,
+      5,
+    )
     expect(onUpdateEdge).toHaveBeenCalledWith('E-C1-E1', {
       importanceToParent: 7,
       probabilityGivenParent: 0.8,
@@ -107,6 +111,7 @@ describe('GraphDetailsPanel', () => {
     expect(onAddSupporting.mock.calls[0][0]).toBe('E1')
     expect(submittedData.kind).toBe('objection')
     expect(submittedData.priorOdds).toBeCloseTo(Math.log(0.65 / 0.35), 5)
+    expect(submittedData.posteriorOdds).toBeCloseTo(Math.log(0.65 / 0.35), 5)
     expect(onAddSupporting.mock.calls[0][2]).toEqual({
       kind: 'rebut',
       importanceToParent: 4,

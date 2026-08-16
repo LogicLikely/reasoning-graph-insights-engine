@@ -15,6 +15,10 @@ public enum PathDirection
     Down
 }
 
+/// <summary>
+/// Provides legacy ImportanceToParent-based path analytics. Persisted
+/// posterior log odds are calculated by <see cref="GraphPosteriorOddsCalculator"/>.
+/// </summary>
 public sealed class GraphLikelihoodCalculator
 {
     private const decimal MinLogOdds = -100m;

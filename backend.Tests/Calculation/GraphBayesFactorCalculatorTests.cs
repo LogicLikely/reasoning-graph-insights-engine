@@ -9,6 +9,20 @@ public class GraphBayesFactorCalculatorTests
     private readonly GraphBayesFactorCalculator _calculator = new();
 
     [TestMethod]
+    public void Calculate_PreservesDecimalPrecisionForLeafBayesFactor()
+    {
+        const decimal leafBayesFactor = 0.1234567890123456789012345678m;
+        var graph = GraphWith([Node("H")], []);
+
+        decimal result = _calculator.Calculate(
+            graph,
+            "H",
+            new Dictionary<string, decimal> { ["H"] = leafBayesFactor });
+
+        Assert.AreEqual(leafBayesFactor, result);
+    }
+
+    [TestMethod]
     public void Calculate_ReturnsSuppliedBayesFactorWhenHypothesisIsALeaf()
     {
         var graph = GraphWith([Node("H")], []);

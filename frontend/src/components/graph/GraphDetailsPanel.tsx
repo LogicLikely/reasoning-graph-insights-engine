@@ -193,22 +193,31 @@ export function GraphDetailsPanel({
     if (!isFormValid) return
 
     const probability = Number(formData.likelihoodPercent) / 100
+    const priorLogOdds = probabilityToLogOdds(probability)
     const submissionData: Partial<GraphFixtureNode> = {
       title: (formData.title ?? '').trim(),
       bodyText: (formData.bodyText ?? '').trim(),
-      priorOdds: probabilityToLogOdds(probability)
+      priorOdds: priorLogOdds
     }
 
     if (mode === 'add') {
       onAddSupporting?.(node.id, {
         ...submissionData,
         kind: formData.kind,
+        // Until an observation is authored, log(BF) = posterior - prior = 0.
+        posteriorOdds: priorLogOdds,
         tags: ['dynamic']
       }, {
         kind: derivedEdgeKind,
         ...parentEdgeWeights,
       })
     } else if (mode === 'edit') {
+      if (node.kind === 'evidence' || node.kind === 'objection') {
+        // Prior/posterior are both log odds. Move them together so editing the
+        // displayed prior does not silently change the authored leaf log(BF).
+        submissionData.posteriorOdds = priorLogOdds +
+          (node.posteriorOdds - node.priorOdds)
+      }
       onUpdate?.(node.id, submissionData)
       parentRelations.forEach((relation) => {
         const nextWeights = parseEdgeWeightFormData(

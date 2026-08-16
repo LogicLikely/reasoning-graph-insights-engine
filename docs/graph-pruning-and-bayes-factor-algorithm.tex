@@ -37,32 +37,53 @@
 
 \section{Purpose and Scope}
 
-This document describes the two-stage algorithm implemented by
-\texttt{GraphBayesFactorPruner} and \texttt{GraphBayesFactorCalculator}.
-The stages are deliberately separate:
+This document describes the three-stage posterior-odds flow implemented by
+\texttt{GraphBayesFactorPruner}, \texttt{GraphBayesFactorCalculator}, and
+\texttt{GraphPosteriorOddsCalculator}.  The stages have deliberately separate
+responsibilities:
 
 \begin{enumerate}
     \item The \emph{graph-pruning stage} selects a compatible collection of
           strong evidence-to-hypothesis paths.
     \item The \emph{Bayes-factor stage} evaluates the pruned graph using two
           conditional probabilities on every retained edge.
+    \item The \emph{posterior-odds stage} supplies structural leaf inputs,
+          invokes the first two stages, and applies the resulting log Bayes
+          factor to a node's prior log odds.
 \end{enumerate}
 
-Neither stage updates posterior odds.  Leaf Bayes factors are supplied
-explicitly to the calculator, and the result is an ordinary Bayes factor for
-the requested hypothesis.
+The pruner and BF calculator remain pure with respect to node odds: neither
+reads nor updates them.  The BF calculator accepts either ordinary leaf Bayes
+factors or natural-log leaf Bayes factors.  Posterior integration is confined
+to \texttt{GraphPosteriorOddsCalculator}.
 
-The complete caller-side flow is therefore
+The persisted node fields \texttt{PriorOdds} and \texttt{PosteriorOdds} store
+\emph{natural-log odds}, despite the shorter field names.  Writing
+\(L_{\mathrm{prior}}(v)=\log O_{\mathrm{prior}}(v)\) and
+\(L_{\mathrm{post}}(v)=\log O_{\mathrm{post}}(v)\), the complete flow for a
+requested hypothesis \(H\) is
 \[
     G_H^{\star}
         = \operatorname{Prune}(G,H),
     \qquad
-    \BF_H
-        = \operatorname{Calculate}(G_H^{\star},H,\mathcal{B}_{\mathrm{leaf}}),
+    \lambda_H
+        = \operatorname{CalculateLogBayesFactor}
+          (G_H^{\star},H,\Lambda_{\mathrm{leaf}}),
+    \qquad
+    L_{\mathrm{post}}(H)
+        = \operatorname{clamp}
+          \bigl(L_{\mathrm{prior}}(H)+\lambda_H,-100,100\bigr),
 \]
 where \(G_H^{\star}\) is the pruned graph and
-\(\mathcal{B}_{\mathrm{leaf}}\) maps relevant leaf-node identifiers to their
-externally supplied Bayes factors.
+\(\lambda_H=\log\BF_H\).  The dictionary
+\(\Lambda_{\mathrm{leaf}}\) maps every structural leaf in the pruned graph to
+its natural-log Bayes factor.  Thus the implemented update is
+\[
+    \boxed{
+    \log O_{\mathrm{post}}(H)
+      = \log O_{\mathrm{prior}}(H)+\log\BF_H}.
+\]
+It is an update of \emph{log odds}, not an update of log probability.
 
 \section{Graph Model and Direction}
 
@@ -105,6 +126,17 @@ The two probabilities are separately specified model parameters; neither is
 determined by the other.  The stored edge kind (for example, \texttt{support} or
 \texttt{rebut}) does not alter either numerical algorithm.
 
+Each node also stores \texttt{PriorOdds} and \texttt{PosteriorOdds}.  Both are
+natural-log odds:
+\[
+    \texttt{PriorOdds}(v)=\log O_{\mathrm{prior}}(v),
+    \qquad
+    \texttt{PosteriorOdds}(v)=\log O_{\mathrm{post}}(v).
+\]
+These values are intentionally absent from path pruning and from the pure BF
+recurrence.  They are interpreted only by the posterior-odds orchestration
+stage described in Stage~III.
+
 For a node \(v\), define
 \begin{align*}
     \Parents(v)
@@ -141,7 +173,9 @@ The algorithms use the following assumptions.
     \item Every relevant path-ranking weight satisfies \(r_e>0\).
     \item Every retained conditional probability satisfies
           \(0\leq a_e\leq 1\) and \(0\leq b_e\leq 1\).
-    \item Every relevant leaf has a supplied Bayes factor greater than zero.
+    \item When the ordinary-BF API is used, every relevant leaf has a supplied
+          Bayes factor greater than zero.  The log-BF API instead accepts a
+          natural-log BF directly.
     \item Claim co-dependencies have been removed before multiplying child
           contributions.  The product recurrence treats direct child
           contributions as conditionally independent at their parent.
@@ -150,7 +184,10 @@ The algorithms use the following assumptions.
 The implementation recognizes node kinds \texttt{evidence} and
 \texttt{objection}, case-insensitively, as evidence sources for pruning.
 By contrast, a leaf for BF evaluation is defined structurally by the absence
-of relevant child edges, regardless of its node kind.
+of relevant child edges, regardless of its node kind.  Stage~III assigns an
+authored observation only to structural leaves whose kind is
+\texttt{evidence} or \texttt{objection}; a structural leaf of another kind is
+BF-neutral.
 
 \section{Stage I: Graph Pruning}
 
@@ -589,13 +626,16 @@ Write the already-pruned graph as
 \[
     G_H^{\star}=(V_H^{\star},E_H^{\star}).
 \]
-The calculator receives
+The calculator receives an already-pruned graph, the hypothesis identifier,
+and one of two equivalent forms of leaf input:
 
 \begin{enumerate}
     \item an already-pruned graph \(G_H^{\star}\);
     \item the hypothesis identifier \(H\);
-    \item a dictionary \(\mathcal{B}_{\mathrm{leaf}}\) of positive leaf Bayes
-          factors.
+    \item either a dictionary \(\mathcal{B}_{\mathrm{leaf}}\) of positive
+          ordinary leaf Bayes factors for \texttt{Calculate}, or a dictionary
+          \(\Lambda_{\mathrm{leaf}}\) of natural-log leaf Bayes factors for
+          \texttt{CalculateLogBayesFactor}.
 \end{enumerate}
 
 The relevant portion of the input must be a DAG in which every relevant
@@ -613,7 +653,7 @@ For a node \(v\), let
 \]
 be its direct children in the pruned graph.
 
-The node Bayes factor is
+In ordinary BF notation, the mathematical recurrence is
 \[
     \BF_v
       =
@@ -638,7 +678,62 @@ For edge \(e=(u,v)\), transform the child's Bayes factor through the edge:
       }}.
 \]
 
-The final return value is \(\BF_H\).
+Mathematically, the ordinary result is \(\BF_H\); the two public entry points
+return either this value or its natural logarithm.  They use separate
+implementations of the same mathematical recurrence:
+
+\begin{itemize}
+    \item \texttt{Calculate} preserves the original direct recurrence.  It
+          transforms ordinary BFs, multiplies child contributions, and returns
+          \(\BF_H\) using checked \texttt{decimal} arithmetic throughout.
+    \item \texttt{CalculateLogBayesFactor} evaluates the algebraically
+          equivalent recurrence in natural-log space for stable posterior
+          integration.
+\end{itemize}
+
+For the log-domain implementation, define
+\[
+    \lambda_v=\log\BF_v,
+    \qquad
+    \lambda_{u\rightarrow v}=\log\BF_{u\rightarrow v}.
+\]
+Then
+\[
+    \lambda_v
+      =
+      \begin{cases}
+        \Lambda_{\mathrm{leaf}}[v],
+            & N(v)=\varnothing,\\[0.8em]
+        \displaystyle
+        \sum_{u\in N(v)}\lambda_{u\rightarrow v},
+            & N(v)\neq\varnothing,
+      \end{cases}
+\]
+and the edge transform is
+\[
+    \boxed{
+    \lambda_{u\rightarrow v}
+      =
+      \log\!\left(a_e e^{\lambda_u}+1-a_e\right)
+      -
+      \log\!\left(b_e e^{\lambda_u}+1-b_e\right)}.
+\]
+
+Each term of the form
+\(\log(p e^x+1-p)\) is evaluated with a stable log-sum-exp calculation:
+\[
+    \operatorname{LSE}\bigl(x+\log p,\log(1-p)\bigr)
+      =m+\log\!\left(e^{x+\log p-m}+e^{\log(1-p)-m}\right),
+\]
+where
+\(m=\max\{x+\log p,\log(1-p)\}\).  The boundary values \(p=0\) and
+\(p=1\) are handled directly.  This avoids exponentiating a potentially
+extreme child log BF during the graph recurrence.
+
+\texttt{CalculateLogBayesFactor} returns \(\lambda_H\) directly.
+\texttt{Calculate} independently returns \(\BF_H\) from the direct decimal
+recurrence; it neither converts its leaf inputs to logarithms nor exponentiates
+a log-domain result.
 
 \subsection{Interpretation of the Edge Transform}
 
@@ -675,9 +770,13 @@ For every relevant node \(v\), initialize
 \[
     q_{\mathrm{child}}(v)=|N(v)|
 \]
-and a multiplicative accumulator
+and the accumulator appropriate to the selected API:
 \[
-    C(v)=1.
+    C_{\BF}(v)=1
+    \quad\text{for \texttt{Calculate}},
+    \qquad
+    C_{\log}(v)=0
+    \quad\text{for \texttt{CalculateLogBayesFactor}}.
 \]
 
 Every node with \(q_{\mathrm{child}}(v)=0\) is a leaf and is placed in the
@@ -685,21 +784,29 @@ ready queue.
 
 \subsection{Step 3: Evaluate Leaves}
 
-When a leaf \(v\) leaves the queue, retrieve
+When a leaf \(v\) leaves the queue, \texttt{Calculate} retrieves
 \[
-    \BF_v=\mathcal{B}_{\mathrm{leaf}}[v].
+    \BF_v=\mathcal{B}_{\mathrm{leaf}}[v],
+\]
+whereas \texttt{CalculateLogBayesFactor} retrieves
+\[
+    \lambda_v=\Lambda_{\mathrm{leaf}}[v].
 \]
 
-The value must exist and must be strictly positive.  Extra dictionary values
-for irrelevant or non-leaf nodes are not needed by the recurrence.
+The selected value must exist.  An ordinary leaf BF must be strictly positive;
+a leaf log BF may be negative, zero, or positive.  Extra dictionary values for
+irrelevant or non-leaf nodes are not needed by either recurrence.
 
 \subsection{Step 4: Evaluate Internal Nodes}
 
 An internal node is queued only after every direct child contribution has been
-accumulated.  Its Bayes factor is therefore already available as
+accumulated.  Its value is therefore already available as
 \[
-    \BF_v=C(v).
+    \BF_v=C_{\BF}(v)
+    \quad\text{or}\quad
+    \lambda_v=C_{\log}(v),
 \]
+depending on the public operation.
 
 \subsection{Step 5: Transform and Propagate to the Parent}
 
@@ -707,17 +814,29 @@ For every relevant continuation edge \(e=(v,u)\):
 
 \begin{enumerate}
     \item validate \(a_e,b_e\in[0,1]\);
-    \item calculate \(\BF_{v\rightarrow u}\) with the edge transform;
-    \item update
+    \item for \texttt{Calculate}, evaluate the ordinary edge transform and
+          multiply with checked decimal arithmetic:
           \[
-              C(u)\leftarrow C(u)\,\BF_{v\rightarrow u};
+              C_{\BF}(u)
+                \leftarrow
+              C_{\BF}(u)\,\BF_{v\rightarrow u};
+          \]
+    \item for \texttt{CalculateLogBayesFactor}, evaluate the stable log-domain
+          edge transform and add:
+          \[
+              C_{\log}(u)
+                \leftarrow
+              C_{\log}(u)+\lambda_{v\rightarrow u};
           \]
     \item decrement \(q_{\mathrm{child}}(u)\);
     \item if \(q_{\mathrm{child}}(u)=0\), enqueue \(u\).
 \end{enumerate}
 
-The arithmetic is checked decimal arithmetic in the implementation, so an
-overflow is reported rather than silently wrapping.
+The ordinary path uses checked \texttt{decimal} multiplication, addition, and
+division and reports decimal overflow.  The log path uses checked decimal
+addition for accumulated log contributions; its log-sum-exp edge transform
+uses finite floating-point transcendental operations and rejects an undefined
+or non-finite result.
 
 \subsection{Step 6: Detect Cycles and Validate Compatibility}
 
@@ -733,14 +852,19 @@ The calculator also rejects an unpruned relevant node with multiple
 continuations toward \(H\).  This prevents a shared child subtree from being
 propagated along competing parent paths and counted more than once.
 
-\subsection{Step 7: Return the Hypothesis Bayes Factor}
+\subsection{Step 7: Return the Hypothesis Result}
 
-After all relevant nodes have been evaluated, return the memoized value
+After all relevant nodes have been evaluated, each API returns its memoized
+hypothesis value:
 \[
-    \BF_H.
+    \texttt{Calculate}:\ \BF_H,
+    \qquad
+    \texttt{CalculateLogBayesFactor}:\ \lambda_H=\log\BF_H.
 \]
 
-No node odds are read, divided, multiplied, or updated during this process.
+The ordinary API does not pass through log space; an overflow in its checked
+decimal edge transform or contribution product is reported directly.  No node
+odds are read, divided, multiplied, or updated during either calculation.
 
 \subsection{Worked Bayes-Factor Example}
 
@@ -807,8 +931,14 @@ Then
        \approx 0.95652.
 \end{align*}
 
-This value is returned directly.  The calculator does not apply it to any
-prior odds.
+The two implementations produce equivalent mathematical results.  The direct
+decimal recurrence used by \texttt{Calculate} returns \(22/23\), while
+\texttt{CalculateLogBayesFactor} returns
+\[
+    \lambda_H=\log(22/23)\approx -0.04445.
+\]
+Neither implementation applies its result to prior odds; that is
+Stage~III's responsibility.
 
 \subsection{Bayes-Factor Complexity}
 
@@ -827,9 +957,159 @@ so its total time and storage bounds are
     O(|V|+|E|).
 \]
 
+\section{Stage III: Log-Posterior-Odds Calculation}
+
+\subsection{Responsibility and Public Operations}
+
+\texttt{GraphPosteriorOddsCalculator} is the integration layer.  It owns the
+policy that turns stored evidence-node values into leaf log BFs, calls the
+pruner and pure BF calculator, and applies the final log-odds update.  This
+keeps path selection independent of posterior state and keeps the BF
+recurrence reusable by callers that already have explicit leaf inputs.
+
+Its single-target operation,
+\texttt{CalculateNodeLogPosteriorOdds}, computes a value without mutating the
+graph.  Its recalculation operations apply computed values to affected nodes:
+
+\begin{itemize}
+    \item \texttt{RecalculateAncestors} recalculates the ancestors of one
+          changed node, excluding the changed node itself;
+    \item \texttt{RecalculateNodesAndAncestors} recalculates the supplied
+          nodes and all of their ancestors.
+\end{itemize}
+
+When a service mutation creates a node, or edits a node's \texttt{Kind},
+\texttt{PriorOdds}, or \texttt{PosteriorOdds}, \texttt{GraphService} uses
+\texttt{RecalculateNodesAndAncestors}.  Consequently, that persistence flow
+recalculates and writes both the created or changed node and all of its
+ancestors.
+
+Affected nodes are evaluated from the supplied or closest descendant level
+toward increasingly distant ancestors, so an ancestor observes posterior
+updates already made below it.
+
+\subsection{Step 1: Prune for the Requested Hypothesis}
+
+For the requested node \(H\), calculate
+\[
+    G_H^{\star}=\operatorname{Prune}(G,H).
+\]
+This is performed separately for every requested posterior because compatible
+path selection is target-specific.
+
+\subsection{Step 2: Identify Structural Leaves}
+
+Within \(G_H^{\star}\), a node \(v\) is a structural leaf exactly when it has
+no retained child entering it:
+\[
+    N(v)=\varnothing.
+\]
+Only these structural leaves receive entries in
+\(\Lambda_{\mathrm{leaf}}\).  A node whose kind is evidence-like but which has
+a retained child is an internal node for this calculation; its stored odds do
+not replace the BF contributed by its child subtree.
+
+\subsection{Step 3: Construct Leaf Log Bayes Factors}
+
+For a structural leaf \(v\), the current policy is
+\[
+    \Lambda_{\mathrm{leaf}}[v]
+      =
+      \begin{cases}
+        \texttt{PosteriorOdds}(v)-\texttt{PriorOdds}(v),
+          & \operatorname{kind}(v)\in
+            \{\texttt{evidence},\texttt{objection}\},\\[0.6em]
+        0,
+          & \text{otherwise.}
+      \end{cases}
+\]
+Because both fields store natural-log odds, the first branch is
+\[
+    \log O_{\mathrm{post}}(v)-\log O_{\mathrm{prior}}(v)
+      =\log\!\left(
+          \frac{O_{\mathrm{post}}(v)}{O_{\mathrm{prior}}(v)}
+        \right)
+      =\log\BF_v.
+\]
+
+The neutral second branch is important for a hypothesis with no downstream
+evidence.  It gives \(\log\BF_H=0\), so that hypothesis's recalculated
+posterior equals its prior instead of feeding a previously calculated
+posterior back into itself.  If the requested node itself is an evidence or
+objection leaf, its stored posterior-minus-prior delta is preserved as its
+authored observation.
+
+\subsection{Step 4: Calculate the Hypothesis Log Bayes Factor}
+
+The orchestrator calls
+\[
+    \lambda_H
+      =\operatorname{CalculateLogBayesFactor}
+        (G_H^{\star},H,\Lambda_{\mathrm{leaf}}).
+\]
+Stage~II transforms each leaf log BF through the retained edge probabilities
+and adds independent child log contributions until it reaches \(H\).
+
+\subsection{Step 5: Apply the Log-Odds Update}
+
+The unclamped result is
+\[
+    L_{\mathrm{post}}(H)
+      =L_{\mathrm{prior}}(H)+\lambda_H,
+\]
+which in terms of stored fields is implemented directly as
+\[
+    \texttt{PosteriorOdds}(H)
+      =\texttt{PriorOdds}(H)+\log\BF_H.
+\]
+There is no additional logarithm around \texttt{PriorOdds}: it already stores
+\(\log O_{\mathrm{prior}}\).  The returned or persisted value is clamped to
+the supported log-odds interval:
+\[
+    \texttt{PosteriorOdds}(H)
+      =\operatorname{clamp}
+        \bigl(\texttt{PriorOdds}(H)+\lambda_H,-100,100\bigr).
+\]
+
+\subsection{Leaf-Observation Provenance Limitation}
+
+The current schema uses \texttt{PosteriorOdds} for two different roles:
+
+\begin{enumerate}
+    \item on a structural evidence or objection leaf, it is treated as an
+          externally authored observation from which a leaf log BF is
+          derived;
+    \item on a recalculated internal or hypothesis node, it is an output
+          produced by this algorithm.
+\end{enumerate}
+
+The schema does not record which role produced a particular value.  This is a
+provenance compromise: for example, an evidence node that was previously
+internal and later becomes a structural leaf can expose a stale calculated
+posterior as though it were authored evidence.  A future schema should add a
+dedicated authored field such as \texttt{LogBayesFactor} (or an explicit
+observation object) for leaf input.  Stage~III should then read that field,
+leaving \texttt{PosteriorOdds} exclusively as calculated output.  No such
+field is inferred or fabricated by the current implementation.
+
+\subsection{Posterior-Odds Complexity}
+
+For one requested hypothesis, pruning and log-BF calculation are each linear
+in the graph presented to them, so the orchestration cost is
+\[
+    O(|V|+|E|).
+\]
+If \(A\) affected nodes are recalculated after an edit, the current
+implementation performs a separate target-specific prune and BF evaluation
+for each one, giving a worst-case bound of
+\[
+    O\bigl(A(|V|+|E|)\bigr),
+\]
+in addition to collecting the affected ancestor set.
+
 \section{End-to-End Properties}
 
-The two stages together provide the following behavior.
+The three stages together provide the following behavior.
 
 \begin{enumerate}
     \item Pruning removes competing continuations before BF multiplication.
@@ -838,7 +1118,10 @@ The two stages together provide the following behavior.
     \item Each retained edge's two probabilities are preserved when the graph
           is cloned.
     \item The BF calculator visits each retained node and edge once.
-    \item Prior and posterior odds remain unchanged.
+    \item The pruner and BF calculator do not read or modify node odds.
+    \item The posterior calculator derives evidence-leaf log BFs, adds the
+          resulting \(\log\BF_H\) to the target's prior log odds, clamps the
+          result, and can persist recalculated node values.
 \end{enumerate}
 
 \section{Validation and Failure Conditions}
@@ -855,11 +1138,14 @@ Duplicate node or edge identifier & pruning stops \\
 Dangling edge endpoint & graph-context construction stops \\
 Relevant cycle & topological processing stops \\
 Nonpositive relevant \(r_e\) & pruning stops \\
-Missing or nonpositive leaf BF & BF calculation stops \\
+Missing leaf BF or log BF & BF calculation stops \\
+Nonpositive ordinary leaf BF & ordinary-BF calculation stops \\
 \(a_e\) or \(b_e\) outside \([0,1]\) & BF calculation stops \\
 Multiple continuations in BF input & caller is instructed to prune first \\
 Cancellation requested & the active operation stops \\
-Decimal overflow & checked arithmetic throws \\
+Non-finite edge transform & BF calculation stops \\
+Decimal overflow in the ordinary-BF recurrence
+    & checked decimal arithmetic throws \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -904,22 +1190,25 @@ Both \texttt{evidence} and \texttt{objection} nodes start pruning tokens.  If
 the domain later introduces other evidence-like kinds, that policy should be
 centralized or replaced with an explicit evidence-node input set.
 
-\subsection{Posterior-Odds Integration}
+\subsection{Legacy Path Analytics}
 
-Posterior integration remains intentionally out of scope.  Before adding it,
-the application must decide whether stored values are ordinary odds or
-log-odds:
+The evidence-impact, robustness, and minimal-counter-set operations still use
+\texttt{GraphLikelihoodCalculator} and the legacy
+\texttt{ImportanceToParent}-based path model.  They are intentionally not part
+of the posterior-odds integration described here and can therefore disagree
+with a posterior produced by the conditional-probability BF recurrence.  They
+should be migrated separately once BF-based definitions for those analytics
+are specified.
 
-\begin{itemize}
-    \item for ordinary odds,
-          \(O_{\mathrm{post}}=O_{\mathrm{prior}}\BF_H\);
-    \item for log-odds,
-          \(\log O_{\mathrm{post}}
-             =\log O_{\mathrm{prior}}+\log\BF_H\).
-\end{itemize}
+\subsection{Stored Odds and Leaf Observation Ownership}
 
-That decision should be implemented in a separate integration layer rather
-than inside either algorithm described here.
+The stored-odds convention is now fixed: \texttt{PriorOdds} and
+\texttt{PosteriorOdds} are natural-log odds, and posterior integration is
+implemented in the separate \texttt{GraphPosteriorOddsCalculator}.  The
+remaining product decision is how to represent an authored evidence
+observation independently from calculated posterior output.  As described in
+Stage~III, a dedicated \texttt{LogBayesFactor} field is recommended so the two
+roles no longer share \texttt{PosteriorOdds}.
 
 \section{Mapping from the Document to the C\# Implementation}
 
@@ -935,9 +1224,23 @@ Choose min/max extreme & \texttt{SelectStrongest} \\
 Register and schedule a token & local function \texttt{AddArrival} \\
 Perform compatible merge sweep & \texttt{SelectCompatiblePaths} \\
 Clone the selected result & \texttt{CreatePrunedGraph} \\
-Retrieve a leaf BF & \texttt{GetLeafBayesFactor} \\
-Apply edge recurrence & \texttt{TransformThroughEdge} \\
-Calculate \(\BF_H\) & \texttt{GraphBayesFactorCalculator.Calculate} \\
+Retrieve an ordinary leaf BF
+    & \texttt{GetLeafBayesFactor} \\
+Retrieve a supplied leaf log BF
+    & \texttt{GetSuppliedLeafLogBayesFactor} \\
+Apply the direct decimal edge recurrence & \texttt{TransformThroughEdge} \\
+Apply the stable log edge recurrence & \texttt{TransformLogThroughEdge} and
+    \texttt{LogAffineBayesFactor} \\
+Calculate \(\log\BF_H\)
+    & \texttt{GraphBayesFactorCalculator.CalculateLogBayesFactor} \\
+Calculate ordinary \(\BF_H\)
+    & \texttt{GraphBayesFactorCalculator.Calculate} and
+      \texttt{CalculateBayesFactorCore} \\
+Construct leaf inputs and calculate target log posterior odds
+    & \texttt{GraphPosteriorOddsCalculator.CalculateNodeLogPosteriorOdds} \\
+Recalculate affected posterior values
+    & \texttt{RecalculateAncestors} and
+      \texttt{RecalculateNodesAndAncestors} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -951,9 +1254,23 @@ extreme, while multiple tokens at one node trigger a merge and one locally
 strongest shared suffix.  This preserves all incoming prefixes and naturally
 handles later nested merges.
 
-The BF calculator then processes the pruned DAG from leaves toward \(H\).
-Explicit leaf Bayes factors are transformed through edge probabilities, direct
-child contributions are multiplied, and the resulting \(\BF_H\) is returned.
-Posterior odds are neither consulted nor modified.
+The BF calculator then processes the pruned DAG from leaves toward \(H\) using
+one of two equivalent recurrences.  \texttt{Calculate} preserves the exact
+checked-decimal ordinary-BF recurrence, including direct multiplication of
+child contributions.  \texttt{CalculateLogBayesFactor} transforms explicit
+leaf log BFs through edge probabilities with a stable log-sum-exp calculation,
+adds child log contributions, and returns \(\log\BF_H\) for posterior
+integration.
+
+Finally, the posterior-odds calculator supplies structural evidence-leaf log
+BFs, computes
+\[
+    \log O_{\mathrm{post}}(H)
+      =\log O_{\mathrm{prior}}(H)+\log\BF_H,
+\]
+and clamps the stored result.  This orchestration leaves the pruner and BF
+calculator pure.  The current reuse of evidence-leaf \texttt{PosteriorOdds} as
+authored input should eventually be replaced by a dedicated observation or
+\texttt{LogBayesFactor} field.
 
 \end{document}

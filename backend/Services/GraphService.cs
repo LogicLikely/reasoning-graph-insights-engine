@@ -9,14 +9,31 @@ namespace Backend.Services;
 public class GraphService : IGraphService
 {
     private readonly IGraphRepository _graphRepository;
+
+    // Legacy ImportanceToParent-based ranking, robustness, and counter analytics.
     private readonly GraphLikelihoodCalculator _calculator;
+
+    // BF-based pruning, recurrence, and persisted posterior-log-odds updates.
+    private readonly GraphPosteriorOddsCalculator _posteriorOddsCalculator;
 
     public GraphService(
         IGraphRepository graphRepository,
         GraphLikelihoodCalculator graphLikelihoodCalculator)
+        : this(
+            graphRepository,
+            graphLikelihoodCalculator,
+            new GraphPosteriorOddsCalculator())
+    {
+    }
+
+    public GraphService(
+        IGraphRepository graphRepository,
+        GraphLikelihoodCalculator graphLikelihoodCalculator,
+        GraphPosteriorOddsCalculator posteriorOddsCalculator)
     {
         _graphRepository = graphRepository;
         _calculator = graphLikelihoodCalculator;
+        _posteriorOddsCalculator = posteriorOddsCalculator;
     }
 
     public async Task<IReadOnlyList<GraphSummaryDto>> GetSummariesAsync(
@@ -331,10 +348,10 @@ public class GraphService : IGraphService
             return false;
         }
 
-        if (!string.IsNullOrEmpty(parentID))
-        {
-            await RecalculateAndPersistAncestorsAsync(slug, node.Id, cancellationToken);
-        }
+        await RecalculateAndPersistNodesAndAncestorsAsync(
+            slug,
+            [node.Id],
+            cancellationToken);
 
         return true;
     }
@@ -351,9 +368,16 @@ public class GraphService : IGraphService
             return false;
         }
 
-        if (node.PriorOdds.HasValue)
+        // Kind changes path eligibility and the evidence-leaf base case. Odds
+        // changes affect either the target prior or its authored leaf log BF.
+        if (node.Kind is not null ||
+            node.PriorOdds.HasValue ||
+            node.PosteriorOdds.HasValue)
         {
-            await RecalculateAndPersistAncestorsAsync(slug, nodeId, cancellationToken);
+            await RecalculateAndPersistNodesAndAncestorsAsync(
+                slug,
+                [nodeId],
+                cancellationToken);
         }
 
         return true;
@@ -387,7 +411,11 @@ public class GraphService : IGraphService
             return false;
         }
 
-        if (edge.ImportanceToParent.HasValue)
+        // Importance changes the selected pruned paths; either conditional
+        // probability changes the BF transform on the retained edge.
+        if (edge.ImportanceToParent.HasValue ||
+            edge.ProbabilityGivenParent.HasValue ||
+            edge.ProbabilityGivenNotParent.HasValue)
         {
             var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
             var updatedEdge = graph?.Edges.FirstOrDefault(candidate => candidate.Id == edgeId);
@@ -408,6 +436,7 @@ public class GraphService : IGraphService
         await _graphRepository.ResetDatabaseAsync(stressGraphs, cancellationToken);
     }
 
+    /// <summary>Loads a graph, recalculates ancestors, and persists the result.</summary>
     private async Task<IReadOnlyDictionary<string, decimal>> RecalculateAndPersistAncestorsAsync(
         string slug,
         string changedNodeId,
@@ -422,13 +451,16 @@ public class GraphService : IGraphService
         return await RecalculateAndPersistAncestorsAsync(graph, changedNodeId, cancellationToken);
     }
 
+    /// <summary>Recalculates and batch-persists ancestors, excluding the changed node.</summary>
     private async Task<IReadOnlyDictionary<string, decimal>> RecalculateAndPersistAncestorsAsync(
         Graph graph,
         string changedNodeId,
         CancellationToken cancellationToken)
     {
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
-        var recalculatedLogOdds = _calculator.RecalculateAncestors(context, changedNodeId);
+        var recalculatedLogOdds = _posteriorOddsCalculator.RecalculateAncestors(
+            graph,
+            changedNodeId,
+            cancellationToken);
 
         if (recalculatedLogOdds.Count > 0)
         {
@@ -438,13 +470,35 @@ public class GraphService : IGraphService
         return recalculatedLogOdds;
     }
 
+    /// <summary>Loads a graph, recalculates supplied nodes and ancestors, and persists them.</summary>
+    private async Task<IReadOnlyDictionary<string, decimal>> RecalculateAndPersistNodesAndAncestorsAsync(
+        string slug,
+        IEnumerable<string> nodeIds,
+        CancellationToken cancellationToken)
+    {
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        if (graph is null)
+        {
+            return new Dictionary<string, decimal>();
+        }
+
+        return await RecalculateAndPersistNodesAndAncestorsAsync(
+            graph,
+            nodeIds,
+            cancellationToken);
+    }
+
+    /// <summary>Recalculates and batch-persists supplied nodes and their ancestors.</summary>
     private async Task<IReadOnlyDictionary<string, decimal>> RecalculateAndPersistNodesAndAncestorsAsync(
         Graph graph,
         IEnumerable<string> nodeIds,
         CancellationToken cancellationToken)
     {
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
-        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
+        var recalculatedLogOdds =
+            _posteriorOddsCalculator.RecalculateNodesAndAncestors(
+                graph,
+                nodeIds,
+                cancellationToken);
 
         if (recalculatedLogOdds.Count > 0)
         {

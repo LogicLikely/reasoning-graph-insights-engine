@@ -303,13 +303,16 @@ export function DemoPage() {
     }
 
     const newNodeId = `node-${Date.now()}`
+    const priorOdds = data.priorOdds ?? 0
     const newNode: GraphFixtureNode = {
       ...data,
       id: newNodeId,
       kind: data.kind ?? 'claim',
       title: data.title ?? 'New Node',
       bodyText: data.bodyText ?? '',
-    } as GraphFixtureNode
+      priorOdds,
+      posteriorOdds: data.posteriorOdds ?? priorOdds,
+    }
 
     if (!activeGraphSlug) {
       return
