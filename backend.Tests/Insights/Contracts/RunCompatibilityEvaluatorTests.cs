@@ -1,4 +1,5 @@
 using Backend.Insights.Contracts;
+using backend.Tests.Insights.Persistence;
 
 namespace backend.Tests.Insights.Contracts;
 
@@ -17,18 +18,36 @@ public class RunCompatibilityEvaluatorTests
     }
 
     [TestMethod]
+    public void FromManifest_IncludesProfileActualStrategyAndRunLevelSampleMode()
+    {
+        var manifest = BenchmarkPersistenceTestData.Manifest() with
+        {
+            Strategy = new StrategySelection(null, null)
+        };
+
+        var identity = RunComparisonIdentity.FromManifest(manifest);
+
+        Assert.AreEqual("quick", identity.ProfileKey);
+        Assert.IsNull(identity.ActualStrategy);
+        Assert.AreEqual(RunSampleModeTokens.Warm, identity.SampleMode);
+    }
+
+    [TestMethod]
     public void Evaluate_ReturnsExactlyOneReasonForEachIndependentlyChangedField()
     {
         var baseline = Baseline();
         var changes = new (RunCompatibilityField Field, RunComparisonIdentity Candidate)[]
         {
             (RunCompatibilityField.ScenarioKey, baseline with { ScenarioKey = "wide-1k" }),
+            (RunCompatibilityField.ProfileKey, baseline with { ProfileKey = "standard" }),
             (RunCompatibilityField.OperationKey, baseline with { OperationKey = OperationKeys.GraphFetch }),
             (RunCompatibilityField.DatasetInputFingerprint, baseline with { DatasetInputFingerprint = "sha256:other-input" }),
             (RunCompatibilityField.AlgorithmSemanticIdentity, baseline with { AlgorithmSemanticIdentity = "robustness-v1" }),
             (RunCompatibilityField.ParameterDigest, baseline with { ParameterDigest = "sha256:other-parameters" }),
+            (RunCompatibilityField.ActualStrategy, baseline with { ActualStrategy = OperationStrategyNames.Greedy }),
             (RunCompatibilityField.EnvironmentProfile, baseline with { EnvironmentProfile = "different-host" }),
             (RunCompatibilityField.BuildMode, baseline with { BuildMode = "Debug" }),
+            (RunCompatibilityField.SampleMode, baseline with { SampleMode = RunSampleModeTokens.Cold }),
             (RunCompatibilityField.MeasurementUnits, baseline with
             {
                 MeasurementUnits = baseline.MeasurementUnits with { WallClockDuration = "us" }
@@ -59,7 +78,10 @@ public class RunCompatibilityEvaluatorTests
             "sha256:different-parameters",
             "different-environment",
             "Debug",
-            new MeasurementUnitContract("us", "us", "kb", "kb", "items", "percent"));
+            new MeasurementUnitContract("us", "us", "kb", "kb", "items", "percent"),
+            "different-profile",
+            OperationStrategyNames.Greedy,
+            RunSampleModeTokens.Cold);
 
         var result = RunCompatibilityEvaluator.Evaluate(baseline, candidate);
 
@@ -79,6 +101,9 @@ public class RunCompatibilityEvaluatorTests
             "sha256:parameters",
             "ll-arm64-mac-primary",
             "Release",
-            new MeasurementUnitContract("ms", "ms", "bytes", "bytes", "count", "ratio"));
+            new MeasurementUnitContract("ms", "ms", "bytes", "bytes", "count", "ratio"),
+            "quick",
+            OperationStrategyNames.Exact,
+            RunSampleModeTokens.Warm);
     }
 }

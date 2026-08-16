@@ -23,4 +23,8 @@ public interface IGraphRepository
     Task ResetDatabaseAsync(
         IReadOnlyList<StressGraphSeedSpec> stressGraphs,
         CancellationToken cancellationToken = default);
+    Task ResetDatabaseAsync(
+        IReadOnlyList<StressGraphSeedSpec> stressGraphs,
+        DatabaseResetTargetExpectation targetExpectation,
+        CancellationToken cancellationToken = default);
 }

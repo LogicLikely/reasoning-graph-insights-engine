@@ -3,6 +3,7 @@ using Backend.Insights.Contracts;
 using Backend.Insights.Measurement;
 using Backend.Middleware;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace backend.Tests.Insights.Measurement;
 
@@ -101,6 +102,46 @@ public sealed class InsightsCorrelationMiddlewareTests
     }
 
     [TestMethod]
+    public async Task Middleware_PublishesPhasesCompletedAfterHeadersAsServerTimingTrailer()
+    {
+        var context = Context();
+        foreach (var header in ValidHeaders()) context.Request.Headers[header.Key] = header.Value;
+        var responseFeature = new TestResponseFeature(context.Response.Body);
+        context.Features.Set<IHttpResponseFeature>(responseFeature);
+        var trailerFeature = new TestResponseTrailersFeature();
+        context.Features.Set<IHttpResponseTrailersFeature>(trailerFeature);
+        var accessor = new InsightCorrelationAccessor();
+        var collector = new InsightPhaseTimingCollector();
+        var middleware = new InsightsCorrelationMiddleware(async httpContext =>
+        {
+            collector.Record(
+                InsightMeasurementLayers.PostgreSqlRepository,
+                InsightMeasurementPhases.GraphLookup,
+                2m,
+                TimingBoundaryProvenance.DirectlyInstrumented);
+            await responseFeature.StartAsync();
+            collector.Record(
+                InsightMeasurementLayers.BackendServiceApi,
+                InsightMeasurementPhases.Serialization,
+                3m,
+                TimingBoundaryProvenance.DirectlyInstrumented);
+        });
+
+        await middleware.InvokeAsync(context, accessor, collector);
+
+        StringAssert.Contains(
+            context.Response.Headers["Server-Timing"].ToString(),
+            "postgresql-repository.graph-lookup;dur=2");
+        Assert.IsFalse(context.Response.Headers["Server-Timing"].ToString().Contains(
+            "serialization",
+            StringComparison.Ordinal));
+        Assert.AreEqual("Server-Timing", context.Response.Headers["Trailer"].ToString());
+        Assert.AreEqual(
+            "backend-service-api.serialization;dur=3",
+            trailerFeature.Trailers["Server-Timing"].ToString());
+    }
+
+    [TestMethod]
     public async Task Middleware_InvalidPairReturnsStructuredValidationErrorWithoutCallingNext()
     {
         var context = Context();
@@ -133,5 +174,43 @@ public sealed class InsightsCorrelationMiddlewareTests
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();
         return context;
+    }
+
+    private sealed class TestResponseTrailersFeature : IHttpResponseTrailersFeature
+    {
+        public IHeaderDictionary Trailers { get; set; } = new HeaderDictionary();
+    }
+
+    private sealed class TestResponseFeature : IHttpResponseFeature
+    {
+        private readonly List<(Func<object, Task> Callback, object State)> _starting = [];
+        private readonly List<(Func<object, Task> Callback, object State)> _completed = [];
+
+        public TestResponseFeature(Stream body)
+        {
+            Body = body;
+        }
+
+        public int StatusCode { get; set; } = StatusCodes.Status200OK;
+        public string? ReasonPhrase { get; set; }
+        public IHeaderDictionary Headers { get; set; } = new HeaderDictionary();
+        public Stream Body { get; set; }
+        public bool HasStarted { get; private set; }
+
+        public void OnStarting(Func<object, Task> callback, object state) =>
+            _starting.Add((callback, state));
+
+        public void OnCompleted(Func<object, Task> callback, object state) =>
+            _completed.Add((callback, state));
+
+        public async Task StartAsync()
+        {
+            foreach (var (callback, state) in _starting.AsEnumerable().Reverse())
+            {
+                await callback(state);
+            }
+
+            HasStarted = true;
+        }
     }
 }

@@ -8,6 +8,8 @@ export class StorybookWorld extends World {
   context?: BrowserContext
   page?: Page
   currentStoryId?: string
+  unexpectedConsoleErrors: string[] = []
+  pageErrors: string[] = []
 
   get baseUrl() {
     return process.env.STORYBOOK_BASE_URL ?? DEFAULT_STORYBOOK_URL

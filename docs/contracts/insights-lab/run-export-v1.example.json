@@ -11,6 +11,7 @@
     "startedAt": "2026-08-15T18:15:00+00:00",
     "completedAt": "2026-08-15T18:15:08.412+00:00",
     "runnerType": "command-line",
+    "profileKey": "standard",
     "scenarioKey": "contract.example.deep-3.strongest-upstream",
     "operationKey": "path.strongest",
     "graph": {
@@ -80,7 +81,8 @@
       "warmupPolicy": "three unrecorded warmup iterations",
       "samplePolicy": "ten serial measured iterations",
       "jitPolicy": "recorded after warmup",
-      "cachePolicy": "warm"
+      "cachePolicy": "warm",
+      "sampleMode": "warm"
     },
     "executionPolicy": {
       "timeout": "00:00:30",
@@ -278,7 +280,7 @@
     }
   ],
   "digests": {
-    "manifestDigest": "sha256:ac284ac6f6177301f56481a03838d8edce714950f7c13f6d325c53824a05f71e",
+    "manifestDigest": "sha256:b1e55bd8f86ea2ec5befac5b0b2759855a14746f69abd65d2ab3b25dbc7630dd",
     "samplesDigest": "sha256:7aba1bfd15deeff485f35706d26477a95776ac675beeda352ffad7330d670703",
     "outputsDigest": "sha256:9426e46c29d838d9458b5ba2d862487d6739cde998d94832d5597b00b5e2af95"
   }

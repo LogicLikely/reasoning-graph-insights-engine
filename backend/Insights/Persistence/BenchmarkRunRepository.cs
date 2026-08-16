@@ -17,6 +17,7 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             started_at,
             completed_at,
             runner_type,
+            profile_key,
             scenario_key,
             operation_key,
             graph_slug,
@@ -25,6 +26,8 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             parameter_digest,
             environment_profile,
             build_mode,
+            actual_strategy,
+            sample_mode,
             measurement_units,
             manifest_json
         ) VALUES (
@@ -35,6 +38,7 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             @StartedAt,
             @CompletedAt,
             @RunnerType,
+            @ProfileKey,
             @ScenarioKey,
             @OperationKey,
             @GraphSlug,
@@ -43,6 +47,8 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
             @ParameterDigest,
             @EnvironmentProfile,
             @BuildMode,
+            @ActualStrategy,
+            @SampleMode,
             @MeasurementUnitsJson::jsonb,
             @ManifestJson::jsonb
         );
@@ -246,6 +252,7 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
                 StartedAt = manifest.StartedAt.UtcDateTime,
                 CompletedAt = manifest.CompletedAt?.UtcDateTime,
                 RunnerType = EnumToken(manifest.RunnerType),
+                manifest.ProfileKey,
                 manifest.ScenarioKey,
                 manifest.OperationKey,
                 GraphSlug = manifest.Graph.Slug,
@@ -254,6 +261,8 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
                 ParameterDigest = manifest.CanonicalParameters.Digest,
                 manifest.EnvironmentProfile,
                 manifest.BuildMode,
+                ActualStrategy = manifest.Strategy.Used,
+                manifest.SamplingPolicy.SampleMode,
                 MeasurementUnitsJson = SerializeJson(manifest.MeasurementUnits),
                 ManifestJson = SerializeJson(manifest)
             },
@@ -431,11 +440,20 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
         }
 
         RequireText(manifest.Name, "Run name");
+        RequireText(manifest.ProfileKey, "Benchmark profile key");
         RequireText(manifest.ScenarioKey, "Scenario key");
         RequireText(manifest.OperationKey, "Operation key");
         RequireText(manifest.Graph.Slug, "Graph slug");
         RequireText(manifest.EnvironmentProfile, "Environment profile");
         RequireText(manifest.BuildMode, "Build mode");
+        ArgumentNullException.ThrowIfNull(manifest.SamplingPolicy);
+        if (!RunSampleModeTokens.IsKnown(manifest.SamplingPolicy.SampleMode))
+        {
+            throw new ArgumentException(
+                $"Unknown run-level sample mode '{manifest.SamplingPolicy.SampleMode}'.",
+                nameof(manifest));
+        }
+        ValidateMeasurementUnits(manifest.MeasurementUnits, "manifest");
         _ = InsightOperationRegistry.Get(manifest.OperationKey);
         _ = SemanticIdentity.Parse(manifest.Algorithm.SemanticIdentity);
         if (!string.Equals(manifest.OperationKey, manifest.Algorithm.Key, StringComparison.Ordinal))
@@ -495,6 +513,35 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
         RequireText(sample.Classification.JitState, "Sample JIT state");
         RequireText(sample.Classification.CacheState, "Sample cache state");
 
+        ValidateMeasurementUnits(sample.MeasurementUnits, "sample");
+        ArgumentNullException.ThrowIfNull(sample.NodeCounts);
+        RequireNonnegative(sample.NodeCounts.Requested, "Requested node count");
+        RequireNonnegative(sample.NodeCounts.Canonical, "Canonical node count");
+        RequireNonnegative(sample.NodeCounts.Synthetic, "Synthetic node count");
+        RequireNonnegative(sample.NodeCounts.Rendered, "Rendered node count");
+        ArgumentNullException.ThrowIfNull(sample.EdgeCounts);
+        RequireNonnegative(sample.EdgeCounts.Requested, "Requested edge count");
+        RequireNonnegative(sample.EdgeCounts.Rendered, "Rendered edge count");
+        RequireNonnegative(sample.EdgeCounts.Density, "Edge density");
+        ArgumentNullException.ThrowIfNull(sample.SearchCounts);
+        RequireNonnegative(sample.SearchCounts.Matches, "Search match count");
+        RequireNonnegative(
+            sample.SearchCounts.CompleteRequiredAncestorUnion,
+            "Complete required-ancestor-union count");
+        RequireNonnegative(sample.ResultCardinality, "Result cardinality");
+        ArgumentNullException.ThrowIfNull(sample.Transport);
+        RequireNonnegative(sample.Transport.RequestBytes, "Request bytes");
+        RequireNonnegative(sample.Transport.ResponseBytes, "Response bytes");
+        RequireNonnegative(sample.Transport.TimeToFirstByte, "Time to first byte");
+        RequireNonnegative(sample.Transport.FullTransferDuration, "Full transfer duration");
+        ArgumentNullException.ThrowIfNull(sample.Resources);
+        RequireNonnegative(sample.Resources.AllocatedBytes, "Allocated bytes");
+        RequireNonnegative(sample.Resources.Generation0Collections, "Generation 0 collections");
+        RequireNonnegative(sample.Resources.Generation1Collections, "Generation 1 collections");
+        RequireNonnegative(sample.Resources.Generation2Collections, "Generation 2 collections");
+        RequireNonnegative(sample.Resources.CpuTime, "CPU time");
+        RequireText(sample.Resources.CpuTimeUnit, "Sample CPU-time unit");
+
         ValidateOperationCounters(sample.OperationCounters);
     }
 
@@ -510,6 +557,41 @@ public sealed class BenchmarkRunRepository : IBenchmarkRunRepository
         ArgumentOutOfRangeException.ThrowIfNegative(counters.VisitedEdgeCount ?? 0);
         ArgumentOutOfRangeException.ThrowIfNegative(counters.AlgorithmIterationCount ?? 0);
         ArgumentOutOfRangeException.ThrowIfNegative(counters.CancellationCheckCount ?? 0);
+    }
+
+    private static void ValidateMeasurementUnits(MeasurementUnitContract units, string owner)
+    {
+        ArgumentNullException.ThrowIfNull(units);
+        RequireText(units.WallClockDuration, $"{owner} wall-clock-duration unit");
+        RequireText(units.CpuTime, $"{owner} CPU-time unit");
+        RequireText(units.Memory, $"{owner} memory unit");
+        RequireText(units.PayloadSize, $"{owner} payload-size unit");
+        RequireText(units.Counts, $"{owner} count unit");
+        RequireText(units.Density, $"{owner} density unit");
+    }
+
+    private static void RequireNonnegative(long? value, string fieldName)
+    {
+        if (value < 0)
+        {
+            throw new ArgumentOutOfRangeException(fieldName, value, $"{fieldName} cannot be negative.");
+        }
+    }
+
+    private static void RequireNonnegative(int? value, string fieldName)
+    {
+        if (value < 0)
+        {
+            throw new ArgumentOutOfRangeException(fieldName, value, $"{fieldName} cannot be negative.");
+        }
+    }
+
+    private static void RequireNonnegative(decimal? value, string fieldName)
+    {
+        if (value < 0)
+        {
+            throw new ArgumentOutOfRangeException(fieldName, value, $"{fieldName} cannot be negative.");
+        }
     }
 
     private static void ValidateOutput(CompactRunOutput output)

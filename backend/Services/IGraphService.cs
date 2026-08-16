@@ -1,4 +1,5 @@
 using Backend.Models.Dto;
+using Backend.Seeding;
 
 namespace Backend.Services;
 
@@ -32,5 +33,9 @@ public interface IGraphService
         CancellationToken cancellationToken = default);
     Task ResetDatabaseAsync(
         IReadOnlyCollection<string> stressGraphIds,
+        CancellationToken cancellationToken = default);
+    Task ResetDatabaseAsync(
+        IReadOnlyCollection<string> stressGraphIds,
+        DatabaseResetTargetExpectation targetExpectation,
         CancellationToken cancellationToken = default);
 }

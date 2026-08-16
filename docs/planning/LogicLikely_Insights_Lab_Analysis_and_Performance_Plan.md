@@ -1,6 +1,6 @@
 # LogicLikely Insights Lab Analysis and Performance Plan
 
-**Status:** Phases 0, 1, and 3 are implemented and committed; Phase 2 was dropped; Phase 3.5 is implemented, verified, and committed by the user as `0c3415a`; Phases 4–6 have not started
+**Status:** Phases 0, 1, and 3 are implemented and committed; Phase 2 was dropped; Phase 3.5 is implemented, verified, and committed by the user as `0c3415a`; Phase 4 Goals 1 and 2 are implemented and verified; Phases 5 and 6 have not started
 
 **Last updated:** 2026-08-16
 
@@ -46,18 +46,27 @@ This plan complements the original [Structural Insights Engine Implementation Pl
 - Phase 1 implemented the correlation, timing, persistence, export, and worker-isolation foundation.
 - Phase 3 implemented the versioned analysis operations and compatibility surfaces.
 - Phase 3.5 reconciled those artifacts with the unchanged GraphMap integration boundary.
+- Phase 4 implemented the repeatable CLI runner, deterministic scenario matrix,
+  real PostgreSQL/REST journeys, isolated workers, controlled browser and
+  result-render harness, named execution profiles, reset-safe persistence, and
+  validated portable export. The operational entry point is the
+  [Insights benchmark suite runbook](../operations/insights-benchmark-suite.md).
 - GraphMap is responsive with compact projections of large source graphs.
 - GraphMap search is fast when the union of matches and required ancestor chains is compact.
 - Full expansion is a designated small-dataset benchmark scenario.
-- Graph fetches and current REST operations are fast at 10K, but 100K must be measured rather than assumed.
+- The registered matrix measures graph fetch and REST work through 100K rather
+  than extrapolating from smaller graphs.
 
 ### 3.2 Remaining gaps
 
 - The existing application does not yet provide the intended durable, explainable Lab result UI.
-- Repeatable benchmark runners and the historical comparison UI do not yet exist.
-- Existing algorithm requests may still pay complete graph retrieval and mapping costs that need separate measurement.
-- Browser, result-panel, and GraphMap phases are not yet measured consistently by a controlled harness.
-- Deep recursive operations can fail from call-stack depth before their asymptotic runtime becomes the limiting factor.
+- The historical comparison UI does not yet exist.
+- Existing algorithm requests may still pay complete graph retrieval and
+  mapping costs; Phase 4 measures those boundaries but does not optimize them.
+- Deep recursive operations remain unsafe in-process; Phase 4 isolates the
+  affected scenarios and records structured terminal evidence, while an
+  iterative equivalent remains later work.
+- Authoritative-host calibration and baseline promotion have not started.
 
 ## 4. Target Architecture
 
@@ -352,14 +361,19 @@ Capture where applicable:
 - Full transfer.
 - JSON parse.
 - API-to-domain adaptation.
-- Search computation.
+- Search action through GraphMap's stable visible completion status, including
+  match and complete required-node-union counts where exposed.
 - Node/edge model creation.
 - Consumer-observed GraphMap layout/render interval.
 - React commit.
 - Viewport settling.
 - Lab result-panel rendering.
 
-Use the existing package as a black-box dependency. Consumer performance marks, React Profiler, browser timing, and Playwright observations provide the measurement seams. Document any phase that is approximate.
+Use the existing package as a black-box dependency. Consumer performance
+marks, React Profiler, browser timing, and Playwright observations provide the
+measurement seams. GraphMap exposes no internal search-index boundary, so do
+not claim one. Mark direct consumer instrumentation, external observation, and
+estimated settling honestly; document every approximate phase.
 
 ### 9.5 Sample policy
 
@@ -472,7 +486,8 @@ Use Playwright for controlled journeys:
 
 - Actual REST graph fetch.
 - Browser parse and adaptation.
-- Search computation and result metadata.
+- Search action through stable visible GraphMap completion, with exposed match
+  and required-node-union metadata.
 - Representative GraphMap render measurement using existing capabilities.
 - Lab result rendering.
 - Optional selected-result graph context.
@@ -483,12 +498,23 @@ Use React Profiler and consumer performance marks where stable. Treat DOM settli
 
 Provide named profiles:
 
-- `quick`: correctness/smoke validation with minimal repetitions.
-- `standard`: warmups plus repeated measured samples for local comparison.
-- `cold`: separately labeled fresh-process/connection/cache scenarios.
-- `authoritative`: controlled standard suite on `ll-arm64-mac-primary` with a clean Release build.
+- `quick`: no warmup and one recorded measured iteration for bounded
+  correctness and smoke work; run-level sample mode remains warm.
+- `standard`: one recorded warmup and three recorded measured iterations for
+  repeatable local comparison; run-level sample mode remains warm.
+- `cold`: no warmup and one measured iteration, runnable only in a fresh
+  isolated .NET worker or fresh Node and Chromium processes. The runner, API,
+  static production-profiling Storybook HTTP server and its serving/cache
+  state, PostgreSQL, filesystem, and OS caches remain shared and are not reset;
+  affected REST and graph-browser cases are structured skips.
+- `authoritative`: configuration, listing, and validation only, with zero
+  scheduled iterations. Execution and baseline promotion are refused until
+  Phase 6.
 
-Never mix cold and warm samples in one percentile series. Benchmark setup and seed installation are measured separately from the operation under test.
+Never mix cold and warm samples in one percentile series. Benchmark setup and
+seed installation are measured separately from the operation under test. The
+exact commands, reset scope, and cache disclosures are maintained in the
+[suite runbook](../operations/insights-benchmark-suite.md).
 
 ## 12. Dataset and Scenario Matrix
 
@@ -632,7 +658,7 @@ Acceptance:
 
 ### Phase 3.5 — Remove dropped GraphMap node-limit artifacts
 
-**Status:** Implemented and verified on 2026-08-16; committed by the user as `0c3415a`. Phase 4 has not started.
+**Status:** Implemented and verified on 2026-08-16; committed by the user as `0c3415a`. Phase 4 subsequently completed without changing the accepted GraphMap boundary.
 
 Completion record:
 
@@ -672,21 +698,77 @@ Acceptance:
 - Phase 0/1/3 correctness, persistence, export, compatibility, and algorithm-digest tests pass after cleanup.
 - Consumer-side GraphMap and result-render timing remains measurable.
 - No unrelated benchmark history or result data is lost.
-- Phase 4 does not begin until this phase is complete.
+- Phase 4 began only after this phase was complete.
 
 ### Phase 4 — Benchmark runners
 
-**Status:** Goal 1, Benchmark Core, is complete as of 2026-08-16. Goal 2 is not started.
+**Status:** Completed and verified on 2026-08-16. Goal 1, Benchmark Core, and Goal 2, controlled end-to-end suites, are complete. Phases 5 and 6 remain unstarted.
 
 Goal 1 completion record:
 
-- The shared run contract now identifies directly instrumented, externally observed, and estimated timing boundaries; keeps setup, warmup, measured, cold, and warm populations distinct; preserves raw samples and explicit units; and reserves neutral Lab result-render measurement for Goal 2. Pre-Phase-4 nonblank v1 classification labels remain readable as separate, non-aggregated compatibility buckets.
+- The shared run contract identifies directly instrumented, externally
+  observed, and estimated timing boundaries; keeps setup, warmup, measured,
+  cold, and warm populations distinct; preserves raw samples and explicit
+  units; and defined the neutral Lab result-render measurement implemented by
+  Goal 2. Pre-Phase-4 nonblank v1 classification labels remain readable as
+  separate, non-aggregated compatibility buckets.
 - The serial CLI runner uses the retained operation registry, deterministic stress fixtures, shared operation execution, the existing worker protocol, optional reset-safe PostgreSQL persistence, and schema-validated versioned JSON export. It records actual strategy selection, cancellation and every terminal lifecycle state, phase provenance and available operation counters, real source-revision state, and partial evidence from failed isolated work.
-- The bounded `quick` profile covers the retained in-memory algorithms and records explicit reasons for deferred Goal 2 journeys, unsafe uncapped exact work, and unsafe in-process recursive work. Exact and auto critical-counter execution require an explicit positive candidate limit; recursive, combinatorial, and override-derived hazardous cases are isolated.
+- The bounded `quick` profile covers the retained in-memory algorithms and
+  integrated Goal 2 journeys while preserving explicit skips for unsafe full
+  expansion, uncapped exact work, and unsafe in-process recursive work. Exact
+  and auto critical-counter execution require an explicit positive candidate
+  limit; recursive, combinatorial, and override-derived hazardous cases are
+  isolated.
 - The dedicated BenchmarkDotNet project covers calculation-context construction, strongest path, minimum and maximum single-pair paths, evidence impact, exact and greedy critical counters, both auto-strategy branches, robustness, and likelihood recalculation. Fixture preparation is outside measured work, mutation-prone state is reset per iteration, and MemoryDiagnoser plus available deterministic algorithm counters are included.
-- Release verification completed with a clean six-project solution build; 403 backend tests passed with no skips against a disposable PostgreSQL database; two equivalent 15-case quick runs matched dataset, parameter, result, status, and scenario identities; and standard out-of-process BenchmarkDotNet `Dry` and `ShortRun` jobs each executed all 11 workloads successfully. These development measurements are informational and establish no authoritative thresholds or baselines.
 
-Goal 2 remains explicitly deferred. It includes real graph catalog/fetch/search and REST/database performance journeys, API serialization and network transfer, Playwright and browser parsing/adaptation, GraphMap and React/result-panel measurement, and integrated cold, standard, or authoritative suites. Phase 5 UI and Phase 6 calibration also remain unstarted.
+Goal 2 completion record:
+
+- The runner now executes correlated real PostgreSQL catalog/reset/fetch and
+  REST analysis journeys, records header and HTTP/2 trailer `Server-Timing`,
+  observes transport bytes and timing separately, and reconciles cross-layer
+  differences as overhead rather than forcing equality.
+- The controlled Playwright harness uses the actual absolute API boundary and
+  static `storybook-production-profiling` build with GraphMap `0.2.0`
+  unchanged. It records explicit JSON parsing, domain mapping, GraphMap adapter
+  work, React commits, externally observed search and node/edge completion,
+  estimated layout/viewport settling, bounded result rendering, and terminal
+  stable-view evidence. Unexpected browser errors fail the journey.
+- The browser matrix covers collapsed presentation, designated-small full
+  expansion, compact-hit and no-hit search, and bounded strongest,
+  critical-counter, evidence-impact, and robustness result states. Large full
+  expansions, unsafe deep materializing searches, and unsatisfiable bounded
+  wide auto-greedy cases remain explicit structured skips.
+- The `quick`, `standard`, and scoped `cold` profiles are executable with their
+  recorded iteration policies. `authoritative` is deliberately
+  non-executable configuration/validation surface until Phase 6. Dataset reset
+  remains guarded by opt-in, loopback/disposable-name checks, and an
+  independently observed runner/API PostgreSQL-instance fingerprint before any
+  seed SQL.
+- Persisted samples preserve per-iteration identity, partial evidence, compact
+  results, and complete-result digests across graph resets. Readback and
+  schema-validated portable export preserve every completed output.
+- The complete operational contract, commands, reset limits, scenario/skip
+  policy, provenance, transport limitations, and artifact paths are recorded
+  in the [Insights benchmark suite runbook](../operations/insights-benchmark-suite.md).
+
+Final Phase 4 verification evidence:
+
+- The Release benchmark-runner build completed with zero warnings and zero
+  errors. The backend suite passed `490/490`, including real disposable
+  PostgreSQL coverage, with no skips.
+- Frontend unit coverage passed `89/89`; frontend lint and production build
+  passed. The static production-profiling Chromium verifier passed `5/5`
+  journeys, and the functional browser suite passed `12/12` scenarios and
+  `45/45` steps.
+- The full real `quick` profile recorded 25 scenarios: 21 succeeded and four
+  expected structured skips. The real compact-hit and no-hit searches both
+  completed with reconciled match/result cardinality.
+- Standard strongest-path and REST journeys each recorded one warmup plus
+  three measured iterations and retained all four outputs. Scoped-cold browser
+  result-render and isolated-worker journeys both succeeded.
+- Persistence readback and versioned JSON export were confirmed. These
+  development measurements are informational and establish no authoritative
+  cutoff, threshold, or baseline.
 
 Execution constraints:
 
@@ -887,7 +969,8 @@ The initiative is complete when:
 
 ## 19. Pre-Implementation Checkpoints
 
-Phase 3.5 is complete. Before the corresponding later baseline and presentation work:
+Phase 4 is complete. Before the corresponding Phase 5 presentation and Phase 6
+baseline work:
 
 1. Confirm `robustness-v0` semantics with the algorithm partner before calling its baseline authoritative.
 2. Confirm candidate eligibility/removal semantics for critical counters against the frozen golden cases.
@@ -895,4 +978,6 @@ Phase 3.5 is complete. Before the corresponding later baseline and presentation 
 4. Calibrate the auto-strategy candidate cutoff on the authoritative host.
 5. Establish the named browser/result-render scenarios used for authoritative comparison.
 
-Phase 3.5 is implemented and verified. Phases 4–6 remain unstarted until the user explicitly starts them. All future implementation commits remain for the user to make.
+Phase 4 Goals 1 and 2 are implemented and verified. Phases 5 and 6 remain
+unstarted until the user explicitly starts them. All future implementation
+commits remain for the user to make.

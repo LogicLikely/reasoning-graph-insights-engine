@@ -75,6 +75,7 @@ public sealed class RunExportService
             throw InvalidDocument("json", exception.Message);
         }
 
+        var normalizeLegacyManifest = false;
         using (document)
         {
             try
@@ -106,6 +107,12 @@ public sealed class RunExportService
             {
                 throw new RunExportValidationException(schemaIssues);
             }
+
+            normalizeLegacyManifest = RequiresLegacyManifestDefaults(document.RootElement);
+            if (normalizeLegacyManifest)
+            {
+                ValidateLegacyManifestDigest(document.RootElement);
+            }
         }
 
         VersionedRunExport export;
@@ -119,6 +126,24 @@ public sealed class RunExportService
         catch (Exception exception) when (exception is JsonException or ArgumentException or InvalidOperationException)
         {
             throw InvalidDocument("deserialization", exception.Message);
+        }
+
+        if (normalizeLegacyManifest)
+        {
+            // Goal 1 v1 exports predate profileKey and samplingPolicy.sampleMode.
+            // Their original manifest digest is verified above before typed
+            // defaults are supplied. Return a normalized current v1 value with
+            // a digest that covers those explicit conservative defaults.
+            export = new VersionedRunExport(
+                export.SchemaIdentity,
+                export.SchemaVersion,
+                export.Manifest,
+                export.Samples,
+                export.Outputs,
+                export.Digests with
+                {
+                    ManifestDigest = CanonicalJson.ComputeSha256(export.Manifest)
+                });
         }
 
         ValidateOrThrow(export);
@@ -164,6 +189,34 @@ public sealed class RunExportService
 
     private static RunExportValidationException InvalidDocument(string code, string message) =>
         new([new RunExportValidationIssue("$", code, message)]);
+
+    private static bool RequiresLegacyManifestDefaults(JsonElement root)
+    {
+        var manifest = root.GetProperty("manifest");
+        var missingProfile = !manifest.TryGetProperty("profileKey", out _);
+        var missingSampleMode = manifest.TryGetProperty("samplingPolicy", out var samplingPolicy) &&
+                                !samplingPolicy.TryGetProperty("sampleMode", out _);
+        return missingProfile || missingSampleMode;
+    }
+
+    private static void ValidateLegacyManifestDigest(JsonElement root)
+    {
+        var recordedDigest = root
+            .GetProperty("digests")
+            .GetProperty("manifestDigest")
+            .GetString();
+        var computedDigest = CanonicalJson.ComputeSha256(root.GetProperty("manifest"));
+        if (!string.Equals(recordedDigest, computedDigest, StringComparison.Ordinal))
+        {
+            throw new RunExportValidationException(
+            [
+                new RunExportValidationIssue(
+                    "$.digests.manifestDigest",
+                    "digest-mismatch",
+                    "The legacy manifest section digest does not match its source JSON.")
+            ]);
+        }
+    }
 
     private static JsonSerializerOptions CreateDeserializationOptions()
         => CanonicalJson.CreateSerializerOptions();

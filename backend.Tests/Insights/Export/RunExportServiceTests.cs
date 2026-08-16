@@ -100,6 +100,57 @@ public sealed class RunExportServiceTests
         Assert.AreEqual(export.Digests.OutputsDigest, CanonicalJson.ComputeSha256(export.Outputs));
     }
 
+    [TestMethod]
+    public void DeserializeAndValidate_ImportsGoal1V1ManifestWithConservativeDefaults()
+    {
+        var service = new RunExportService();
+        var current = service.Create(
+            Manifest(new ExecutionOutcome(ExecutionStatus.Succeeded)),
+            [Sample(new ExecutionOutcome(ExecutionStatus.Succeeded))],
+            [Output()]);
+        var root = JsonNode.Parse(service.Serialize(current))!.AsObject();
+        var manifest = root["manifest"]!.AsObject();
+        manifest.Remove("profileKey");
+        manifest["samplingPolicy"]!.AsObject().Remove("sampleMode");
+        using var legacyManifestDocument = JsonDocument.Parse(manifest.ToJsonString());
+        var legacyManifestDigest = CanonicalJson.ComputeSha256(legacyManifestDocument.RootElement);
+        root["digests"]!.AsObject()["manifestDigest"] = legacyManifestDigest;
+
+        var restored = service.DeserializeAndValidate(root.ToJsonString());
+
+        Assert.AreEqual(RunProfileKeys.LegacyUnspecified, restored.Manifest.ProfileKey);
+        Assert.AreEqual(
+            RunSampleModeTokens.LegacyUnspecified,
+            restored.Manifest.SamplingPolicy.SampleMode);
+        Assert.AreNotEqual(legacyManifestDigest, restored.Digests.ManifestDigest);
+        Assert.AreEqual(
+            CanonicalJson.ComputeSha256(restored.Manifest),
+            restored.Digests.ManifestDigest);
+        var normalized = service.Serialize(restored);
+        StringAssert.Contains(normalized, "\"profileKey\":\"legacy-unspecified\"");
+        StringAssert.Contains(normalized, "\"sampleMode\":\"legacy-unspecified\"");
+    }
+
+    [TestMethod]
+    public void DeserializeAndValidate_RejectsCorruptGoal1V1ManifestBeforeDefaulting()
+    {
+        var service = new RunExportService();
+        var current = service.Create(
+            Manifest(new ExecutionOutcome(ExecutionStatus.Succeeded)),
+            [Sample(new ExecutionOutcome(ExecutionStatus.Succeeded))],
+            [Output()]);
+        var root = JsonNode.Parse(service.Serialize(current))!.AsObject();
+        var manifest = root["manifest"]!.AsObject();
+        manifest.Remove("profileKey");
+        manifest["samplingPolicy"]!.AsObject().Remove("sampleMode");
+
+        var exception = Assert.ThrowsException<RunExportValidationException>(() =>
+            service.DeserializeAndValidate(root.ToJsonString()));
+
+        Assert.IsTrue(exception.Issues.Any(issue =>
+            issue.Path == "$.digests.manifestDigest" && issue.Code == "digest-mismatch"));
+    }
+
     [DataTestMethod]
     [DataRow("succeeded")]
     [DataRow("failed-execution")]
@@ -128,6 +179,37 @@ public sealed class RunExportServiceTests
         {
             Assert.AreEqual(1, restored.Manifest.Execution.Failure?.ValidationFailures.Count);
         }
+    }
+
+    [TestMethod]
+    public void RoundTrip_PreservesCompletedServerPhasesAndTransportBytesOnTerminalFailure()
+    {
+        var failure = Outcome("timed-out");
+        var completedServerPhase = Sample(new ExecutionOutcome(ExecutionStatus.Succeeded));
+        var terminalTransportPhase = Sample(failure) with
+        {
+            Layer = InsightMeasurementLayers.Transport,
+            Phase = InsightMeasurementPhases.FullTransfer,
+            WallClockDuration = 30_000m,
+            Transport = new SampleTransportMeasurements(320, 4_096, 12.5m, 30_000m),
+            TimingBoundaryProvenance = TimingBoundaryProvenance.ExternallyObserved
+        };
+        var service = new RunExportService();
+
+        var restored = service.DeserializeAndValidate(service.Serialize(service.Create(
+            Manifest(failure),
+            [terminalTransportPhase, completedServerPhase],
+            [])));
+
+        Assert.AreEqual(2, restored.Samples.Count);
+        Assert.AreEqual(ExecutionStatus.Succeeded, restored.Samples[0].Execution.Status);
+        Assert.AreEqual(ExecutionStatus.TimedOut, restored.Samples[1].Execution.Status);
+        Assert.AreEqual(FailureKind.Timeout, restored.Samples[1].Execution.Failure?.Kind);
+        Assert.AreEqual(4_096L, restored.Samples[1].Transport.ResponseBytes);
+        Assert.AreEqual(12.5m, restored.Samples[1].Transport.TimeToFirstByte);
+        Assert.AreEqual(
+            TimingBoundaryProvenance.ExternallyObserved,
+            restored.Samples[1].TimingBoundaryProvenance);
     }
 
     [TestMethod]
@@ -186,18 +268,25 @@ public sealed class RunExportServiceTests
     {
         var invalidSample = Sample(new ExecutionOutcome(ExecutionStatus.Succeeded)) with
         {
-            WallClockDuration = -1m
+            WallClockDuration = -1m,
+            Transport = new SampleTransportMeasurements(null, -1, null, null)
         };
         var invalidManifest = Manifest(new ExecutionOutcome(ExecutionStatus.Succeeded)) with
         {
-            EnvironmentProfile = ""
+            ProfileKey = "",
+            EnvironmentProfile = "",
+            SamplingPolicy = Manifest(new ExecutionOutcome(ExecutionStatus.Succeeded))
+                .SamplingPolicy with { SampleMode = "tepid" }
         };
 
         var exception = Assert.ThrowsException<RunExportValidationException>(() =>
             new RunExportService().Create(invalidManifest, [invalidSample], [Output()]));
 
+        Assert.IsTrue(exception.Issues.Any(issue => issue.Path == "$.manifest.profileKey"));
         Assert.IsTrue(exception.Issues.Any(issue => issue.Path == "$.manifest.environmentProfile"));
+        Assert.IsTrue(exception.Issues.Any(issue => issue.Path == "$.manifest.samplingPolicy.sampleMode"));
         Assert.IsTrue(exception.Issues.Any(issue => issue.Path == "$.samples[0].wallClockDuration"));
+        Assert.IsTrue(exception.Issues.Any(issue => issue.Path == "$.samples[0].transport.responseBytes"));
     }
 
     [TestMethod]
@@ -424,9 +513,11 @@ public sealed class RunExportServiceTests
                 new Dictionary<string, string> { ["Npgsql"] = "8.0.6" }),
             new HostEnvironment("macOS", "arm64", "fixture-cpu", 8, 16_000_000_000),
             "fixture-environment",
-            new WarmupSampleCachePolicy(0, 1, "none", "one", "post-jit", "warm"),
+            new WarmupSampleCachePolicy(
+                0, 1, "none", "one", "post-jit", "warm", RunSampleModeTokens.Warm),
             new TimeoutCancellationPolicy(TimeSpan.FromSeconds(30), "cooperative then terminate", true),
-            Units());
+            Units(),
+            "quick");
     }
 
     private static RunSample Sample(ExecutionOutcome outcome, string? phase = null)

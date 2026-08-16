@@ -41,8 +41,11 @@ public class BenchmarkSchemaSqlTests
         StringAssert.Contains(sql, "dataset_input_fingerprint text NOT NULL");
         StringAssert.Contains(sql, "algorithm_semantic_identity text NOT NULL");
         StringAssert.Contains(sql, "parameter_digest text NOT NULL");
+        StringAssert.Contains(sql, "profile_key text NOT NULL");
         StringAssert.Contains(sql, "environment_profile text NOT NULL");
         StringAssert.Contains(sql, "build_mode text NOT NULL");
+        StringAssert.Contains(sql, "actual_strategy text");
+        StringAssert.Contains(sql, "sample_mode text NOT NULL");
         StringAssert.Contains(sql, "measurement_units jsonb NOT NULL");
         StringAssert.Contains(sql, "timing_boundary_provenance text NOT NULL");
         StringAssert.Contains(sql, "ck_benchmark_samples_timing_boundary_provenance");
@@ -56,7 +59,69 @@ public class BenchmarkSchemaSqlTests
         StringAssert.Contains(sql, "ck_benchmark_runs_completion_not_before_start");
         StringAssert.Contains(sql, "ck_benchmark_samples_failure_matches_status");
         StringAssert.Contains(sql, "ck_benchmark_outputs_failure_matches_status");
+        StringAssert.Contains(sql, "ck_benchmark_runs_sample_mode");
+        StringAssert.Contains(sql, "manifest_json->>'profileKey' = profile_key");
+        StringAssert.Contains(
+            sql,
+            "manifest_json#>>'{strategy,used}' IS NOT DISTINCT FROM actual_strategy");
+        StringAssert.Contains(sql, "manifest_json#>>'{samplingPolicy,sampleMode}' = sample_mode");
         StringAssert.Contains(sql, "jsonb_array_length(output_json->'items') <= 100");
+    }
+
+    [TestMethod]
+    public void Schema_ReconcilesPreGoal2RunComparisonSelectorsWithoutGuessingWarmState()
+    {
+        var sql = ReadRepositoryFile("backend", "data", "sql", "benchmark_schema.sql");
+        var reconciliationStart = sql.IndexOf("DO $phase4_goal2_runs$", StringComparison.Ordinal);
+        Assert.IsTrue(reconciliationStart > 0);
+        var reconciliationSql = sql[reconciliationStart..];
+
+        StringAssert.Contains(reconciliationSql, "AND column_name = 'profile_key'");
+        StringAssert.Contains(reconciliationSql, "ADD COLUMN profile_key text");
+        StringAssert.Contains(reconciliationSql, "ADD COLUMN actual_strategy text");
+        StringAssert.Contains(reconciliationSql, "ADD COLUMN sample_mode text");
+        StringAssert.Contains(reconciliationSql, "profile_key = 'legacy-unspecified'");
+        StringAssert.Contains(reconciliationSql, "sample_mode = 'legacy-unspecified'");
+        StringAssert.Contains(reconciliationSql, "'{profileKey}'");
+        StringAssert.Contains(reconciliationSql, "'{samplingPolicy,sampleMode}'");
+        Assert.IsFalse(
+            Regex.IsMatch(
+                reconciliationSql,
+                @"^\s*(TRUNCATE|DELETE\s+FROM)\b",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline),
+            "Goal 2 reconciliation must preserve benchmark history.");
+    }
+
+    [TestMethod]
+    public void Schema_ReconcilesComparisonIndexToEveryDefaultCompatibilitySelector()
+    {
+        var sql = ReadRepositoryFile("backend", "data", "sql", "benchmark_schema.sql");
+        StringAssert.Contains(sql, "DO $phase4_goal2_comparison_index$");
+        StringAssert.Contains(sql, "current_columns IS DISTINCT FROM expected_columns");
+        StringAssert.Contains(sql, "DROP INDEX IF EXISTS benchmark.ix_benchmark_runs_comparison;");
+
+        var create = Regex.Match(
+            sql,
+            @"CREATE\s+INDEX\s+ix_benchmark_runs_comparison\s+ON\s+benchmark\.runs\s*\((?<columns>[^)]*)\)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        Assert.IsTrue(create.Success);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "scenario_key",
+                "profile_key",
+                "operation_key",
+                "dataset_input_fingerprint",
+                "algorithm_semantic_identity",
+                "parameter_digest",
+                "actual_strategy",
+                "environment_profile",
+                "build_mode",
+                "sample_mode",
+                "measurement_units"
+            },
+            create.Groups["columns"].Value
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
     }
 
     [TestMethod]

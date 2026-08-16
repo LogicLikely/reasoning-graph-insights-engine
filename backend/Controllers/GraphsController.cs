@@ -45,11 +45,51 @@ public class GraphsController : ControllerBase
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ResetDatabaseRequestDto? request,
         CancellationToken cancellationToken)
     {
+        DatabaseResetTargetExpectation? targetExpectation = null;
+        var expectedNameProvided = request?.ExpectedDatabaseName is not null;
+        var expectedFingerprintProvided = request?.ExpectedDatabaseFingerprint is not null;
+        if (expectedNameProvided != expectedFingerprintProvided)
+        {
+            return BadRequest(new
+            {
+                code = "database-reset-identity-expectation-incomplete",
+                message = "Database reset identity requires both the expected name and opaque fingerprint."
+            });
+        }
+
+        if (expectedNameProvided)
+        {
+            try
+            {
+                targetExpectation = new DatabaseResetTargetExpectation(
+                    request!.ExpectedDatabaseName!,
+                    request.ExpectedDatabaseFingerprint!);
+            }
+            catch (ArgumentException)
+            {
+                return BadRequest(new
+                {
+                    code = "database-reset-identity-expectation-invalid",
+                    message = "The database reset identity expectation is invalid."
+                });
+            }
+        }
+
         try
         {
-            await _graphService.ResetDatabaseAsync(
-                request?.StressGraphIds ?? [],
-                cancellationToken);
+            if (targetExpectation is null)
+            {
+                await _graphService.ResetDatabaseAsync(
+                    request?.StressGraphIds ?? [],
+                    cancellationToken);
+            }
+            else
+            {
+                await _graphService.ResetDatabaseAsync(
+                    request?.StressGraphIds ?? [],
+                    targetExpectation,
+                    cancellationToken);
+            }
         }
         catch (InvalidStressGraphSeedSelectionException exception)
         {
@@ -57,6 +97,14 @@ public class GraphsController : ControllerBase
             {
                 message = exception.Message,
                 unknownStressGraphIds = exception.UnknownIds
+            });
+        }
+        catch (DatabaseResetIdentityMismatchException)
+        {
+            return Conflict(new
+            {
+                code = "database-reset-identity-mismatch",
+                message = "The connected database target did not match the destructive reset expectation."
             });
         }
 

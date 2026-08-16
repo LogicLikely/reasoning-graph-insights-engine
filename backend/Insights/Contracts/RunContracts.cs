@@ -50,13 +50,34 @@ public sealed record HostEnvironment(
     int LogicalCoreCount,
     long MemoryBytes);
 
+public static class RunProfileKeys
+{
+    public const string LegacyUnspecified = "legacy-unspecified";
+}
+
+public static class RunSampleModeTokens
+{
+    /// <summary>
+    /// Compatibility value assigned while reading benchmark manifests written
+    /// before the controlled runner recorded an explicit run-level sample mode.
+    /// It never compares as warm or cold.
+    /// </summary>
+    public const string LegacyUnspecified = "legacy-unspecified";
+
+    public const string Warm = "warm";
+    public const string Cold = "cold";
+
+    public static bool IsKnown(string? value) => value is Warm or Cold or LegacyUnspecified;
+}
+
 public sealed record WarmupSampleCachePolicy(
     int WarmupIterations,
     int SampleIterations,
     string WarmupPolicy,
     string SamplePolicy,
     string JitPolicy,
-    string CachePolicy);
+    string CachePolicy,
+    string SampleMode = RunSampleModeTokens.LegacyUnspecified);
 
 public sealed record TimeoutCancellationPolicy(
     TimeSpan Timeout,
@@ -101,7 +122,8 @@ public sealed record RunManifest(
     string EnvironmentProfile,
     WarmupSampleCachePolicy SamplingPolicy,
     TimeoutCancellationPolicy ExecutionPolicy,
-    MeasurementUnitContract MeasurementUnits);
+    MeasurementUnitContract MeasurementUnits,
+    string ProfileKey = RunProfileKeys.LegacyUnspecified);
 
 public sealed record IterationClassification(
     string IterationKind,

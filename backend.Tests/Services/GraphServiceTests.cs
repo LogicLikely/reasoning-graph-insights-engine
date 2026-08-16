@@ -97,6 +97,34 @@ public class GraphServiceTests
     }
 
     [TestMethod]
+    public async Task ResetDatabaseAsync_WithTargetExpectation_ForwardsIdentityAndCanonicalSelection()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var service = CreateService(repositoryMock.Object);
+        var expectation = new DatabaseResetTargetExpectation(
+            "logiclikely_benchmark_test",
+            DatabaseResetTargetIdentity.ComputeFingerprint("stable-target-tuple"));
+
+        await service.ResetDatabaseAsync(
+            [StressGraphSeedIds.Deep1K, StressGraphSeedIds.Balanced1K],
+            expectation,
+            CancellationToken.None);
+
+        repositoryMock.Verify(repository => repository.ResetDatabaseAsync(
+            It.Is<IReadOnlyList<StressGraphSeedSpec>>(specs =>
+                specs.Select(spec => spec.Id).SequenceEqual(new[]
+                {
+                    StressGraphSeedIds.Balanced1K,
+                    StressGraphSeedIds.Deep1K
+                })),
+            It.Is<DatabaseResetTargetExpectation>(value => value == expectation),
+            It.IsAny<CancellationToken>()), Times.Once);
+        repositoryMock.Verify(repository => repository.ResetDatabaseAsync(
+            It.IsAny<IReadOnlyList<StressGraphSeedSpec>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
     public async Task ResetDatabaseAsync_RejectsMixedUnknownSelectionBeforeRepositoryCall()
     {
         var repositoryMock = new Mock<IGraphRepository>();

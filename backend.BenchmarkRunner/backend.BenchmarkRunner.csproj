@@ -15,4 +15,9 @@
              Link="data\sql\benchmark_schema.sql"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\frontend\performance\run-browser-journey.mjs"
+             Link="browser\run-browser-journey.mjs"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

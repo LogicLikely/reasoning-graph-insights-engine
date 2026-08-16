@@ -61,9 +61,11 @@ internal static class BenchmarkPersistenceTestData
                 8,
                 16_000_000_000),
             "fixture-environment",
-            new WarmupSampleCachePolicy(0, 1, "none", "single", "warm", "warm"),
+            new WarmupSampleCachePolicy(
+                0, 1, "none", "single", "warm", "warm", RunSampleModeTokens.Warm),
             new TimeoutCancellationPolicy(TimeSpan.FromSeconds(30), "cooperative", true),
-            Units);
+            Units,
+            "quick");
     }
 
     internal static RunSample Sample(

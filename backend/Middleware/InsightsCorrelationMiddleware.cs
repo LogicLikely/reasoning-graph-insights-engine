@@ -43,24 +43,45 @@ public sealed class InsightsCorrelationMiddleware
                 httpContext.Response.Headers[InsightCorrelationHeaders.SampleId] =
                     validation.Context.SampleId.ToString("D");
 
+                var publication = new ServerTimingPublication(
+                    httpContext.Response,
+                    timingCollector);
+
+                if (httpContext.Response.SupportsTrailers())
+                {
+                    httpContext.Response.DeclareTrailer(ServerTimingHeader);
+                }
+
                 httpContext.Response.OnStarting(static state =>
                 {
-                    var (response, collector) =
-                        ((HttpResponse Response, IInsightPhaseTimingCollector Collector))state;
-                    WriteServerTimingHeader(response, collector);
+                    var publication = (ServerTimingPublication)state;
+                    publication.WriteHeader();
                     return Task.CompletedTask;
-                }, (httpContext.Response, timingCollector));
+                }, publication);
+
+                await _next(httpContext);
+
+                // In-memory hosts and endpoints without a body may not start
+                // the response before returning. Ordinary Kestrel responses
+                // publish late phases (notably MVC serialization) as a trailer
+                // so measuring them does not require response buffering. The
+                // controlled REST harness uses HTTP/2 because local HTTP/1.1
+                // Kestrel responses do not advertise trailer support; on an
+                // unsupported protocol the scoped collector still retains the
+                // measurement, but it cannot be added after headers are sent.
+                if (!httpContext.Response.HasStarted)
+                {
+                    publication.WriteHeader();
+                }
+                else
+                {
+                    publication.WriteTrailer();
+                }
+
+                return;
             }
 
             await _next(httpContext);
-
-            // In-memory hosts and endpoints without a body may not start the
-            // response before returning. Publish the same snapshot while the
-            // headers remain mutable; OnStarting covers ordinary body writes.
-            if (validation.Context is not null && !httpContext.Response.HasStarted)
-            {
-                WriteServerTimingHeader(httpContext.Response, timingCollector);
-            }
         }
         finally
         {
@@ -82,18 +103,65 @@ public sealed class InsightsCorrelationMiddleware
         return $"{timing.Layer}.{timing.Phase};dur={duration}";
     }
 
-    private static void WriteServerTimingHeader(
-        HttpResponse response,
-        IInsightPhaseTimingCollector collector)
+    private sealed class ServerTimingPublication
     {
-        var values = collector.Snapshot()
-            .Where(IsServerTimingEligible)
-            .Select(ToServerTimingValue)
-            .ToArray();
+        private readonly HttpResponse _response;
+        private readonly IInsightPhaseTimingCollector _collector;
+        private readonly HashSet<long> _publishedSequences = [];
 
-        if (values.Length > 0)
+        public ServerTimingPublication(
+            HttpResponse response,
+            IInsightPhaseTimingCollector collector)
         {
-            response.Headers[ServerTimingHeader] = string.Join(", ", values);
+            _response = response;
+            _collector = collector;
+        }
+
+        public void WriteHeader()
+        {
+            var timings = UnpublishedTimings();
+            if (timings.Length == 0)
+            {
+                return;
+            }
+
+            _response.Headers[ServerTimingHeader] = string.Join(
+                ", ",
+                timings.Select(ToServerTimingValue));
+            MarkPublished(timings);
+        }
+
+        public void WriteTrailer()
+        {
+            if (!_response.SupportsTrailers())
+            {
+                return;
+            }
+
+            var timings = UnpublishedTimings();
+            if (timings.Length == 0)
+            {
+                return;
+            }
+
+            _response.AppendTrailer(
+                ServerTimingHeader,
+                string.Join(", ", timings.Select(ToServerTimingValue)));
+            MarkPublished(timings);
+        }
+
+        private InsightPhaseTimingRecord[] UnpublishedTimings() =>
+            _collector.Snapshot()
+                .Where(IsServerTimingEligible)
+                .Where(timing => !_publishedSequences.Contains(timing.Sequence))
+                .ToArray();
+
+        private void MarkPublished(IEnumerable<InsightPhaseTimingRecord> timings)
+        {
+            foreach (var timing in timings)
+            {
+                _publishedSequences.Add(timing.Sequence);
+            }
         }
     }
 

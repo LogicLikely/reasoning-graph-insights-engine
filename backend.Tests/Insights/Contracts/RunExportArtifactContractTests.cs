@@ -156,6 +156,31 @@ public class RunExportArtifactContractTests
     }
 
     [TestMethod]
+    public void Schema_DefinesProfileAndSampleModeWhileAllowingGoal1V1Omission()
+    {
+        using var schema = JsonDocument.Parse(
+            File.ReadAllText(ArtifactPath("run-export-v1.schema.json")));
+        var manifest = schema.RootElement.GetProperty("$defs").GetProperty("runManifest");
+        CollectionAssert.DoesNotContain(
+            manifest.GetProperty("required").EnumerateArray().Select(value => value.GetString()).ToArray(),
+            "profileKey");
+        Assert.IsTrue(manifest.GetProperty("properties").TryGetProperty("profileKey", out _));
+        var sampling = manifest.GetProperty("properties").GetProperty("samplingPolicy");
+        CollectionAssert.DoesNotContain(
+            sampling.GetProperty("required").EnumerateArray().Select(value => value.GetString()).ToArray(),
+            "sampleMode");
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                RunSampleModeTokens.Warm,
+                RunSampleModeTokens.Cold,
+                RunSampleModeTokens.LegacyUnspecified
+            },
+            sampling.GetProperty("properties").GetProperty("sampleMode")
+                .GetProperty("enum").EnumerateArray().Select(value => value.GetString()).ToArray());
+    }
+
+    [TestMethod]
     public void Example_DeserializesIntoTypedContractWithAuditedFields()
     {
         var json = File.ReadAllText(ArtifactPath("run-export-v1.example.json"));
@@ -170,7 +195,9 @@ public class RunExportArtifactContractTests
         Assert.IsNull(export.Manifest.Graph.GraphId);
         Assert.IsFalse(string.IsNullOrWhiteSpace(export.Manifest.BuildConfiguration));
         Assert.IsFalse(string.IsNullOrWhiteSpace(export.Manifest.BuildMode));
+        Assert.AreEqual("standard", export.Manifest.ProfileKey);
         Assert.IsFalse(string.IsNullOrWhiteSpace(export.Manifest.EnvironmentProfile));
+        Assert.AreEqual(RunSampleModeTokens.Warm, export.Manifest.SamplingPolicy.SampleMode);
         Assert.IsTrue(export.Samples.Count > 0);
         Assert.IsFalse(string.IsNullOrWhiteSpace(export.Samples[0].Classification.IterationKind));
         Assert.AreEqual(
@@ -180,6 +207,7 @@ public class RunExportArtifactContractTests
         Assert.AreEqual(2L, export.Samples[0].OperationCounters?.VisitedEdgeCount);
         Assert.IsNotNull(export.Samples[0].Transport.TimeToFirstByte);
         Assert.IsNotNull(export.Samples[0].Transport.FullTransferDuration);
+        Assert.AreEqual(16_384L, export.Samples[0].Transport.ResponseBytes);
         Assert.IsTrue(export.Outputs.Count > 0);
         Assert.IsFalse(string.IsNullOrWhiteSpace(export.Outputs[0].AlgorithmSemanticIdentity));
         Assert.AreEqual(ExecutionStatus.Succeeded, export.Outputs[0].Execution.Status);

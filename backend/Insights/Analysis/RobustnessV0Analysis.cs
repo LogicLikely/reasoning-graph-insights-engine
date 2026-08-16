@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Backend.Calculation;
 using Backend.Insights.Contracts;
+using Backend.Insights.Measurement;
 using Backend.Models.Domain;
 
 namespace Backend.Insights.Analysis;
@@ -89,99 +90,146 @@ public sealed class RobustnessV0Analyzer
         Graph graph,
         CancellationToken cancellationToken = default)
     {
+        return Analyze(graph, null, cancellationToken);
+    }
+
+    internal RobustnessV0AnalysisResult Analyze(
+        Graph graph,
+        IInsightPhaseTimingCollector? phaseTimings,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(graph);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var validation = RobustnessV0Contract.ValidateGraph(graph, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!validation.IsValid)
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.Validation))
         {
-            throw new ArgumentException(
-                $"Graph violates the robustness-v0 input contract: {string.Join("; ", validation.Issues.Select(issue => issue.Message))}",
-                nameof(graph));
-        }
-
-        var context = GraphCalculationContext.From(
-            graph.Nodes,
-            graph.Edges,
-            cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var domainNodesById = graph.Nodes.ToDictionary(
-            node => node.Id,
-            StringComparer.Ordinal);
-        var pathByNodeId = new Dictionary<string, MaximumPathState>(StringComparer.Ordinal);
-        var nodesBeingCalculated = new HashSet<string>(StringComparer.Ordinal);
-        var computedNodes = new List<ComputedNode>(context.NodesById.Count);
-
-        foreach (var nodeId in context.NodesById.Keys)
-        {
+            var validation = RobustnessV0Contract.ValidateGraph(graph, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            var path = GetMaximumLeafPath(
-                context,
-                nodeId,
-                pathByNodeId,
-                nodesBeingCalculated,
-                cancellationToken);
-            var node = domainNodesById[nodeId];
-            var vector = RobustnessV0Contract.Evaluate(
-                node,
-                path.AccumulatedPathLogLikelihoodRatio);
-            computedNodes.Add(new ComputedNode(node, path, vector));
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var orderedNodes = computedNodes.ToArray();
-        CancellationAwareOrdering.Sort(
-            orderedNodes,
-            (left, right) =>
+            if (!validation.IsValid)
             {
-                var scoreComparison = left.Vector.RobustnessScore.CompareTo(
-                    right.Vector.RobustnessScore);
-                return scoreComparison != 0
-                    ? scoreComparison
-                    : StringComparer.Ordinal.Compare(left.Node.Id, right.Node.Id);
-            },
-            cancellationToken);
-
-        var ranking = new RobustnessV0AnalysisItem[orderedNodes.Length];
-        for (var index = 0; index < orderedNodes.Length; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var computed = orderedNodes[index];
-            ranking[index] = new RobustnessV0AnalysisItem(
-                computed.Node.Id,
-                computed.Node.Title,
-                computed.Node.Kind,
-                index + 1,
-                computed.Vector.RobustnessScore,
-                computed.Vector.OriginalProbability,
-                computed.Vector.HypotheticalProbability,
-                computed.Vector.AbsoluteProbabilityDelta,
-                computed.Vector.AccumulatedPathLogLikelihoodRatio,
-                computed.Vector.AccumulatedPathLikelihoodRatio,
-                computed.Path.NodeIds,
-                computed.Path.EdgeIds,
-                RobustnessV0Contract.SemanticVersion);
+                throw new ArgumentException(
+                    $"Graph violates the robustness-v0 input contract: {string.Join("; ", validation.Issues.Select(issue => issue.Message))}",
+                    nameof(graph));
+            }
         }
 
-        var frozenRanking = Array.AsReadOnly(ranking);
-        var top100 = Array.AsReadOnly(
-            ranking.Take(OperationResultEnvelope.MaximumRetainedItems).ToArray());
-        var distribution = CreateDistribution(ranking, cancellationToken);
-        var orderedPaths = CreateOrderedPaths(ranking, cancellationToken);
-        var normalizedItems = CreateNormalizedItems(ranking, cancellationToken);
-        var retainedItems = Array.AsReadOnly(
-            normalizedItems.Take(OperationResultEnvelope.MaximumRetainedItems).ToArray());
-        var resultDigest = ComputeCompleteResultDigest(normalizedItems, cancellationToken);
+        GraphCalculationContext context;
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.CalculationContextConstruction))
+        {
+            context = GraphCalculationContext.From(
+                graph.Nodes,
+                graph.Edges,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
 
-        return new RobustnessV0AnalysisResult(
-            frozenRanking,
-            top100,
-            retainedItems,
-            distribution,
-            orderedPaths,
-            resultDigest);
+        List<ComputedNode> computedNodes;
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.Algorithm))
+        {
+            var domainNodesById = graph.Nodes.ToDictionary(
+                node => node.Id,
+                StringComparer.Ordinal);
+            var pathByNodeId = new Dictionary<string, MaximumPathState>(StringComparer.Ordinal);
+            var nodesBeingCalculated = new HashSet<string>(StringComparer.Ordinal);
+            computedNodes = new List<ComputedNode>(context.NodesById.Count);
+
+            using (phaseTimings?.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.AlgorithmSubphase("maximum-path-evaluation")))
+            {
+                foreach (var nodeId in context.NodesById.Keys)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var path = GetMaximumLeafPath(
+                        context,
+                        nodeId,
+                        pathByNodeId,
+                        nodesBeingCalculated,
+                        cancellationToken);
+                    var node = domainNodesById[nodeId];
+                    var vector = RobustnessV0Contract.Evaluate(
+                        node,
+                        path.AccumulatedPathLogLikelihoodRatio);
+                    computedNodes.Add(new ComputedNode(node, path, vector));
+                }
+            }
+        }
+
+        RobustnessV0AnalysisItem[] ranking;
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.Ranking))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var orderedNodes = computedNodes.ToArray();
+            CancellationAwareOrdering.Sort(
+                orderedNodes,
+                (left, right) =>
+                {
+                    var scoreComparison = left.Vector.RobustnessScore.CompareTo(
+                        right.Vector.RobustnessScore);
+                    return scoreComparison != 0
+                        ? scoreComparison
+                        : StringComparer.Ordinal.Compare(left.Node.Id, right.Node.Id);
+                },
+                cancellationToken);
+
+            ranking = new RobustnessV0AnalysisItem[orderedNodes.Length];
+            for (var index = 0; index < orderedNodes.Length; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var computed = orderedNodes[index];
+                ranking[index] = new RobustnessV0AnalysisItem(
+                    computed.Node.Id,
+                    computed.Node.Title,
+                    computed.Node.Kind,
+                    index + 1,
+                    computed.Vector.RobustnessScore,
+                    computed.Vector.OriginalProbability,
+                    computed.Vector.HypotheticalProbability,
+                    computed.Vector.AbsoluteProbabilityDelta,
+                    computed.Vector.AccumulatedPathLogLikelihoodRatio,
+                    computed.Vector.AccumulatedPathLikelihoodRatio,
+                    computed.Path.NodeIds,
+                    computed.Path.EdgeIds,
+                    RobustnessV0Contract.SemanticVersion);
+            }
+        }
+
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.ResultShaping))
+        {
+            var frozenRanking = Array.AsReadOnly(ranking);
+            var top100 = Array.AsReadOnly(
+                ranking.Take(OperationResultEnvelope.MaximumRetainedItems).ToArray());
+            var distribution = CreateDistribution(ranking, cancellationToken);
+            var orderedPaths = CreateOrderedPaths(ranking, cancellationToken);
+            var normalizedItems = CreateNormalizedItems(ranking, cancellationToken);
+            var retainedItems = Array.AsReadOnly(
+                normalizedItems.Take(OperationResultEnvelope.MaximumRetainedItems).ToArray());
+            string resultDigest;
+            using (phaseTimings?.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.DigestGeneration))
+            {
+                resultDigest = ComputeCompleteResultDigest(normalizedItems, cancellationToken);
+            }
+
+            return new RobustnessV0AnalysisResult(
+                frozenRanking,
+                top100,
+                retainedItems,
+                distribution,
+                orderedPaths,
+                resultDigest);
+        }
     }
 
     private static MaximumPathState GetMaximumLeafPath(

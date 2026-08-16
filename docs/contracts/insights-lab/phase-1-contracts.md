@@ -9,10 +9,13 @@ with Phase 4 controlled-measurement evidence
 versioned run export, isolated-worker supervision, and controlled-run raw
 measurement evidence
 
-This record implements Phase 1 of the Insights Lab plan. It preserves the
-Phase 0 operation, algorithm, result, canonical JSON, and compatibility
-contracts. It does not implement replacement analysis algorithms, benchmark
-runners, Lab routes, calibration, or an authoritative baseline.
+This record implements Phase 1 of the Insights Lab plan and records the Phase 4
+controlled-run extensions that consume it. It preserves the Phase 0 operation,
+algorithm, result, canonical JSON, and compatibility contracts. Phase 4 now
+implements the CLI benchmark runner and controlled PostgreSQL, REST, browser,
+and isolated-worker journeys. It does not implement Lab routes, calibration,
+or an authoritative baseline. The operational contract is documented in
+[Insights benchmark suite operations](../../operations/insights-benchmark-suite.md).
 
 ## 1. Correlation
 
@@ -41,13 +44,13 @@ The registry order is the canonical export order for otherwise equal samples.
 
 | Layer | Frozen phases |
 |---|---|
-| `postgresql-repository` | `connection-open-wait`, `graph-lookup`, `node-query`, `edge-query`, `evidence-json-materialization`, `catalog-aggregation` |
-| `backend-service-api` | `dto-mapping`, `validation`, `calculation-context-construction`, `algorithm`, `algorithm.<subphase>`, `ranking`, `result-shaping`, `serialization` |
-| `benchmark-orchestration` | `fixture-construction`, `operation-execution`, `worker-supervision`, `persistence`, `export-validation` |
+| `postgresql-repository` | `connection-open-wait`, `graph-lookup`, `node-query`, `edge-query`, `evidence-json-materialization`, `graph-construction`, `catalog-aggregation` |
+| `backend-service-api` | `dto-mapping`, `validation`, `calculation-context-construction`, `algorithm`, `algorithm.<subphase>`, `ranking`, `result-shaping`, `digest-generation`, `serialization` |
+| `benchmark-orchestration` | `fixture-construction`, `operation-execution`, `worker-supervision`, `exact-greedy-quality-comparison`, `persistence`, `export-validation` |
 | `transport` | `response-bytes`, `time-to-first-byte`, `full-transfer` |
-| `browser-data` | `axios-receipt-parse`, `domain-mapping`, `graph-map-adapter`, `search-index-construction` |
+| `browser-data` | `axios-receipt-parse`, `json-parse`, `domain-mapping`, `graph-map-adapter`, `search-index-construction`, `search-completion` |
 | `graph-map` | `node-edge-materialization`, `dagre-layout`, `react-commit`, `deferred-edge-commit`, `viewport-fit` |
-| `lab-result` | `result-render` |
+| `lab-result` | `result-render`, `react-commit` |
 | `end-to-end` | `action-to-stable-result-and-view` |
 
 Algorithm subphases use lowercase dot-separated kebab-case tokens. Phase
@@ -65,13 +68,25 @@ declare external observation or estimation (or direct instrumentation if the
 caller owns a trustworthy monotonic boundary); the collector never guesses.
 Approximate or reconstructed data is always `estimated`.
 
-The backend currently measures the repository fetch/catalog phases and service
-DTO mapping. A correlated response exposes server phases that finished before
-headers were committed through `Server-Timing`. Response byte count belongs in
-the transport measurement fields; true time-to-first-byte and full-transfer
-remain client-observed measurements for the later controlled browser/API
-runner. Reserving browser and GraphMap phase names here does not implement their
-later-phase behavior.
+The backend measures repository fetch/catalog phases, graph and calculation
+context construction, service DTO mapping, exposed analysis phases, canonical
+digest generation, and MVC response serialization. A correlated response
+exposes phases completed before headers are committed through `Server-Timing`;
+trailer-capable controlled HTTP/2 journeys receive serialization and any other
+late completed phases through the `Server-Timing` trailer. Response byte count,
+true time-to-first-byte, and full transfer remain client-observed transport
+measurements. The Phase 4 consumer harness implements the applicable browser
+and GraphMap phases without changing GraphMap 0.2.0; unavailable GraphMap
+internals remain unclaimed.
+
+Phase 4 adds the neutral `json-parse` and `search-completion` browser seams.
+The earlier `axios-receipt-parse` and `search-index-construction` tokens remain
+readable for compatibility, but a fetch-based harness must not call explicit
+`JSON.parse` work Axios receipt parsing, and GraphMap 0.2.0 exposes no internal
+search-index boundary. Its visible search-status completion is therefore
+externally observed as `search-completion`. Result-only React Profiler commits
+use `lab-result/react-commit`; `graph-map/react-commit` remains specific to a
+GraphMap consumer commit.
 
 BenchmarkDotNet owns repeatable in-process operation measurements and its own
 runtime statistics. The controlled runner owns fixture construction, isolated
@@ -96,6 +111,139 @@ counter source exists or an object with the nullable fields `candidateCount`,
 `cancellationCheckCount`, and `thresholdAttained`. Numeric counter values are
 nonnegative. These counters are algorithm work evidence, not values inferred
 from elapsed time.
+
+### 2.1 Phase 4 suite profiles and reset semantics
+
+The executable profile contract is:
+
+- `quick`: no warmup and one recorded measured iteration, with warm run-level
+  sample mode;
+- `standard`: one recorded warmup followed by three recorded measured
+  iterations, with warm run-level sample mode;
+- `cold`: no warmup and one recorded measured iteration, executable only when
+  every iteration starts a fresh isolated .NET worker or fresh Node and
+  Chromium processes; the static production-profiling Storybook HTTP server
+  remains shared and is not restarted; and
+- `authoritative`: configuration and validation only, with zero scheduled
+  iterations and execution/baseline promotion refused until Phase 6.
+
+Every profile iteration has a distinct sample ID. All completed iteration
+samples and compact outputs remain part of the run, including evidence emitted
+before a later failure. Setup, warmup, and measured rows are never aggregated
+as one population.
+
+Run-level sample mode does not erase raw process-state evidence. A quick or
+standard browser/isolated journey can contain cold child-owned phase rows when
+that browser or worker is fresh, while its shared API/repository phases remain
+warm. Shared-runner setup and quality-comparison work remains warm when the
+runner was not reset.
+
+`cold` is a deliberately scoped child-process classification. It does not mean
+that the runner, API, API connection pool, static production-profiling
+Storybook HTTP server process or serving/cache state, PostgreSQL
+process/shared buffers, filesystem cache, OS page cache, or network/kernel
+state was restarted or cleared. REST and graph-fetch/search browser cases
+whose shared-service state cannot be reset are registered as structured cold
+skips. API-free bounded result rendering and isolated algorithm work may run
+cold because their relevant Node, Chromium, or .NET worker processes are
+freshly launched; the Storybook HTTP server remains shared.
+
+Dataset installation is a setup exchange before a scenario's iterations. It
+uses a correlated exact-HTTP/2 `POST /api/graphs/reset`, rebuilds only
+`public.graphs`, `public.nodes`, and `public.edges`, and installs the requested
+canonical stress data. It never owns the independent `benchmark` schema and is
+never included in measured graph-fetch or algorithm time. Destructive setup is
+restricted to an explicitly opted-in loopback API and a disposable database
+whose name identifies it as test/benchmark/disposable.
+
+Before any destructive request, the runner and API independently prove that
+their configured connections reach the same live PostgreSQL target. Each
+observes `[current_database, inet_server_addr, inet_server_port, UTC
+pg_postmaster_start_time]`, with local-socket/zero fallbacks and microsecond UTC
+formatting. It hashes UTF-8
+`postgres-reset-target-v1\n<jsonb tuple>`. The runner also requires its parsed
+database name to equal its observed `current_database`, then sends the expected
+name and lowercase opaque `sha256:` fingerprint. The API repeats the probe in
+the reset transaction and compares both fields before executing seed SQL. A
+difference rolls back without seed work and is refused as
+`409 database-reset-identity-mismatch`. The disposable-name, loopback, and
+explicit-opt-in guards remain mandatory; the identity handshake does not
+replace them.
+
+### 2.2 Transport and browser limitations
+
+The controlled REST client uses an exact HTTP/2 boundary. Phases completed
+before response commit are read from the `Server-Timing` header; serialization
+and other late phases are read from the `Server-Timing` trailer. The separate
+browser-compatible API endpoint may use HTTP/1, where browser fetch does not
+expose trailers. A browser journey must not manufacture late serialization
+evidence; the paired REST journey owns that observation.
+
+Graph fetch/search browser evidence includes the exact resource's observed
+`PerformanceResourceTiming.nextHopProtocol`, or a nonblank
+`resourceTimingLimitation` when the browser does not disclose it. The protocol
+is never inferred from configured scheme. Cross-origin correlation headers can
+trigger a CORS preflight, so browser request-to-headers timing may include that
+preflight and must not be relabeled as server-only time.
+
+The static controlled harness identifies itself as
+`storybook-production-profiling`. A development Storybook build identifies
+itself separately and cannot be accepted as the production-profiling
+environment. Unexpected page/console errors fail a journey. No browser error,
+including a `ResizeObserver` message, is globally suppressed.
+
+### 2.3 Cross-layer reconciliation
+
+Repository, service, response serialization, transport, browser, and
+end-to-end durations are inclusive observations owned by different clocks and
+may nest. Reconciliation does not force equality and does not sum them as
+exclusive phases. Derived differences are labeled overhead observations and
+may include scheduling, queueing, connection handling, CORS preflight,
+serialization, transfer, parsing, React/render work, and stable-view detection.
+
+Identity fields, counts, statuses, units, and digests reconcile exactly where
+their contracts apply. Time deltas remain diagnostic raw evidence rather than
+an invented internal phase.
+
+### 2.4 Scenario, artifact, and execution policy
+
+The deterministic standard registry covers all four canonical shapes at 1K,
+10K, and 100K for REST fetch, collapsed presentation, bounded searches, and
+the required analysis operations. Complete GraphMap expansion runs only for
+the designated balanced-1K graph; every other expansion remains a structured
+skip. Large deep-chain searches whose ancestor union would materialize most of
+the graph are also structured skips. Unsupported or unsafe work remains in the
+run as `failed`, `timed-out`, `cancelled`, `crashed`, or `skipped` evidence and
+is never silently omitted.
+
+Safe non-deep strongest-path, evidence-impact, greedy-counter, and likelihood
+cases execute in the shared runner so a standard warmup can establish actual
+post-JIT work. Deep variants are isolated. Exact/auto counter cases and every
+robustness case are isolated. Auto-greedy entries remain present for every
+dataset, but the three wide-graph entries are structured skips because no
+bounded wide target can honestly resolve auto to greedy.
+
+Browser scenario dataset, parameter, and strategy values are registry-locked;
+CLI overrides are refused so the manifest, browser journey/query, bounded
+input, and materialization-safety evidence cannot diverge. Non-browser dataset
+overrides recompute shape-dependent worker isolation, including deep
+strongest, evidence, greedy-counter, robustness, and likelihood work.
+
+The operational entry points are the single `backend.BenchmarkRunner` CLI and
+its `list`/`run` commands. Controlled graph-browser runs use a separately
+running API with exact-HTTP/2 REST and browser-compatible endpoints, exact CORS
+origin configuration, and the static production-profiling Storybook harness.
+The complete command lines and safety preconditions live in the
+[suite runbook](../../operations/insights-benchmark-suite.md).
+
+`--persist` writes the reset-safe `benchmark` schema and reloads the durable
+snapshot. `--export-dir` writes one validated v1 JSON artifact per run ID; the
+recommended ignored local path is
+`artifacts/insights-benchmarks/<profile>/<run-id>.json`. Performance runs remain
+manual or explicitly scheduled and informational. They are not ordinary CI
+timing gates. `/lab/analyze`, `/lab/performance`, and historical result UX are
+deferred to Phase 5; authoritative execution, calibration, and baseline
+promotion remain deferred to Phase 6.
 
 ## 3. Explicit, reset-safe persistence
 
@@ -166,6 +314,15 @@ sample row is preserved, its timing provenance is conservatively reconciled to
 `estimated`, and its JSON payload receives `operationCounters: null`. Repeated
 steady-state initialization does not rewrite current rows or replace current
 constraints.
+
+Current v1 manifests require `profileKey` and `samplingPolicy.sampleMode`.
+Pre-Phase-4 v1 imports that omitted either member remain readable only after
+their original source manifest digest has been validated. Typed ingestion then
+normalizes each missing value to `legacy-unspecified` and recomputes the
+manifest digest over that explicit conservative identity. Store migration
+preserves all existing runs, samples, and outputs and assigns the same
+incompatible legacy bucket; it never guesses that old evidence was quick,
+standard, cold, or authoritative.
 
 `resultDigest` covers the complete logical result. It is recomputed from
 retained `items` only when `totalResultCardinality == items.Count`. A top-100

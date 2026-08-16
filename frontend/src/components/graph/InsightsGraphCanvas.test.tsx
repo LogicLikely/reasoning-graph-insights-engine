@@ -140,4 +140,29 @@ describe('InsightsGraphCanvas', () => {
 
     expect(getLatestProps().fullscreen).toMatchObject({ value: true })
   })
+
+  it('measures the consumer adapter without changing the GraphMap package API', () => {
+    const onGraphMapAdapterMeasured = vi.fn()
+    render(
+      <InsightsGraphCanvas
+        graph={sampleGraph}
+        onNodeSelect={() => undefined}
+        isFullscreen={false}
+        onFullscreenChange={() => undefined}
+        onGraphMapAdapterMeasured={onGraphMapAdapterMeasured}
+      />,
+    )
+
+    const adapted = getLatestProps().adapter(sampleGraph)
+
+    expect(adapted.nodes).toHaveLength(sampleGraph.nodes.length)
+    expect(adapted.edges).toHaveLength(sampleGraph.edges.length)
+    expect(onGraphMapAdapterMeasured).toHaveBeenCalledWith(expect.objectContaining({
+      durationMilliseconds: expect.any(Number),
+      startTimeMilliseconds: expect.any(Number),
+      endTimeMilliseconds: expect.any(Number),
+      nodeCount: sampleGraph.nodes.length,
+      edgeCount: sampleGraph.edges.length,
+    }))
+  })
 })

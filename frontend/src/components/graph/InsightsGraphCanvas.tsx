@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   AdaptedGraphMap,
+  type GraphAdapter,
   type GraphLayoutDirection,
 } from '@logiclikely/graphmap'
 import '@logiclikely/graphmap/style.css'
-import type { GraphFixture, GraphFixtureNode } from '../../fixtures/sampleGraph'
+import type {
+  GraphFixture,
+  GraphFixtureEdge,
+  GraphFixtureNode,
+} from '../../fixtures/sampleGraph'
 import { insightsGraphAdapter } from './insightsGraphAdapter'
 import {
   getInsightsEdgePresentation,
@@ -19,6 +24,15 @@ export interface InsightsGraphCanvasProps {
   onNodeSelect: (node: GraphFixtureNode | null) => void
   isFullscreen: boolean
   onFullscreenChange: (isFullscreen: boolean) => void
+  onGraphMapAdapterMeasured?: (measurement: InsightsGraphAdapterMeasurement) => void
+}
+
+export interface InsightsGraphAdapterMeasurement {
+  durationMilliseconds: number
+  startTimeMilliseconds: number
+  endTimeMilliseconds: number
+  nodeCount: number
+  edgeCount: number
 }
 
 export function InsightsGraphCanvas({
@@ -27,14 +41,30 @@ export function InsightsGraphCanvas({
   onNodeSelect,
   isFullscreen,
   onFullscreenChange,
+  onGraphMapAdapterMeasured,
 }: InsightsGraphCanvasProps) {
   const [orientation, setOrientation] = useState<GraphLayoutDirection>('LR')
+  const measuredAdapter = useCallback<GraphAdapter<GraphFixture, GraphFixtureNode, GraphFixtureEdge>>((currentGraph) => {
+    const startTimeMilliseconds = performance.now()
+    const adaptedGraph = insightsGraphAdapter(currentGraph)
+    const endTimeMilliseconds = performance.now()
+
+    onGraphMapAdapterMeasured?.({
+      durationMilliseconds: endTimeMilliseconds - startTimeMilliseconds,
+      startTimeMilliseconds,
+      endTimeMilliseconds,
+      nodeCount: adaptedGraph.nodes.length,
+      edgeCount: adaptedGraph.edges.length,
+    })
+
+    return adaptedGraph
+  }, [onGraphMapAdapterMeasured])
 
   return (
     <div className="insights-graphmap-host" data-testid="insights-graph-canvas">
       <AdaptedGraphMap
         graph={graph}
-        adapter={insightsGraphAdapter}
+        adapter={onGraphMapAdapterMeasured ? measuredAdapter : insightsGraphAdapter}
         selectedNodeId={selectedNodeId ?? null}
         onSelect={onNodeSelect}
         defaultTheme="insights"

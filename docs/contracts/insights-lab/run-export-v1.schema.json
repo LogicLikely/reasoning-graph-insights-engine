@@ -817,6 +817,10 @@
             "api-browser-journey"
           ]
         },
+        "profileKey": {
+          "type": "string",
+          "minLength": 1
+        },
         "scenarioKey": {
           "type": "string",
           "minLength": 1
@@ -1084,6 +1088,13 @@
             "cachePolicy": {
               "type": "string",
               "minLength": 1
+            },
+            "sampleMode": {
+              "enum": [
+                "warm",
+                "cold",
+                "legacy-unspecified"
+              ]
             }
           }
         },

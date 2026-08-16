@@ -144,6 +144,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/storybook-static/
 
+# Local Insights benchmark-suite exports
+/artifacts/insights-benchmarks/
+
 # Backend
 backend/bin/
 backend/obj/

@@ -364,6 +364,94 @@ public class BenchmarkResetPreservationPostgreSqlTests
         }
     }
 
+    [TestMethod]
+    public async Task Phase4Goal2RunReconciliation_PreservesRowsAndUsesIncompatibleLegacyDefaults()
+    {
+        var connectionString = RequireDisposablePostgreSql();
+        await EnsurePostgreSqlIsAvailable(connectionString);
+
+        var repositoryRoot = BenchmarkSchemaSqlTests.FindRepositoryRoot();
+        var backendRoot = Path.Combine(repositoryRoot, "backend");
+        var options = Options.Create(new DatabaseOptions { ConnectionString = connectionString });
+        var connectionFactory = new DbConnectionFactory(options);
+        var initializer = new BenchmarkSchemaInitializer(
+            connectionFactory,
+            CreateHostEnvironment(backendRoot));
+        var repository = new BenchmarkRunRepository(connectionFactory);
+        var intent = ExplicitBenchmarkRunIntent.ForRun(BenchmarkPersistenceTestData.RunId);
+
+        await initializer.InitializeAsync(CancellationToken.None);
+        await DeleteFixtureRun(connectionString);
+
+        try
+        {
+            await repository.CreateRunAsync(
+                intent,
+                BenchmarkPersistenceTestData.Manifest(),
+                CancellationToken.None);
+            await repository.AppendSampleAsync(
+                intent,
+                BenchmarkPersistenceTestData.Sample(),
+                CancellationToken.None);
+            await repository.AppendOutputAsync(
+                intent,
+                BenchmarkPersistenceTestData.Output(),
+                CancellationToken.None);
+            var rowCounts = await ReadBenchmarkRowCounts(connectionString);
+
+            await SimulatePrePhase4Goal2Runs(connectionString);
+            var legacyIndex = await ReadComparisonIndex(connectionString);
+            await initializer.InitializeAsync(CancellationToken.None);
+
+            var snapshot = await repository.GetSnapshotAsync(
+                BenchmarkPersistenceTestData.RunId,
+                CancellationToken.None);
+            Assert.IsNotNull(snapshot);
+            Assert.AreEqual(rowCounts, await ReadBenchmarkRowCounts(connectionString));
+            Assert.AreEqual(RunProfileKeys.LegacyUnspecified, snapshot.Manifest.ProfileKey);
+            Assert.AreEqual(
+                RunSampleModeTokens.LegacyUnspecified,
+                snapshot.Manifest.SamplingPolicy.SampleMode);
+            Assert.AreEqual(1, snapshot.Samples.Count);
+            Assert.AreEqual(1, snapshot.Outputs.Count);
+
+            var selectors = await ReadRunComparisonSelectors(connectionString);
+            Assert.AreEqual(RunProfileKeys.LegacyUnspecified, selectors.ProfileKey);
+            Assert.IsNull(selectors.ActualStrategy);
+            Assert.AreEqual(RunSampleModeTokens.LegacyUnspecified, selectors.SampleMode);
+
+            var reconciledIndex = await ReadComparisonIndex(connectionString);
+            Assert.AreNotEqual(legacyIndex.Oid, reconciledIndex.Oid);
+            CollectionAssert.AreEqual(
+                new[]
+                {
+                    "scenario_key",
+                    "profile_key",
+                    "operation_key",
+                    "dataset_input_fingerprint",
+                    "algorithm_semantic_identity",
+                    "parameter_digest",
+                    "actual_strategy",
+                    "environment_profile",
+                    "build_mode",
+                    "sample_mode",
+                    "measurement_units"
+                },
+                reconciledIndex.Columns);
+
+            await initializer.InitializeAsync(CancellationToken.None);
+            Assert.AreEqual(rowCounts, await ReadBenchmarkRowCounts(connectionString));
+            Assert.AreEqual(
+                reconciledIndex.Oid,
+                (await ReadComparisonIndex(connectionString)).Oid,
+                "Steady-state initialization must not replace the current comparison index.");
+        }
+        finally
+        {
+            await DeleteFixtureRun(connectionString);
+        }
+    }
+
     private static string RequireDisposablePostgreSql()
     {
         var connectionString = Environment.GetEnvironmentVariable(
@@ -563,6 +651,90 @@ public class BenchmarkResetPreservationPostgreSqlTests
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SimulatePrePhase4Goal2Runs(string connectionString)
+    {
+        const string sql = """
+            DROP INDEX benchmark.ix_benchmark_runs_comparison;
+
+            ALTER TABLE benchmark.runs
+                DROP CONSTRAINT ck_benchmark_runs_manifest_identity,
+                DROP CONSTRAINT ck_benchmark_runs_profile_key_nonempty,
+                DROP CONSTRAINT ck_benchmark_runs_actual_strategy_nonempty,
+                DROP CONSTRAINT ck_benchmark_runs_sample_mode;
+
+            ALTER TABLE benchmark.runs
+                DROP COLUMN profile_key,
+                DROP COLUMN actual_strategy,
+                DROP COLUMN sample_mode;
+
+            UPDATE benchmark.runs
+            SET manifest_json = (manifest_json - 'profileKey') #- '{samplingPolicy,sampleMode}';
+
+            CREATE INDEX ix_benchmark_runs_comparison
+                ON benchmark.runs (
+                    scenario_key,
+                    operation_key,
+                    dataset_input_fingerprint,
+                    algorithm_semantic_identity,
+                    parameter_digest,
+                    environment_profile,
+                    build_mode
+                );
+            """;
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<(string ProfileKey, string? ActualStrategy, string SampleMode)>
+        ReadRunComparisonSelectors(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT profile_key, actual_strategy, sample_mode
+            FROM benchmark.runs
+            WHERE run_id = @run_id;
+            """,
+            connection);
+        command.Parameters.AddWithValue("run_id", BenchmarkPersistenceTestData.RunId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.IsTrue(await reader.ReadAsync());
+        return (
+            reader.GetString(0),
+            await reader.IsDBNullAsync(1) ? null : reader.GetString(1),
+            reader.GetString(2));
+    }
+
+    private static async Task<(long Oid, string[] Columns)> ReadComparisonIndex(
+        string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT
+                index_metadata.indexrelid::oid::bigint,
+                array_agg(attribute.attname::text ORDER BY index_key.ordinality)
+            FROM pg_catalog.pg_index AS index_metadata
+            CROSS JOIN LATERAL unnest(index_metadata.indkey)
+                WITH ORDINALITY AS index_key(attnum, ordinality)
+            JOIN pg_catalog.pg_attribute AS attribute
+              ON attribute.attrelid = index_metadata.indrelid
+             AND attribute.attnum = index_key.attnum
+            WHERE index_metadata.indexrelid =
+                'benchmark.ix_benchmark_runs_comparison'::regclass
+            GROUP BY index_metadata.indexrelid;
+            """,
+            connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.IsTrue(await reader.ReadAsync());
+        return (reader.GetInt64(0), reader.GetFieldValue<string[]>(1));
     }
 
     private static async Task<(string Name, long Oid)[]> ReadPayloadConstraintOids(

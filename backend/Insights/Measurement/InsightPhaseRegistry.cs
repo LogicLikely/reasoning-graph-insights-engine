@@ -22,6 +22,7 @@ public static class InsightMeasurementPhases
     public const string NodeQuery = "node-query";
     public const string EdgeQuery = "edge-query";
     public const string EvidenceJsonMaterialization = "evidence-json-materialization";
+    public const string GraphConstruction = "graph-construction";
     public const string CatalogAggregation = "catalog-aggregation";
 
     public const string DtoMapping = "dto-mapping";
@@ -30,11 +31,13 @@ public static class InsightMeasurementPhases
     public const string Algorithm = "algorithm";
     public const string Ranking = "ranking";
     public const string ResultShaping = "result-shaping";
+    public const string DigestGeneration = "digest-generation";
     public const string Serialization = "serialization";
 
     public const string FixtureConstruction = "fixture-construction";
     public const string OperationExecution = "operation-execution";
     public const string WorkerSupervision = "worker-supervision";
+    public const string ExactGreedyQualityComparison = "exact-greedy-quality-comparison";
     public const string Persistence = "persistence";
     public const string ExportValidation = "export-validation";
 
@@ -43,9 +46,11 @@ public static class InsightMeasurementPhases
     public const string FullTransfer = "full-transfer";
 
     public const string AxiosReceiptParse = "axios-receipt-parse";
+    public const string JsonParse = "json-parse";
     public const string DomainMapping = "domain-mapping";
     public const string GraphMapAdapter = "graph-map-adapter";
     public const string SearchIndexConstruction = "search-index-construction";
+    public const string SearchCompletion = "search-completion";
 
     public const string NodeEdgeMaterialization = "node-edge-materialization";
     public const string DagreLayout = "dagre-layout";
@@ -89,6 +94,7 @@ public static partial class InsightPhaseRegistry
             Phase(InsightMeasurementLayers.PostgreSqlRepository, InsightMeasurementPhases.NodeQuery, true),
             Phase(InsightMeasurementLayers.PostgreSqlRepository, InsightMeasurementPhases.EdgeQuery, true),
             Phase(InsightMeasurementLayers.PostgreSqlRepository, InsightMeasurementPhases.EvidenceJsonMaterialization, true),
+            Phase(InsightMeasurementLayers.PostgreSqlRepository, InsightMeasurementPhases.GraphConstruction, true),
             Phase(InsightMeasurementLayers.PostgreSqlRepository, InsightMeasurementPhases.CatalogAggregation, true),
 
             Phase(InsightMeasurementLayers.BackendServiceApi, InsightMeasurementPhases.DtoMapping, true),
@@ -97,11 +103,13 @@ public static partial class InsightPhaseRegistry
             Phase(InsightMeasurementLayers.BackendServiceApi, InsightMeasurementPhases.Algorithm, true, isPrefix: true),
             Phase(InsightMeasurementLayers.BackendServiceApi, InsightMeasurementPhases.Ranking, true),
             Phase(InsightMeasurementLayers.BackendServiceApi, InsightMeasurementPhases.ResultShaping, true),
+            Phase(InsightMeasurementLayers.BackendServiceApi, InsightMeasurementPhases.DigestGeneration, true),
             Phase(InsightMeasurementLayers.BackendServiceApi, InsightMeasurementPhases.Serialization, true),
 
             Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.FixtureConstruction, false),
             Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.OperationExecution, false),
             Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.WorkerSupervision, false),
+            Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.ExactGreedyQualityComparison, false),
             Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.Persistence, false),
             Phase(InsightMeasurementLayers.BenchmarkOrchestration, InsightMeasurementPhases.ExportValidation, false),
 
@@ -110,9 +118,11 @@ public static partial class InsightPhaseRegistry
             Phase(InsightMeasurementLayers.Transport, InsightMeasurementPhases.FullTransfer, false),
 
             Phase(InsightMeasurementLayers.BrowserData, InsightMeasurementPhases.AxiosReceiptParse, false),
+            Phase(InsightMeasurementLayers.BrowserData, InsightMeasurementPhases.JsonParse, false),
             Phase(InsightMeasurementLayers.BrowserData, InsightMeasurementPhases.DomainMapping, false),
             Phase(InsightMeasurementLayers.BrowserData, InsightMeasurementPhases.GraphMapAdapter, false),
             Phase(InsightMeasurementLayers.BrowserData, InsightMeasurementPhases.SearchIndexConstruction, false),
+            Phase(InsightMeasurementLayers.BrowserData, InsightMeasurementPhases.SearchCompletion, false),
 
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.NodeEdgeMaterialization, false),
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.DagreLayout, false),
@@ -121,6 +131,7 @@ public static partial class InsightPhaseRegistry
             Phase(InsightMeasurementLayers.GraphMap, InsightMeasurementPhases.ViewportFit, false),
 
             Phase(InsightMeasurementLayers.LabResult, InsightMeasurementPhases.ResultRender, false),
+            Phase(InsightMeasurementLayers.LabResult, InsightMeasurementPhases.ReactCommit, false),
 
             Phase(InsightMeasurementLayers.EndToEnd, InsightMeasurementPhases.ActionToStableResultAndView, false)
         ]);

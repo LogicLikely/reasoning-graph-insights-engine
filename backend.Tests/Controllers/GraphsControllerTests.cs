@@ -5,6 +5,7 @@ using Backend.Seeding;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Moq;
+using System.Text.Json;
 
 namespace backend.Tests.Controllers;
 
@@ -94,6 +95,96 @@ public class GraphsControllerTests
         serviceMock.Verify(service => service.ResetDatabaseAsync(
             It.Is<IReadOnlyCollection<string>>(ids => ids.SequenceEqual(request.StressGraphIds)),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabase_CompleteTargetExpectation_UsesGuardedServiceOverload()
+    {
+        var serviceMock = new Mock<IGraphService>();
+        var controller = new GraphsController(serviceMock.Object);
+        var expectation = new DatabaseResetTargetExpectation(
+            "logiclikely_benchmark_test",
+            DatabaseResetTargetIdentity.ComputeFingerprint("stable-target-tuple"));
+        var request = new ResetDatabaseRequestDto
+        {
+            StressGraphIds = [StressGraphSeedIds.Balanced1K],
+            ExpectedDatabaseName = expectation.DatabaseName,
+            ExpectedDatabaseFingerprint = expectation.Fingerprint
+        };
+
+        var result = await controller.ResetDatabase(request, CancellationToken.None);
+
+        Assert.IsInstanceOfType<NoContentResult>(result);
+        serviceMock.Verify(service => service.ResetDatabaseAsync(
+            It.Is<IReadOnlyCollection<string>>(ids =>
+                ids.SequenceEqual(new[] { StressGraphSeedIds.Balanced1K })),
+            It.Is<DatabaseResetTargetExpectation>(value => value == expectation),
+            It.IsAny<CancellationToken>()), Times.Once);
+        serviceMock.Verify(service => service.ResetDatabaseAsync(
+            It.IsAny<IReadOnlyCollection<string>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabase_IncompleteTargetExpectation_ReturnsStructuredBadRequestWithoutReset()
+    {
+        var serviceMock = new Mock<IGraphService>();
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.ResetDatabase(
+            new ResetDatabaseRequestDto
+            {
+                StressGraphIds = [StressGraphSeedIds.Balanced1K],
+                ExpectedDatabaseName = "logiclikely_benchmark_test"
+            },
+            CancellationToken.None);
+
+        var badRequest = result as BadRequestObjectResult;
+        Assert.IsNotNull(badRequest);
+        var payload = JsonSerializer.SerializeToElement(badRequest.Value);
+        Assert.AreEqual(
+            "database-reset-identity-expectation-incomplete",
+            payload.GetProperty("code").GetString());
+        serviceMock.Verify(service => service.ResetDatabaseAsync(
+            It.IsAny<IReadOnlyCollection<string>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        serviceMock.Verify(service => service.ResetDatabaseAsync(
+            It.IsAny<IReadOnlyCollection<string>>(),
+            It.IsAny<DatabaseResetTargetExpectation>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task ResetDatabase_TargetMismatch_ReturnsOpaqueStructuredConflict()
+    {
+        var expectation = new DatabaseResetTargetExpectation(
+            "logiclikely_benchmark_test",
+            DatabaseResetTargetIdentity.ComputeFingerprint("expected-target-tuple"));
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.ResetDatabaseAsync(
+                It.IsAny<IReadOnlyCollection<string>>(),
+                It.IsAny<DatabaseResetTargetExpectation>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DatabaseResetIdentityMismatchException(
+                DatabaseResetIdentityMismatchKind.TargetFingerprint));
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.ResetDatabase(
+            new ResetDatabaseRequestDto
+            {
+                ExpectedDatabaseName = expectation.DatabaseName,
+                ExpectedDatabaseFingerprint = expectation.Fingerprint
+            },
+            CancellationToken.None);
+
+        var conflict = result as ConflictObjectResult;
+        Assert.IsNotNull(conflict);
+        var payload = JsonSerializer.SerializeToElement(conflict.Value);
+        Assert.AreEqual("database-reset-identity-mismatch", payload.GetProperty("code").GetString());
+        var raw = payload.GetRawText();
+        Assert.IsFalse(raw.Contains(expectation.DatabaseName, StringComparison.Ordinal));
+        Assert.IsFalse(raw.Contains(expectation.Fingerprint, StringComparison.Ordinal));
     }
 
     [TestMethod]

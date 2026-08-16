@@ -135,7 +135,7 @@ public class GraphService : IGraphService
             return null;
         }
 
-        var graph = ToDomainGraph(graphContext);
+        var graph = ToDomainGraphWithTiming(graphContext);
 
         return await Task.FromResult(
             GetMinimalCounterSet(
@@ -150,33 +150,43 @@ public class GraphService : IGraphService
         CancellationToken cancellationToken = default
     )
     {
-        var result = _robustnessAnalysis.Analyze(graph, cancellationToken);
+        var result = _robustnessAnalysis.Analyze(graph, _phaseTimings, cancellationToken);
         if (result.LeastRobust is null)
         {
             return null;
         }
 
-        return new NodeRobustnessDto
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.DtoMapping))
         {
-            NodeId = result.LeastRobust.NodeId,
-            NodeTitle = result.LeastRobust.Title,
-            Robustness = result.LeastRobust.RobustnessScore
-        };
+            return new NodeRobustnessDto
+            {
+                NodeId = result.LeastRobust.NodeId,
+                NodeTitle = result.LeastRobust.Title,
+                Robustness = result.LeastRobust.RobustnessScore
+            };
+        }
     }
 
     public List<NodeRobustnessDto> GetNodeRobustnessRanking(
         Graph graph,
         CancellationToken cancellationToken = default)
     {
-        return _robustnessAnalysis.Analyze(graph, cancellationToken)
-            .Ranking
-            .Select(item => new NodeRobustnessDto
-            {
-                NodeId = item.NodeId,
-                NodeTitle = item.Title,
-                Robustness = item.RobustnessScore
-            })
-            .ToList();
+        var result = _robustnessAnalysis.Analyze(graph, _phaseTimings, cancellationToken);
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.DtoMapping))
+        {
+            return result.Ranking
+                .Select(item => new NodeRobustnessDto
+                {
+                    NodeId = item.NodeId,
+                    NodeTitle = item.Title,
+                    Robustness = item.RobustnessScore
+                })
+                .ToList();
+        }
     }
 
     public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
@@ -197,7 +207,8 @@ public class GraphService : IGraphService
             return Task.FromResult<NodeRobustnessDto?>(null);
         }
 
-        return Task.FromResult(GetLeastRobustNode(ToDomainGraph(graphContext), cancellationToken));
+        return Task.FromResult(
+            GetLeastRobustNode(ToDomainGraphWithTiming(graphContext), cancellationToken));
     }
 
     public async Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
@@ -219,7 +230,7 @@ public class GraphService : IGraphService
         }
 
         return Task.FromResult<List<NodeRobustnessDto>?>(
-            GetNodeRobustnessRanking(ToDomainGraph(graphContext), cancellationToken));
+            GetNodeRobustnessRanking(ToDomainGraphWithTiming(graphContext), cancellationToken));
     }
 
     public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
@@ -244,7 +255,7 @@ public class GraphService : IGraphService
             return Task.FromResult<EvidenceImpactRankingDto?>(null);
         }
 
-        var graph = ToDomainGraph(graphContext);
+        var graph = ToDomainGraphWithTiming(graphContext);
         return Task.FromResult<EvidenceImpactRankingDto?>(
             GetLegacyEvidenceImpactRanking(graph, targetNodeId, cancellationToken));
     }
@@ -254,43 +265,68 @@ public class GraphService : IGraphService
         string targetNodeId,
         CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        // Preserve the legacy endpoint's exception contract for a missing target
-        // while adapting its compact DTO from the versioned rich result.
-        if (!graph.Nodes.Any(node => string.Equals(node.Id, targetNodeId, StringComparison.Ordinal)))
+        bool useRichAnalysis;
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.Validation))
         {
-            throw new InvalidOperationException(
-                $"Target node '{targetNodeId}' does not exist in the calculation context.");
+            cancellationToken.ThrowIfCancellationRequested();
+            // Preserve the legacy endpoint's exception contract for a missing target
+            // while adapting its compact DTO from the versioned rich result.
+            if (!graph.Nodes.Any(node => string.Equals(node.Id, targetNodeId, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException(
+                    $"Target node '{targetNodeId}' does not exist in the calculation context.");
+            }
+
+            // The rich v0 contract makes positive-LR DAG validation explicit. The
+            // pre-Phase3 endpoint did not, so retain its scalar behavior for inputs
+            // outside that richer execution domain instead of narrowing the legacy
+            // route's accepted input set.
+            useRichAnalysis = AlgorithmGraphContractValidation
+                .ValidateDirectedAcyclicGraph(graph, cancellationToken)
+                .IsValid;
         }
 
-        // The rich v0 contract makes positive-LR DAG validation explicit. The
-        // pre-Phase3 endpoint did not, so retain its scalar behavior for inputs
-        // outside that richer execution domain instead of narrowing the legacy
-        // route's accepted input set.
-        var richInputValidation = AlgorithmGraphContractValidation
-            .ValidateDirectedAcyclicGraph(graph, cancellationToken);
-        if (!richInputValidation.IsValid)
+        if (!useRichAnalysis)
         {
-            return _calculator.GetEvidenceImpactRanking(
-                graph,
-                targetNodeId,
-                cancellationToken);
+            using (_phaseTimings.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.Algorithm))
+            using (_phaseTimings.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.AlgorithmSubphase("legacy-scalar-fallback")))
+            {
+                return _calculator.GetEvidenceImpactRanking(
+                    graph,
+                    targetNodeId,
+                    cancellationToken);
+            }
         }
 
-        var result = _evidenceImpactAnalysis.Analyze(graph, targetNodeId, cancellationToken);
+        var result = _evidenceImpactAnalysis.Analyze(
+            graph,
+            targetNodeId,
+            _phaseTimings,
+            cancellationToken);
 
-        static EvidenceImpactDto ToLegacyDto(EvidenceImpactV0LegacyItem item) => new()
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.DtoMapping))
         {
-            NodeId = item.NodeId,
-            LogLr = item.AccumulatedPathLogLikelihoodRatio,
-            ProbabilityDifference = item.RawProbabilityDelta
-        };
+            static EvidenceImpactDto ToLegacyDto(EvidenceImpactV0LegacyItem item) => new()
+            {
+                NodeId = item.NodeId,
+                LogLr = item.AccumulatedPathLogLikelihoodRatio,
+                ProbabilityDifference = item.RawProbabilityDelta
+            };
 
-        return new EvidenceImpactRankingDto
-        {
-            SupportingEvidence = result.LegacySupportingEvidence.Select(ToLegacyDto).ToList(),
-            CounterEvidence = result.LegacyCounterEvidence.Select(ToLegacyDto).ToList()
-        };
+            return new EvidenceImpactRankingDto
+            {
+                SupportingEvidence = result.LegacySupportingEvidence.Select(ToLegacyDto).ToList(),
+                CounterEvidence = result.LegacyCounterEvidence.Select(ToLegacyDto).ToList()
+            };
+        }
     }
 
     public async Task<bool> DeleteNodeAsync(
@@ -365,6 +401,16 @@ public class GraphService : IGraphService
                 ImportanceToParent = edge.ImportanceToParent
             }).ToList()
         };
+    }
+
+    private Graph ToDomainGraphWithTiming(GraphDto graphDto)
+    {
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.DtoMapping))
+        {
+            return ToDomainGraph(graphDto);
+        }
     }
 
     public async Task<bool> AddNodeAsync(
@@ -458,6 +504,19 @@ public class GraphService : IGraphService
         await _graphRepository.ResetDatabaseAsync(stressGraphs, cancellationToken);
     }
 
+    public async Task ResetDatabaseAsync(
+        IReadOnlyCollection<string> stressGraphIds,
+        DatabaseResetTargetExpectation targetExpectation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(targetExpectation);
+        var stressGraphs = StressGraphSeedCatalog.Resolve(stressGraphIds);
+        await _graphRepository.ResetDatabaseAsync(
+            stressGraphs,
+            targetExpectation,
+            cancellationToken);
+    }
+
     private async Task<IReadOnlyDictionary<string, decimal>> RecalculateAndPersistAncestorsAsync(
         string slug,
         string changedNodeId,
@@ -524,66 +583,101 @@ public class GraphService : IGraphService
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var context = GraphCalculationContext.From(
-            graph.Nodes,
-            graph.Edges,
-            cancellationToken);
-
-        // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
-        var registeredNodeIds = ExcludeCounterNodes(context, nodeIds, cancellationToken);
-        if (!registeredNodeIds.Contains(targetClaimId, StringComparer.Ordinal))
+        GraphCalculationContext context;
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.CalculationContextConstruction))
         {
-            registeredNodeIds.Add(targetClaimId);
-        }
-
-        PriorityQueue<string, decimal> counterQueue = GetCounterQueue(
-            context,
-            targetClaimId,
-            nodeIds,
-            cancellationToken);
-
-        //Dictionary mapping log odds to every node (including counters)
-        cancellationToken.ThrowIfCancellationRequested();
-        var normalLogOdds = _calculator.RecalculateNodesAndAncestors(
-            context,
-            nodeIds,
-            cancellationToken);
-
-        //Calculates odds without considering counters
-        cancellationToken.ThrowIfCancellationRequested();
-        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(
-            context,
-            registeredNodeIds,
-            cancellationToken);
-        List<string> countersUsed = new List<string>();
-        if (!recalculatedLogOdds.TryGetValue(targetClaimId, out var targetClaimLogOdds))
-        {
-            throw new InvalidOperationException($"Target node '{targetClaimId}' does not exist in the recalculatedLogOdds dictionary.");
-        }
-
-        //Walk through every counter from queue, ordered by likelihood, and include it in new odds calculation
-        while (counterQueue.Count > 0 && targetClaimLogOdds > -1)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            string counterNodeId = counterQueue.Dequeue();
-            registeredNodeIds.Add(counterNodeId);
-            countersUsed.Add(counterNodeId);
-            double? counterLikelihoodRatio = (double?)_calculator.GetSingleAccumulatedLR(
-                context,
-                counterNodeId,
-                targetClaimId,
+            context = GraphCalculationContext.From(
+                graph.Nodes,
+                graph.Edges,
                 cancellationToken);
-            if (!counterLikelihoodRatio.HasValue) continue;
-
-            decimal logCounterLikelihoodRatio = (decimal)Math.Log(counterLikelihoodRatio.Value);
-            targetClaimLogOdds += normalLogOdds[counterNodeId] + logCounterLikelihoodRatio;
         }
 
-        if (targetClaimLogOdds > -1)
+        List<string> countersUsed;
+        decimal targetClaimLogOdds;
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.Algorithm))
         {
-            return null;
+            List<string> registeredNodeIds;
+            PriorityQueue<string, decimal> counterQueue;
+            using (_phaseTimings.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.AlgorithmSubphase("candidate-preparation")))
+            {
+                // registeredNodeIds starts without counter evidence; counters
+                // are added one at a time by the frozen heuristic below.
+                registeredNodeIds = ExcludeCounterNodes(context, nodeIds, cancellationToken);
+                if (!registeredNodeIds.Contains(targetClaimId, StringComparer.Ordinal))
+                {
+                    registeredNodeIds.Add(targetClaimId);
+                }
+
+                counterQueue = GetCounterQueue(
+                    context,
+                    targetClaimId,
+                    nodeIds,
+                    cancellationToken);
+            }
+
+            IReadOnlyDictionary<string, decimal> normalLogOdds;
+            using (_phaseTimings.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.AlgorithmSubphase("likelihood-recalculation")))
+            {
+                // Dictionary mapping log odds to every node (including counters).
+                cancellationToken.ThrowIfCancellationRequested();
+                normalLogOdds = _calculator.RecalculateNodesAndAncestors(
+                    context,
+                    nodeIds,
+                    cancellationToken);
+
+                // Calculate odds without considering counters.
+                cancellationToken.ThrowIfCancellationRequested();
+                var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(
+                    context,
+                    registeredNodeIds,
+                    cancellationToken);
+                if (!recalculatedLogOdds.TryGetValue(targetClaimId, out targetClaimLogOdds))
+                {
+                    throw new InvalidOperationException(
+                        $"Target node '{targetClaimId}' does not exist in the recalculatedLogOdds dictionary.");
+                }
+            }
+
+            countersUsed = [];
+            using (_phaseTimings.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.AlgorithmSubphase("threshold-selection")))
+            {
+                // Walk through every counter in likelihood order and include it
+                // in the frozen heuristic's accumulated target odds.
+                while (counterQueue.Count > 0 && targetClaimLogOdds > -1)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    string counterNodeId = counterQueue.Dequeue();
+                    registeredNodeIds.Add(counterNodeId);
+                    countersUsed.Add(counterNodeId);
+                    double? counterLikelihoodRatio = (double?)_calculator.GetSingleAccumulatedLR(
+                        context,
+                        counterNodeId,
+                        targetClaimId,
+                        cancellationToken);
+                    if (!counterLikelihoodRatio.HasValue) continue;
+
+                    decimal logCounterLikelihoodRatio = (decimal)Math.Log(counterLikelihoodRatio.Value);
+                    targetClaimLogOdds += normalLogOdds[counterNodeId] + logCounterLikelihoodRatio;
+                }
+            }
         }
-        return countersUsed;
+
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.ResultShaping))
+        {
+            return targetClaimLogOdds > -1 ? null : countersUsed;
+        }
     }
 
     //Get queue of counters ranked by their likelihood

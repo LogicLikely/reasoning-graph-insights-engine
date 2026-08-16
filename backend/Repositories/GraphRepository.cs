@@ -136,27 +136,20 @@ public class GraphRepository : IGraphRepository
         {
             graphRow = await connection.QuerySingleOrDefaultAsync<GraphRow>(command);
         }
-        var graph = graphRow == null ? null : new Graph
-        {
-            Id = graphRow.Id,
-            Slug = graphRow.Slug,
-            Title = graphRow.Title,
-            Description = graphRow.Description
-        };
 
-        if (graph is null)
+        if (graphRow is null)
         {
             return null;
         }
 
         var nodesCommand = new CommandDefinition(
             NodesSql,
-            new { GraphId = graph.Id },
+            new { GraphId = graphRow.Id },
             cancellationToken: cancellationToken);
 
         var edgesCommand = new CommandDefinition(
             EdgesSql,
-            new { GraphId = graph.Id },
+            new { GraphId = graphRow.Id },
             cancellationToken: cancellationToken);
 
         List<NodeRow> nodeRows;
@@ -167,33 +160,54 @@ public class GraphRepository : IGraphRepository
             nodeRows = (await connection.QueryAsync<NodeRow>(nodesCommand)).ToList();
         }
 
-        //Individually assigns each property so can do custom stuff with evidence field
-        using (_phaseTimings.Measure(
-                   InsightMeasurementLayers.PostgreSqlRepository,
-                   InsightMeasurementPhases.EvidenceJsonMaterialization))
-        {
-            graph.Nodes = nodeRows.Select(row => new GraphNode
-            {
-                Id = row.Id,
-                Kind = row.Kind,
-                Title = row.Title,
-                BodyText = row.BodyText,
-                Category = row.Category,
-                Tags = row.Tags?.ToList() ?? new List<string>(),
-                PriorOdds = row.PriorOdds,
-                PosteriorOdds = row.PosteriorOdds,
-                Evidence = string.IsNullOrEmpty(row.Evidence)
-                    ? null
-                    : JsonSerializer.Deserialize<GraphEvidenceDetails>(row.Evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            }).ToList();
-        }
-
+        List<EdgeRow> edgeRows;
         using (_phaseTimings.Measure(
                    InsightMeasurementLayers.PostgreSqlRepository,
                    InsightMeasurementPhases.EdgeQuery))
         {
-            var edgeRows = (await connection.QueryAsync<EdgeRow>(edgesCommand)).ToList();
-            graph.Edges = edgeRows.Select(row => new GraphEdge
+            edgeRows = (await connection.QueryAsync<EdgeRow>(edgesCommand)).ToList();
+        }
+
+        GraphEvidenceDetails?[] evidenceByNodeIndex;
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.EvidenceJsonMaterialization))
+        {
+            evidenceByNodeIndex = new GraphEvidenceDetails?[nodeRows.Count];
+            for (var index = 0; index < nodeRows.Count; index++)
+            {
+                var evidenceJson = nodeRows[index].Evidence;
+                evidenceByNodeIndex[index] = string.IsNullOrEmpty(evidenceJson)
+                    ? null
+                    : JsonSerializer.Deserialize<GraphEvidenceDetails>(
+                        evidenceJson,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+        }
+
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.GraphConstruction))
+        {
+            var nodes = new List<GraphNode>(nodeRows.Count);
+            for (var index = 0; index < nodeRows.Count; index++)
+            {
+                var row = nodeRows[index];
+                nodes.Add(new GraphNode
+                {
+                    Id = row.Id,
+                    Kind = row.Kind,
+                    Title = row.Title,
+                    BodyText = row.BodyText,
+                    Category = row.Category,
+                    Tags = row.Tags?.ToList() ?? [],
+                    PriorOdds = row.PriorOdds,
+                    PosteriorOdds = row.PosteriorOdds,
+                    Evidence = evidenceByNodeIndex[index]
+                });
+            }
+
+            var edges = edgeRows.Select(row => new GraphEdge
             {
                 Id = row.Id,
                 From = row.From,
@@ -201,9 +215,17 @@ public class GraphRepository : IGraphRepository
                 Kind = row.Kind,
                 ImportanceToParent = row.ImportanceToParent
             }).ToList();
-        }
 
-        return graph;
+            return new Graph
+            {
+                Id = graphRow.Id,
+                Slug = graphRow.Slug,
+                Title = graphRow.Title,
+                Description = graphRow.Description,
+                Nodes = nodes,
+                Edges = edges
+            };
+        }
     }
 
     /// <summary>
@@ -516,7 +538,22 @@ public class GraphRepository : IGraphRepository
 
     public async Task ResetDatabaseAsync(
         IReadOnlyList<StressGraphSeedSpec> stressGraphs,
+        CancellationToken cancellationToken = default) =>
+        await ResetDatabaseCoreAsync(stressGraphs, null, cancellationToken);
+
+    public async Task ResetDatabaseAsync(
+        IReadOnlyList<StressGraphSeedSpec> stressGraphs,
+        DatabaseResetTargetExpectation targetExpectation,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(targetExpectation);
+        await ResetDatabaseCoreAsync(stressGraphs, targetExpectation, cancellationToken);
+    }
+
+    private async Task ResetDatabaseCoreAsync(
+        IReadOnlyList<StressGraphSeedSpec> stressGraphs,
+        DatabaseResetTargetExpectation? targetExpectation,
+        CancellationToken cancellationToken)
     {
         var seedSqlPath = Path.Combine(
             _hostEnvironment.ContentRootPath,
@@ -558,6 +595,35 @@ public class GraphRepository : IGraphRepository
 
         try
         {
+            if (targetExpectation is not null)
+            {
+                var actualTarget = await connection.QuerySingleAsync<DatabaseResetTargetProbe>(
+                    new CommandDefinition(
+                        DatabaseResetTargetIdentity.ProbeSql,
+                        transaction: transaction,
+                        commandTimeout: ResetCommandTimeoutSeconds,
+                        cancellationToken: cancellationToken));
+                if (!string.Equals(
+                        actualTarget.DatabaseName,
+                        targetExpectation.DatabaseName,
+                        StringComparison.Ordinal))
+                {
+                    throw new DatabaseResetIdentityMismatchException(
+                        DatabaseResetIdentityMismatchKind.DatabaseName);
+                }
+
+                var actualFingerprint = DatabaseResetTargetIdentity.ComputeFingerprint(
+                    actualTarget.IdentityTuple);
+                if (!string.Equals(
+                        actualFingerprint,
+                        targetExpectation.Fingerprint,
+                        StringComparison.Ordinal))
+                {
+                    throw new DatabaseResetIdentityMismatchException(
+                        DatabaseResetIdentityMismatchKind.TargetFingerprint);
+                }
+            }
+
             await connection.ExecuteAsync(new CommandDefinition(
                 seedSql,
                 transaction: transaction,
@@ -592,5 +658,12 @@ public class GraphRepository : IGraphRepository
             transaction.Rollback();
             throw;
         }
+    }
+
+    private sealed class DatabaseResetTargetProbe
+    {
+        public string DatabaseName { get; init; } = string.Empty;
+
+        public string IdentityTuple { get; init; } = string.Empty;
     }
 }

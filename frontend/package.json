@@ -21,6 +21,7 @@
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
+    "test:browser-harness:static": "npm run build-storybook && node performance/verify-static-harness.mjs",
     "chromatic": "chromatic"
   },
   "dependencies": {

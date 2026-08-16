@@ -26,10 +26,34 @@ public static class BenchmarkOperationRequestFactory
         ArgumentNullException.ThrowIfNull(fixture);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var graph = fixture.CreateGraph();
         var canonicalParameters = new CanonicalParameters(
             parameters.Clone(),
             CanonicalJson.ComputeSha256(parameters));
+
+        if (scenario.OperationKey is
+            OperationKeys.GraphCatalog or
+            OperationKeys.GraphFetch or
+            OperationKeys.GraphSearch)
+        {
+            var restInput = JsonSerializer.SerializeToElement(new
+            {
+                scenarioKey = scenario.Key,
+                datasetId = scenario.DatasetId,
+                executionBoundary = "rest-api"
+            }, JsonOptions);
+            return new PreparedBenchmarkOperation(
+                new WorkerRequestFrame(
+                    runId,
+                    sampleId,
+                    scenario.OperationKey,
+                    InsightOperationRegistry.Get(scenario.OperationKey).SemanticIdentity,
+                    canonicalParameters,
+                    restInput),
+                new StrategySelection(null, null),
+                null);
+        }
+
+        var graph = fixture.CreateGraph();
         object input;
         StrategySelection strategy;
         string? targetNodeId;

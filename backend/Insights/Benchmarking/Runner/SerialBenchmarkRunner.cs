@@ -6,6 +6,7 @@ using Backend.Insights.Contracts;
 using Backend.Insights.Export;
 using Backend.Insights.Measurement;
 using Backend.Insights.Persistence;
+using Backend.Insights.Workers;
 
 namespace Backend.Insights.Benchmarking;
 
@@ -47,8 +48,13 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(selection);
-        var profile = BenchmarkProfiles.Get(selection.ProfileKey);
+        var profile = BenchmarkProfiles.RequireExecutable(selection.ProfileKey);
         var scenarios = ResolveScenarios(selection);
+        foreach (var scenario in scenarios)
+        {
+            BenchmarkProfiles.ValidateScenarioExecution(profile, scenario);
+        }
+
         var results = new List<BenchmarkSingleRunResult>(scenarios.Count);
         foreach (var scenario in scenarios)
         {
@@ -59,7 +65,7 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
 
             cancellationToken.ThrowIfCancellationRequested();
             results.Add(await RunOneAsync(profile, scenario, selection, cancellationToken));
-            if (results[^1].Manifest.Execution.Status == ExecutionStatus.Cancelled)
+            if (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
@@ -86,6 +92,8 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
             var fixtureStarted = Stopwatch.GetTimestamp();
             var fixture = DeterministicStressGraphFixtureFactory.Create(scenario.DatasetId, cancellationToken);
             PreparedBenchmarkOperation? operation = null;
+            BenchmarkScenarioPreparationResult? scenarioPreparation = null;
+            IReadOnlyList<RunSample> preparationSamples = [];
             ExecutionOutcome? preparationFailure = null;
             StrategySelection strategy;
             string? targetNodeId;
@@ -128,11 +136,52 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
             }
             var fixtureDuration = ElapsedMilliseconds(fixtureStarted);
 
+            if (operation is not null &&
+                preparationFailure is null &&
+                _executor is IBenchmarkScenarioPreparer preparer)
+            {
+                try
+                {
+                    scenarioPreparation = await preparer.PrepareAsync(
+                        operation,
+                        scenario,
+                        fixture,
+                        selection.Timeout ?? profile.DefaultTimeout,
+                        cancellationToken);
+                    operation = scenarioPreparation.Operation;
+                    strategy = operation.Strategy;
+                    targetNodeId = operation.TargetNodeId;
+                    preparationSamples = scenarioPreparation.SetupSamples;
+                    if (scenarioPreparation.Execution.Status != ExecutionStatus.Succeeded)
+                    {
+                        preparationFailure = scenarioPreparation.Execution;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    preparationFailure = BenchmarkOperationExecutor.Failure(
+                        ExecutionStatus.Cancelled,
+                        FailureKind.Cancellation,
+                        "benchmark-scenario-setup-cancelled",
+                        "Benchmark scenario setup was cancelled.");
+                }
+                catch (Exception exception)
+                {
+                    preparationFailure = BenchmarkOperationExecutor.Failure(
+                        ExecutionStatus.Failed,
+                        FailureKind.Execution,
+                        "benchmark-scenario-setup-failed",
+                        "Benchmark scenario setup failed unexpectedly.",
+                        exception.GetType().FullName);
+                }
+            }
+
             var queuedManifest = CreateManifest(
                 profile, scenario, fixture, runId, startedAt, strategy, targetNodeId,
                 selection.Timeout ?? profile.DefaultTimeout,
                 new ExecutionOutcome(ExecutionStatus.Queued), null,
-                _sourceRevision);
+                _sourceRevision,
+                scenarioPreparation);
             var intent = ExplicitBenchmarkRunIntent.ForRun(runId);
             var persist = selection.Persist;
             if (persist && _repository is null)
@@ -172,7 +221,10 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
                     FailureKind.Skip,
                     scenario.SkipReason.Code,
                     scenario.SkipReason.Message);
-                samples = [CreateFixtureSample(runId, fixtureSampleId, scenario, fixture, fixtureDuration)];
+                samples = [
+                    CreateFixtureSample(runId, fixtureSampleId, scenario, fixture, fixtureDuration),
+                    .. preparationSamples
+                ];
                 outputs = [];
             }
             else if (preparationFailure is not null)
@@ -184,7 +236,10 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
                 }
 
                 terminal = preparationFailure;
-                samples = [CreateFixtureSample(runId, fixtureSampleId, scenario, fixture, fixtureDuration)];
+                samples = [
+                    CreateFixtureSample(runId, fixtureSampleId, scenario, fixture, fixtureDuration),
+                    .. preparationSamples
+                ];
                 outputs = [];
             }
             else
@@ -195,40 +250,127 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
                         intent, new ExecutionOutcome(ExecutionStatus.Running), null, CancellationToken.None));
                 }
 
-                BenchmarkOperationExecutionResult execution;
-                try
+                var iterationSamples = new List<RunSample>();
+                var iterationOutputs = new List<CompactRunOutput>();
+                var iterationOutcomes = new List<ExecutionOutcome>(
+                    profile.WarmupIterations + profile.MeasuredIterations);
+                var iterationSequence = 0;
+                foreach (var iteration in EnumerateIterations(profile))
                 {
-                    execution = await _executor.ExecuteAsync(
-                        operation!, scenario, fixture, profile,
-                        selection.Timeout ?? profile.DefaultTimeout,
-                        cancellationToken);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    execution = new BenchmarkOperationExecutionResult(
-                        BenchmarkOperationExecutor.Failure(
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        iterationOutcomes.Add(BenchmarkOperationExecutor.Failure(
                             ExecutionStatus.Cancelled,
                             FailureKind.Cancellation,
                             "benchmark-runner-cancelled",
-                            "The benchmark runner was cancelled."),
-                        [],
-                        []);
+                            "The benchmark runner was cancelled before the next profile iteration."));
+                        break;
+                    }
+
+                    // The first iteration retains the request/preparation
+                    // correlation ID. Every later profile iteration receives
+                    // a distinct ID while one-time setup remains traceable to
+                    // the first operation it prepared.
+                    var iterationSampleId = iterationSequence++ == 0
+                        ? operation!.Request.SampleId
+                        : _identitySource.NewSampleId();
+                    var iterationOperation = WithSampleIdentity(operation!, runId, iterationSampleId);
+                    var iterationStarted = Stopwatch.GetTimestamp();
+                    BenchmarkOperationExecutionResult execution;
+                    try
+                    {
+                        execution = await _executor.ExecuteAsync(
+                            iterationOperation,
+                            scenario,
+                            fixture,
+                            profile,
+                            selection.Timeout ?? profile.DefaultTimeout,
+                            cancellationToken);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        execution = new BenchmarkOperationExecutionResult(
+                            BenchmarkOperationExecutor.Failure(
+                                ExecutionStatus.Cancelled,
+                                FailureKind.Cancellation,
+                                "benchmark-runner-cancelled",
+                                "The benchmark runner was cancelled."),
+                            [],
+                            []);
+                    }
+                    catch (OperationCanceledException exception)
+                    {
+                        execution = new BenchmarkOperationExecutionResult(
+                            BenchmarkOperationExecutor.Failure(
+                                ExecutionStatus.Failed,
+                                FailureKind.Execution,
+                                "benchmark-executor-unexpected-cancellation",
+                                "The benchmark executor cancelled without a caller cancellation or structured timeout.",
+                                exception.GetType().FullName),
+                            [],
+                            []);
+                    }
+                    catch (Exception exception)
+                    {
+                        execution = new BenchmarkOperationExecutionResult(
+                            BenchmarkOperationExecutor.Failure(
+                                ExecutionStatus.Failed,
+                                FailureKind.Execution,
+                                "benchmark-executor-failed",
+                                "The benchmark executor failed unexpectedly.",
+                                exception.GetType().FullName),
+                            [],
+                            []);
+                    }
+
+                    var normalizedSamples = execution.Samples
+                        .Select(sample => RetagIterationSample(
+                            sample,
+                            runId,
+                            iterationSampleId,
+                            iteration.Index,
+                            iteration.Kind,
+                            profile,
+                            scenario))
+                        .ToList();
+                    if (normalizedSamples.Count == 0)
+                    {
+                        normalizedSamples.Add(CreateIterationOutcomeSample(
+                            runId,
+                            iterationSampleId,
+                            scenario,
+                            fixture,
+                            execution.Execution,
+                            ElapsedMilliseconds(iterationStarted),
+                            iteration.Index,
+                            IterationClassificationFor(
+                                profile,
+                                scenario,
+                                InsightMeasurementLayers.BenchmarkOrchestration,
+                                iteration.Kind)));
+                    }
+
+                    iterationSamples.AddRange(normalizedSamples);
+                    iterationOutputs.AddRange(execution.Outputs.Select(output =>
+                        WithOutputIdentity(output, runId, iterationSampleId)));
+                    iterationOutcomes.Add(NormalizeTerminalOutcome(execution.Execution));
+
+                    // A failed, timed-out, crashed, skipped, or internally-cancelled
+                    // iteration does not erase prior evidence and does not suppress
+                    // later iterations. Only the caller's cancellation stops work.
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
                 }
-                catch (Exception exception)
-                {
-                    execution = new BenchmarkOperationExecutionResult(
-                        BenchmarkOperationExecutor.Failure(
-                            ExecutionStatus.Failed,
-                            FailureKind.Execution,
-                            "benchmark-executor-failed",
-                            "The benchmark executor failed unexpectedly.",
-                            exception.GetType().FullName),
-                        [],
-                        []);
-                }
-                terminal = execution.Execution;
-                samples = [CreateFixtureSample(runId, fixtureSampleId, scenario, fixture, fixtureDuration), .. execution.Samples];
-                outputs = execution.Outputs;
+
+                terminal = AggregateTerminalOutcome(iterationOutcomes);
+                samples = [
+                    CreateFixtureSample(runId, fixtureSampleId, scenario, fixture, fixtureDuration),
+                    .. preparationSamples,
+                    .. iterationSamples
+                ];
+                outputs = iterationOutputs.AsReadOnly();
 
             }
 
@@ -341,7 +483,8 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
         TimeSpan timeout,
         ExecutionOutcome execution,
         DateTimeOffset? completedAt,
-        SourceRevision sourceRevision)
+        SourceRevision sourceRevision,
+        BenchmarkScenarioPreparationResult? preparation)
     {
         var spec = fixture.Specification;
         var identity = fixture.Identity;
@@ -351,14 +494,16 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
             execution,
             startedAt,
             completedAt,
-            RunnerType.CommandLine,
+            preparation?.RunnerType ?? RunnerType.CommandLine,
             scenario.Key,
             scenario.OperationKey,
-            new GraphRunIdentity(spec.Slug, spec.GraphId.ToString(), spec.Shape,
-                fixture.NodeCount, fixture.EdgeCount, spec.MaximumDepth),
-            new DatasetRunIdentity(identity.GeneratorVersion, identity.CorpusId,
-                identity.CorpusFingerprint, identity.TopologyFingerprint,
-                identity.InputFingerprint, identity.DatasetInputFingerprint),
+            preparation?.GraphIdentity ??
+                new GraphRunIdentity(spec.Slug, spec.GraphId.ToString(), spec.Shape,
+                    fixture.NodeCount, fixture.EdgeCount, spec.MaximumDepth),
+            preparation?.DatasetIdentity ??
+                new DatasetRunIdentity(identity.GeneratorVersion, identity.CorpusId,
+                    identity.CorpusFingerprint, identity.TopologyFingerprint,
+                    identity.InputFingerprint, identity.DatasetInputFingerprint),
             new AlgorithmRunIdentity(
                 scenario.OperationKey,
                 InsightOperationRegistry.Get(scenario.OperationKey).SemanticIdentity),
@@ -373,22 +518,283 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
             "Release",
             "release",
 #endif
-            new DependencyVersions(
-                Environment.Version.ToString(), "not-used", "not-used", "not-used", "not-measured",
-                new Dictionary<string, string> { ["runtime"] = RuntimeInformation.FrameworkDescription }),
+            preparation?.Dependencies ??
+                new DependencyVersions(
+                    Environment.Version.ToString(), "not-used", "not-used", "not-used", "not-measured",
+                    new Dictionary<string, string> { ["runtime"] = RuntimeInformation.FrameworkDescription }),
             new HostEnvironment(
                 RuntimeInformation.OSDescription,
                 RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
                 "unavailable",
                 Math.Max(1, Environment.ProcessorCount),
                 Math.Max(1, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes)),
-            "local-uncontrolled",
-            new WarmupSampleCachePolicy(
-                profile.WarmupIterations, profile.MeasuredIterations,
-                "profile-defined", "raw-samples", "recorded", "warm"),
+            preparation?.EnvironmentProfile ?? "local-uncontrolled",
+            profile.ToSamplingPolicy(),
             new TimeoutCancellationPolicy(timeout, "cooperative-then-hard-timeout", scenario.RequiresIsolation),
-            BenchmarkOperationExecutor.StandardUnits);
+            BenchmarkOperationExecutor.StandardUnits,
+            profile.Key);
     }
+
+    private static IEnumerable<ProfileIteration> EnumerateIterations(
+        BenchmarkProfileDefinition profile)
+    {
+        for (var index = 0; index < profile.WarmupIterations; index++)
+        {
+            yield return new ProfileIteration(index, IterationClassificationTokens.Warmup);
+        }
+
+        for (var index = 0; index < profile.MeasuredIterations; index++)
+        {
+            yield return new ProfileIteration(index, IterationClassificationTokens.Measured);
+        }
+    }
+
+    private static PreparedBenchmarkOperation WithSampleIdentity(
+        PreparedBenchmarkOperation operation,
+        Guid runId,
+        Guid sampleId)
+    {
+        var request = operation.Request;
+        return operation with
+        {
+            Request = new WorkerRequestFrame(
+                request.ProtocolIdentity,
+                request.ProtocolVersion,
+                request.MessageType,
+                runId,
+                sampleId,
+                request.OperationKey,
+                request.AlgorithmSemanticIdentity,
+                request.CanonicalParameters,
+                request.Input)
+        };
+    }
+
+    private static RunSample RetagIterationSample(
+        RunSample sample,
+        Guid runId,
+        Guid sampleId,
+        int iteration,
+        string iterationKind,
+        BenchmarkProfileDefinition profile,
+        BenchmarkScenarioDefinition scenario)
+    {
+        ArgumentNullException.ThrowIfNull(sample);
+        var classification = sample.Classification.IterationKind == IterationClassificationTokens.Setup
+            ? SetupClassificationFor(sample, scenario)
+            : IterationClassificationFor(profile, scenario, sample.Layer, iterationKind, sample.Phase);
+        return sample with
+        {
+            RunId = runId,
+            SampleId = sampleId,
+            ScenarioKey = scenario.Key,
+            OperationKey = scenario.OperationKey,
+            Iteration = iteration,
+            Classification = classification
+        };
+    }
+
+    private static IterationClassification SetupClassificationFor(
+        RunSample sample,
+        BenchmarkScenarioDefinition scenario)
+    {
+        // Result-render fixture generation happens synchronously in the
+        // long-lived runner before the fresh browser process is launched. It
+        // remains setup work, but must never inherit a cold-browser label.
+        if (scenario.ExecutionTarget == BenchmarkScenarioExecutionTarget.Browser &&
+            scenario.BrowserJourney?.Action == BrowserJourneyActions.ResultRender &&
+            sample.Layer == InsightMeasurementLayers.BenchmarkOrchestration &&
+            sample.Phase == InsightMeasurementPhases.OperationExecution)
+        {
+            return new IterationClassification(
+                IterationClassificationTokens.Setup,
+                IterationClassificationTokens.Warm,
+                BenchmarkProcessStateTokens.SharedRunnerProcessNotReset,
+                BenchmarkProcessStateTokens.SharedRunnerCacheNotReset);
+        }
+
+        return sample.Classification;
+    }
+
+    private static IterationClassification IterationClassificationFor(
+        BenchmarkProfileDefinition profile,
+        BenchmarkScenarioDefinition scenario,
+        string layer,
+        string iterationKind,
+        string? phase = null)
+    {
+        if (phase == InsightMeasurementPhases.ExactGreedyQualityComparison)
+        {
+            return new IterationClassification(
+                iterationKind,
+                IterationClassificationTokens.Warm,
+                BenchmarkProcessStateTokens.SharedRunnerProcessNotReset,
+                BenchmarkProcessStateTokens.SharedRunnerCacheNotReset);
+        }
+
+        if (scenario.ExecutionTarget == BenchmarkScenarioExecutionTarget.Browser)
+        {
+            if (layer is InsightMeasurementLayers.PostgreSqlRepository or
+                InsightMeasurementLayers.BackendServiceApi)
+            {
+                return new IterationClassification(
+                    iterationKind,
+                    IterationClassificationTokens.Warm,
+                    BenchmarkProcessStateTokens.SharedServiceProcessNotReset,
+                    BenchmarkProcessStateTokens.SharedServiceCacheNotReset);
+            }
+
+            var cacheState = scenario.BrowserJourney?.Action == BrowserJourneyActions.ResultRender
+                ? BenchmarkProcessStateTokens.FreshBrowserCacheOsNotReset
+                : BenchmarkProcessStateTokens.FreshBrowserCacheSharedServicesNotReset;
+            return new IterationClassification(
+                iterationKind,
+                IterationClassificationTokens.Cold,
+                BenchmarkProcessStateTokens.FreshBrowserProcess,
+                cacheState);
+        }
+
+        if (scenario.RequiresIsolation)
+        {
+            return new IterationClassification(
+                iterationKind,
+                IterationClassificationTokens.Cold,
+                BenchmarkProcessStateTokens.FreshIsolatedWorkerProcess,
+                BenchmarkProcessStateTokens.FreshWorkerCacheOsNotReset);
+        }
+
+        if (scenario.ExecutionTarget is BenchmarkScenarioExecutionTarget.RestDatabaseLoaded or
+            BenchmarkScenarioExecutionTarget.RestSuppliedGraph)
+        {
+            return new IterationClassification(
+                iterationKind,
+                IterationClassificationTokens.Warm,
+                BenchmarkProcessStateTokens.SharedServiceProcessNotReset,
+                BenchmarkProcessStateTokens.SharedServiceCacheNotReset);
+        }
+
+        if (iterationKind == IterationClassificationTokens.Warmup)
+        {
+            return new IterationClassification(
+                iterationKind,
+                IterationClassificationTokens.Warm,
+                IterationClassificationTokens.PreJit,
+                BenchmarkProcessStateTokens.CacheStateNotControlled);
+        }
+
+        if (profile.WarmupIterations > 0)
+        {
+            return new IterationClassification(
+                iterationKind,
+                IterationClassificationTokens.Warm,
+                IterationClassificationTokens.PostJit,
+                IterationClassificationTokens.WarmCache);
+        }
+
+        return new IterationClassification(
+            iterationKind,
+            IterationClassificationTokens.Warm,
+            BenchmarkProcessStateTokens.JitStateNotControlled,
+            BenchmarkProcessStateTokens.CacheStateNotControlled);
+    }
+
+    private static RunSample CreateIterationOutcomeSample(
+        Guid runId,
+        Guid sampleId,
+        BenchmarkScenarioDefinition scenario,
+        DeterministicStressGraphFixture fixture,
+        ExecutionOutcome execution,
+        decimal duration,
+        int iteration,
+        IterationClassification classification) => new(
+            runId,
+            sampleId,
+            scenario.Key,
+            scenario.OperationKey,
+            InsightMeasurementLayers.BenchmarkOrchestration,
+            InsightMeasurementPhases.OperationExecution,
+            duration,
+            iteration,
+            classification,
+            new SampleNodeCounts(fixture.NodeCount, fixture.NodeCount, fixture.NodeCount, null),
+            new SampleEdgeCounts(
+                fixture.EdgeCount,
+                null,
+                fixture.NodeCount == 0 ? null : (decimal)fixture.EdgeCount / fixture.NodeCount),
+            new SampleSearchCounts(null, null),
+            null,
+            new SampleTransportMeasurements(null, null, null, null),
+            new RuntimeResourceMeasurements(null, null, null, null, null, "ms", null),
+            execution,
+            BenchmarkOperationExecutor.StandardUnits,
+            TimingBoundaryProvenance.ExternallyObserved,
+            null);
+
+    private static CompactRunOutput WithOutputIdentity(
+        CompactRunOutput output,
+        Guid runId,
+        Guid sampleId) => new(
+            runId,
+            sampleId,
+            output.ScenarioKey,
+            output.OperationKey,
+            output.AlgorithmSemanticIdentity,
+            output.Strategy,
+            output.Identifiers,
+            output.CanonicalParameters,
+            output.Execution,
+            output.Summary,
+            output.Distribution,
+            output.TotalResultCardinality,
+            output.Items,
+            output.ResultDigest,
+            output.FullResultArtifactReference,
+            output.OrderedPaths);
+
+    private static ExecutionOutcome NormalizeTerminalOutcome(ExecutionOutcome outcome) =>
+        outcome.Status is ExecutionStatus.Queued or ExecutionStatus.Running
+            ? BenchmarkOperationExecutor.Failure(
+                ExecutionStatus.Failed,
+                FailureKind.Execution,
+                "benchmark-executor-nonterminal-outcome",
+                "The benchmark executor returned a non-terminal iteration outcome.")
+            : outcome;
+
+    private static ExecutionOutcome AggregateTerminalOutcome(
+        IReadOnlyList<ExecutionOutcome> outcomes)
+    {
+        if (outcomes.Count == 0)
+        {
+            return BenchmarkOperationExecutor.Failure(
+                ExecutionStatus.Failed,
+                FailureKind.Execution,
+                "benchmark-profile-no-iterations",
+                "The executable benchmark profile produced no iteration outcome.");
+        }
+
+        var selected = NormalizeTerminalOutcome(outcomes[0]);
+        for (var index = 1; index < outcomes.Count; index++)
+        {
+            var candidate = NormalizeTerminalOutcome(outcomes[index]);
+            if (TerminalSeverity(candidate.Status) > TerminalSeverity(selected.Status))
+            {
+                selected = candidate;
+            }
+        }
+
+        return selected;
+    }
+
+    private static int TerminalSeverity(ExecutionStatus status) => status switch
+    {
+        ExecutionStatus.Cancelled => 6,
+        ExecutionStatus.Crashed => 5,
+        ExecutionStatus.TimedOut => 4,
+        ExecutionStatus.Failed => 3,
+        ExecutionStatus.Skipped => 2,
+        ExecutionStatus.Succeeded => 1,
+        _ => 0
+    };
 
     private static RunSample CreateFixtureSample(
         Guid runId,
@@ -478,6 +884,15 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
         BenchmarkScenarioDefinition scenario,
         BenchmarkRunSelection selection)
     {
+        if (scenario.ExecutionTarget == BenchmarkScenarioExecutionTarget.Browser)
+        {
+            throw new ArgumentException(
+                $"Browser scenario '{scenario.Key}' uses a registry-locked dataset, parameters, strategy, and journey. " +
+                "Dataset, parameter, and strategy overrides are refused so manifest, request, browser journey, and " +
+                "materialization-safety evidence cannot drift. Select a registered browser scenario instead.",
+                nameof(selection));
+        }
+
         var parameters = selection.Parameters?.Clone() ?? scenario.Parameters.Clone();
         if (selection.Strategy is not null)
         {
@@ -489,12 +904,12 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
         var requestedStrategy = selection.Strategy ?? ReadRequestedStrategy(parameters) ?? scenario.RequestedStrategy;
         var datasetId = selection.DatasetId ?? scenario.DatasetId;
         var datasetShape = Backend.Seeding.StressGraphSeedCatalog.Resolve([datasetId]).Single().Shape;
+        var isDeepDataset = string.Equals(datasetShape, "deep", StringComparison.Ordinal);
         var requiresIsolation = scenario.RequiresIsolation ||
             string.Equals(scenario.OperationKey, OperationKeys.PathSinglePair, StringComparison.Ordinal) ||
             (string.Equals(scenario.OperationKey, OperationKeys.CounterCriticalSet, StringComparison.Ordinal) &&
              requestedStrategy is OperationStrategyNames.Exact or OperationStrategyNames.Auto) ||
-            (string.Equals(scenario.OperationKey, OperationKeys.NodeRobustness, StringComparison.Ordinal) &&
-             string.Equals(datasetShape, "deep", StringComparison.Ordinal));
+            (isDeepDataset && RequiresDeepShapeIsolation(scenario.OperationKey));
 
         return new BenchmarkScenarioDefinition(
             scenario.Key,
@@ -505,8 +920,18 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
             parameters,
             requestedStrategy,
             requiresIsolation,
-            scenario.SkipReason);
+            scenario.SkipReason,
+            scenario.ExecutionTarget,
+            scenario.BrowserJourney,
+            scenario.MeasureQualityComparison);
     }
+
+    private static bool RequiresDeepShapeIsolation(string operationKey) => operationKey is
+        OperationKeys.PathStrongest or
+        OperationKeys.EvidenceImpactRanking or
+        OperationKeys.CounterCriticalSet or
+        OperationKeys.NodeRobustness or
+        OperationKeys.LikelihoodRecalculate;
 
     private static string? ReadRequestedStrategy(JsonElement parameters) =>
         parameters.ValueKind == JsonValueKind.Object &&
@@ -514,4 +939,22 @@ public sealed class SerialBenchmarkRunner : ISerialBenchmarkRunner
         value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    private readonly record struct ProfileIteration(int Index, string Kind);
+
+    private static class BenchmarkProcessStateTokens
+    {
+        public const string FreshBrowserProcess = "fresh-browser-process";
+        public const string FreshIsolatedWorkerProcess = "fresh-isolated-worker-process";
+        public const string SharedRunnerProcessNotReset = "shared-runner-process-not-reset";
+        public const string SharedServiceProcessNotReset = "shared-service-process-not-reset";
+        public const string JitStateNotControlled = "jit-state-not-controlled";
+        public const string FreshBrowserCacheOsNotReset = "fresh-browser-cache-os-not-reset";
+        public const string FreshBrowserCacheSharedServicesNotReset =
+            "fresh-browser-cache-shared-services-not-reset";
+        public const string FreshWorkerCacheOsNotReset = "fresh-worker-cache-os-not-reset";
+        public const string SharedRunnerCacheNotReset = "shared-runner-cache-not-reset";
+        public const string SharedServiceCacheNotReset = "shared-service-cache-not-reset";
+        public const string CacheStateNotControlled = "cache-state-not-controlled";
+    }
 }

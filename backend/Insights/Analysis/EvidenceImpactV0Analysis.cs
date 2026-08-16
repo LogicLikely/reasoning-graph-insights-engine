@@ -1,5 +1,6 @@
 using Backend.Calculation;
 using Backend.Insights.Contracts;
+using Backend.Insights.Measurement;
 using Backend.Models.Domain;
 
 namespace Backend.Insights.Analysis;
@@ -139,134 +140,187 @@ public sealed class EvidenceImpactV0Analysis
         string targetNodeId,
         CancellationToken cancellationToken = default)
     {
+        return Analyze(graph, targetNodeId, null, cancellationToken);
+    }
+
+    internal EvidenceImpactV0Result Analyze(
+        Graph graph,
+        string targetNodeId,
+        IInsightPhaseTimingCollector? phaseTimings,
+        CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(targetNodeId);
 
-        var validatedGraph = ValidatedAnalysisGraph.Create(graph, cancellationToken);
-        if (!validatedGraph.NodesById.TryGetValue(targetNodeId, out var targetNode))
+        ValidatedAnalysisGraph validatedGraph;
+        GraphNode targetNode;
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.CalculationContextConstruction))
         {
-            throw new ArgumentException(
-                $"Target node '{targetNodeId}' is not present in the graph.",
-                nameof(targetNodeId));
+            validatedGraph = ValidatedAnalysisGraph.Create(graph, cancellationToken);
+            if (!validatedGraph.NodesById.TryGetValue(targetNodeId, out targetNode!))
+            {
+                throw new ArgumentException(
+                    $"Target node '{targetNodeId}' is not present in the graph.",
+                    nameof(targetNodeId));
+            }
         }
 
-        var strongestPaths = StrongestPathV1Analysis.Compute(
-            validatedGraph,
-            targetNodeId,
-            PathDirection.Down,
-            cancellationToken);
-
-        var orderedNodeIds = validatedGraph.NodesById.Keys.ToArray();
-        CancellationAwareOrdering.Sort(
-            orderedNodeIds,
-            StringComparer.Ordinal.Compare,
-            cancellationToken);
-        var evidencePaths = new List<AnalysisPathState>();
-        foreach (var nodeId in orderedNodeIds)
+        List<EvidenceImpactCandidate> supportingCandidates;
+        List<EvidenceImpactCandidate> counterCandidates;
+        decimal recalculatedBaselineLogOdds;
+        double baselineProbability;
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.Algorithm))
         {
+            StrongestPathComputation strongestPaths;
+            using (phaseTimings?.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.AlgorithmSubphase("strongest-path")))
+            {
+                strongestPaths = StrongestPathV1Analysis.Compute(
+                    validatedGraph,
+                    targetNodeId,
+                    PathDirection.Down,
+                    cancellationToken);
+            }
+
+            using (phaseTimings?.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.AlgorithmSubphase("counterfactual-evaluation")))
+            {
+                var orderedNodeIds = validatedGraph.NodesById.Keys.ToArray();
+                CancellationAwareOrdering.Sort(
+                    orderedNodeIds,
+                    StringComparer.Ordinal.Compare,
+                    cancellationToken);
+                var evidencePaths = new List<AnalysisPathState>();
+                foreach (var nodeId in orderedNodeIds)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var node = validatedGraph.NodesById[nodeId];
+                    if (IsFrozenEvidenceKind(node.Kind) &&
+                        strongestPaths.PathsByEndNodeId.TryGetValue(node.Id, out var path))
+                    {
+                        evidencePaths.Add(path);
+                    }
+                }
+
+                recalculatedBaselineLogOdds = targetNode.PriorOdds;
+                foreach (var evidencePath in evidencePaths)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    recalculatedBaselineLogOdds += evidencePath.AccumulatedLogLikelihoodRatio;
+                }
+
+                recalculatedBaselineLogOdds = Math.Clamp(
+                    recalculatedBaselineLogOdds,
+                    MinimumLogOdds,
+                    MaximumLogOdds);
+                baselineProbability = LogOddsToProbability(recalculatedBaselineLogOdds);
+
+                supportingCandidates = [];
+                counterCandidates = [];
+                foreach (var path in evidencePaths)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (path.AccumulatedLogLikelihoodRatio == 0m)
+                    {
+                        continue;
+                    }
+
+                    var counterfactualLogOdds =
+                        recalculatedBaselineLogOdds - path.AccumulatedLogLikelihoodRatio;
+                    var counterfactualProbability = LogOddsToProbability(counterfactualLogOdds);
+                    var candidate = new EvidenceImpactCandidate(
+                        validatedGraph.NodesById[path.EndNodeId],
+                        path,
+                        baselineProbability,
+                        counterfactualProbability,
+                        baselineProbability - counterfactualProbability);
+
+                    if (path.AccumulatedLogLikelihoodRatio > 0m)
+                    {
+                        supportingCandidates.Add(candidate);
+                    }
+                    else
+                    {
+                        counterCandidates.Add(candidate);
+                    }
+                }
+            }
+        }
+
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.Ranking))
+        {
+            SortPartition(supportingCandidates, cancellationToken);
+            SortPartition(counterCandidates, cancellationToken);
+        }
+
+        using (phaseTimings?.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.ResultShaping))
+        {
+            var supportingItems = ShapePartition(
+                supportingCandidates,
+                EvidenceImpactV0Partitions.Supporting,
+                cancellationToken);
+            var counterItems = ShapePartition(
+                counterCandidates,
+                EvidenceImpactV0Partitions.Counter,
+                cancellationToken);
+            var legacySupportingItems = ShapeLegacyPartition(
+                supportingCandidates,
+                cancellationToken);
+            var legacyCounterItems = ShapeLegacyPartition(
+                counterCandidates,
+                cancellationToken);
+            var completeItems = supportingItems.Concat(counterItems).ToArray();
+
             cancellationToken.ThrowIfCancellationRequested();
-            var node = validatedGraph.NodesById[nodeId];
-            if (IsFrozenEvidenceKind(node.Kind) &&
-                strongestPaths.PathsByEndNodeId.TryGetValue(node.Id, out var path))
-            {
-                evidencePaths.Add(path);
-            }
-        }
+            var normalizedBaselineLogOdds = CanonicalResultNumber.Normalize(
+                recalculatedBaselineLogOdds);
+            var normalizedBaselineProbability = CanonicalResultNumber.Normalize(
+                baselineProbability);
+            var summary = new EvidenceImpactV0Summary(
+                targetNodeId,
+                targetNode.Title ?? string.Empty,
+                targetNode.Kind ?? string.Empty,
+                normalizedBaselineLogOdds,
+                normalizedBaselineProbability,
+                supportingItems.LongLength,
+                counterItems.LongLength);
+            var distribution = new EvidenceImpactV0Distribution(
+                DistributionFor(supportingItems),
+                DistributionFor(counterItems));
 
-        decimal recalculatedBaselineLogOdds = targetNode.PriorOdds;
-        foreach (var evidencePath in evidencePaths)
-        {
             cancellationToken.ThrowIfCancellationRequested();
-            recalculatedBaselineLogOdds += evidencePath.AccumulatedLogLikelihoodRatio;
-        }
-
-        recalculatedBaselineLogOdds = Math.Clamp(
-            recalculatedBaselineLogOdds,
-            MinimumLogOdds,
-            MaximumLogOdds);
-        var baselineProbability = LogOddsToProbability(recalculatedBaselineLogOdds);
-
-        var supportingCandidates = new List<EvidenceImpactCandidate>();
-        var counterCandidates = new List<EvidenceImpactCandidate>();
-        foreach (var path in evidencePaths)
-        {
+            string resultDigest;
+            using (phaseTimings?.Measure(
+                       InsightMeasurementLayers.BackendServiceApi,
+                       InsightMeasurementPhases.DigestGeneration))
+            {
+                resultDigest = CanonicalJson.ComputeSha256Sequence(
+                    completeItems,
+                    cancellationToken);
+            }
             cancellationToken.ThrowIfCancellationRequested();
-            if (path.AccumulatedLogLikelihoodRatio == 0m)
-            {
-                continue;
-            }
 
-            var counterfactualLogOdds =
-                recalculatedBaselineLogOdds - path.AccumulatedLogLikelihoodRatio;
-            var counterfactualProbability = LogOddsToProbability(counterfactualLogOdds);
-            var candidate = new EvidenceImpactCandidate(
-                validatedGraph.NodesById[path.EndNodeId],
-                path,
-                baselineProbability,
-                counterfactualProbability,
-                baselineProbability - counterfactualProbability);
-
-            if (path.AccumulatedLogLikelihoodRatio > 0m)
-            {
-                supportingCandidates.Add(candidate);
-            }
-            else
-            {
-                counterCandidates.Add(candidate);
-            }
+            return new EvidenceImpactV0Result(
+                targetNodeId,
+                supportingItems,
+                counterItems,
+                legacySupportingItems,
+                legacyCounterItems,
+                summary,
+                distribution,
+                resultDigest,
+                cancellationToken);
         }
-
-        SortPartition(supportingCandidates, cancellationToken);
-        SortPartition(counterCandidates, cancellationToken);
-        var supportingItems = ShapePartition(
-            supportingCandidates,
-            EvidenceImpactV0Partitions.Supporting,
-            cancellationToken);
-        var counterItems = ShapePartition(
-            counterCandidates,
-            EvidenceImpactV0Partitions.Counter,
-            cancellationToken);
-        var legacySupportingItems = ShapeLegacyPartition(
-            supportingCandidates,
-            cancellationToken);
-        var legacyCounterItems = ShapeLegacyPartition(
-            counterCandidates,
-            cancellationToken);
-        var completeItems = supportingItems.Concat(counterItems).ToArray();
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var normalizedBaselineLogOdds = CanonicalResultNumber.Normalize(
-            recalculatedBaselineLogOdds);
-        var normalizedBaselineProbability = CanonicalResultNumber.Normalize(
-            baselineProbability);
-        var summary = new EvidenceImpactV0Summary(
-            targetNodeId,
-            targetNode.Title ?? string.Empty,
-            targetNode.Kind ?? string.Empty,
-            normalizedBaselineLogOdds,
-            normalizedBaselineProbability,
-            supportingItems.LongLength,
-            counterItems.LongLength);
-        var distribution = new EvidenceImpactV0Distribution(
-            DistributionFor(supportingItems),
-            DistributionFor(counterItems));
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var resultDigest = CanonicalJson.ComputeSha256Sequence(
-            completeItems,
-            cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        return new EvidenceImpactV0Result(
-            targetNodeId,
-            supportingItems,
-            counterItems,
-            legacySupportingItems,
-            legacyCounterItems,
-            summary,
-            distribution,
-            resultDigest,
-            cancellationToken);
     }
 
     private static bool IsFrozenEvidenceKind(string? kind) =>

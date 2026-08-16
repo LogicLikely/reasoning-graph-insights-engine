@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Backend.Data;
 using Backend.Insights.Contracts;
 using Backend.Insights.Persistence;
@@ -66,10 +67,13 @@ public class BenchmarkRunRepositoryTests
         Assert.AreEqual("running", command.Parameters["Status"]);
         Assert.AreEqual(DBNull.Value, command.Parameters["FailureKind"]);
         Assert.AreEqual("command-line", command.Parameters["RunnerType"]);
+        Assert.AreEqual("quick", command.Parameters["ProfileKey"]);
         Assert.AreEqual(manifest.Dataset.DatasetInputFingerprint,
             command.Parameters["DatasetInputFingerprint"]);
         Assert.AreEqual(manifest.Algorithm.SemanticIdentity,
             command.Parameters["AlgorithmSemanticIdentity"]);
+        Assert.AreEqual(DBNull.Value, command.Parameters["ActualStrategy"]);
+        Assert.AreEqual(RunSampleModeTokens.Warm, command.Parameters["SampleMode"]);
 
         var manifestJson = command.Parameters["ManifestJson"] as string;
         Assert.IsNotNull(manifestJson);
@@ -81,6 +85,10 @@ public class BenchmarkRunRepositoryTests
         Assert.AreEqual(
             "running",
             document.RootElement.GetProperty("execution").GetProperty("status").GetString());
+        Assert.AreEqual("quick", document.RootElement.GetProperty("profileKey").GetString());
+        Assert.AreEqual(
+            RunSampleModeTokens.Warm,
+            document.RootElement.GetProperty("samplingPolicy").GetProperty("sampleMode").GetString());
         Assert.AreEqual(manifest.CanonicalParameters.Digest,
             document.RootElement.GetProperty("canonicalParameters").GetProperty("digest").GetString());
     }
@@ -308,6 +316,32 @@ public class BenchmarkRunRepositoryTests
     }
 
     [TestMethod]
+    public async Task GetSnapshotAsync_ReadsPreGoal2ManifestWithConservativeCompatibilityDefaults()
+    {
+        var connection = new FakeDbConnection();
+        var legacyManifest = JsonNode.Parse(SerializeStored(BenchmarkPersistenceTestData.Manifest()))!
+            .AsObject();
+        legacyManifest.Remove("profileKey");
+        legacyManifest["samplingPolicy"]!.AsObject().Remove("sampleMode");
+        connection.WhenCommandContains(
+            "FROM benchmark.runs",
+            [Row("ManifestJson", legacyManifest.ToJsonString())]);
+        connection.WhenCommandContains("FROM benchmark.samples", []);
+        connection.WhenCommandContains("FROM benchmark.outputs", []);
+        var repository = CreateRepository(connection);
+
+        var snapshot = await repository.GetSnapshotAsync(
+            BenchmarkPersistenceTestData.RunId,
+            CancellationToken.None);
+
+        Assert.IsNotNull(snapshot);
+        Assert.AreEqual(RunProfileKeys.LegacyUnspecified, snapshot.Manifest.ProfileKey);
+        Assert.AreEqual(
+            RunSampleModeTokens.LegacyUnspecified,
+            snapshot.Manifest.SamplingPolicy.SampleMode);
+    }
+
+    [TestMethod]
     public async Task CreateRunAsync_RejectsChangedCanonicalParametersBeforeOpeningDatabase()
     {
         var manifest = BenchmarkPersistenceTestData.Manifest();
@@ -349,7 +383,7 @@ public class BenchmarkRunRepositoryTests
     }
 
     [TestMethod]
-    public async Task AppendSampleAsync_RejectsBlankClassificationInvalidProvenanceAndCountersBeforeDatabaseAccess()
+    public async Task AppendSampleAsync_RejectsInvalidClassificationProvenanceCountersTransportAndUnitsBeforeDatabaseAccess()
     {
         var factoryMock = CreateUnconfiguredFactoryMock();
         var repository = new BenchmarkRunRepository(factoryMock.Object);
@@ -376,6 +410,32 @@ public class BenchmarkRunRepositoryTests
                 {
                     OperationCounters = sample.OperationCounters! with { CandidateCount = -1 }
                 },
+                CancellationToken.None));
+        await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(() =>
+            repository.AppendSampleAsync(
+                intent,
+                sample with
+                {
+                    Transport = sample.Transport with { ResponseBytes = -1 }
+                },
+                CancellationToken.None));
+        factoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task CreateRunAsync_RejectsBlankMeasurementUnitsBeforeDatabaseAccess()
+    {
+        var factoryMock = CreateUnconfiguredFactoryMock();
+        var repository = new BenchmarkRunRepository(factoryMock.Object);
+        var manifest = BenchmarkPersistenceTestData.Manifest() with
+        {
+            MeasurementUnits = BenchmarkPersistenceTestData.Units with { PayloadSize = " " }
+        };
+
+        await Assert.ThrowsExceptionAsync<ArgumentException>(() =>
+            repository.CreateRunAsync(
+                ExplicitBenchmarkRunIntent.ForRun(manifest.RunId),
+                manifest,
                 CancellationToken.None));
 
         factoryMock.Verify(factory => factory.CreateConnection(), Times.Never);

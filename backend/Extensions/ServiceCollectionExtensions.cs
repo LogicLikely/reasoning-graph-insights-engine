@@ -8,6 +8,7 @@ using Backend.Insights.Persistence;
 using Backend.Insights.Workers;
 using Backend.Repositories;
 using Backend.Services;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Backend.Extensions;
 
@@ -22,6 +23,8 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IInsightCorrelationAccessor, InsightCorrelationAccessor>();
         services.AddScoped<IInsightPhaseTimingCollector, InsightPhaseTimingCollector>();
+        services.Configure<MvcOptions>(options =>
+            options.Filters.Add<InsightResponseSerializationFilter>());
         services.AddSingleton<IRunExportSchemaEvaluator, JsonSchemaNetRunExportV1SchemaEvaluator>();
         services.AddSingleton<RunExportValidator>();
         services.AddSingleton<RunExportService>();

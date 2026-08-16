@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS benchmark.runs (
             'api-browser-journey'
         )
     ),
+    profile_key text NOT NULL,
     scenario_key text NOT NULL CHECK (length(btrim(scenario_key)) > 0),
     operation_key text NOT NULL CHECK (length(btrim(operation_key)) > 0),
     graph_slug text NOT NULL CHECK (length(btrim(graph_slug)) > 0),
@@ -55,6 +56,8 @@ CREATE TABLE IF NOT EXISTS benchmark.runs (
     ),
     environment_profile text NOT NULL CHECK (length(btrim(environment_profile)) > 0),
     build_mode text NOT NULL CHECK (length(btrim(build_mode)) > 0),
+    actual_strategy text,
+    sample_mode text NOT NULL,
     measurement_units jsonb NOT NULL CHECK (jsonb_typeof(measurement_units) = 'object'),
     manifest_json jsonb NOT NULL CHECK (jsonb_typeof(manifest_json) = 'object'),
     inserted_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -77,6 +80,15 @@ CREATE TABLE IF NOT EXISTS benchmark.runs (
     CONSTRAINT ck_benchmark_runs_completion_not_before_start CHECK (
         completed_at IS NULL OR completed_at >= started_at
     ),
+    CONSTRAINT ck_benchmark_runs_profile_key_nonempty CHECK (
+        length(btrim(profile_key)) > 0
+    ),
+    CONSTRAINT ck_benchmark_runs_actual_strategy_nonempty CHECK (
+        actual_strategy IS NULL OR length(btrim(actual_strategy)) > 0
+    ),
+    CONSTRAINT ck_benchmark_runs_sample_mode CHECK (
+        sample_mode IN ('warm', 'cold', 'legacy-unspecified')
+    ),
     CONSTRAINT ck_benchmark_runs_manifest_identity CHECK (
         (manifest_json->>'runId')::uuid = run_id
         AND manifest_json->>'name' = name
@@ -88,6 +100,8 @@ CREATE TABLE IF NOT EXISTS benchmark.runs (
             OR (manifest_json->>'completedAt')::timestamp with time zone = completed_at
         )
         AND manifest_json->>'runnerType' = runner_type
+        AND manifest_json ? 'profileKey'
+        AND manifest_json->>'profileKey' = profile_key
         AND manifest_json->>'scenarioKey' = scenario_key
         AND manifest_json->>'operationKey' = operation_key
         AND manifest_json#>>'{graph,slug}' = graph_slug
@@ -96,9 +110,92 @@ CREATE TABLE IF NOT EXISTS benchmark.runs (
         AND manifest_json#>>'{canonicalParameters,digest}' = parameter_digest
         AND manifest_json->>'environmentProfile' = environment_profile
         AND manifest_json->>'buildMode' = build_mode
+        AND manifest_json#>>'{strategy,used}' IS NOT DISTINCT FROM actual_strategy
+        AND manifest_json#>>'{samplingPolicy,sampleMode}' = sample_mode
         AND manifest_json->'measurementUnits' = measurement_units
     )
 );
+
+-- Phase 4 Goal 2 makes the selected runner profile, actual strategy, and
+-- run-level warm/cold sample mode explicit comparison selectors. Existing
+-- pre-Goal-2 rows remain readable but are conservatively assigned the
+-- incompatible legacy-unspecified profile/mode instead of being guessed warm.
+DO $phase4_goal2_runs$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'benchmark'
+          AND table_name = 'runs'
+          AND column_name = 'profile_key'
+    ) THEN
+        ALTER TABLE benchmark.runs
+            DROP CONSTRAINT IF EXISTS ck_benchmark_runs_manifest_identity;
+
+        ALTER TABLE benchmark.runs
+            ADD COLUMN profile_key text,
+            ADD COLUMN actual_strategy text,
+            ADD COLUMN sample_mode text;
+
+        UPDATE benchmark.runs
+        SET
+            profile_key = 'legacy-unspecified',
+            actual_strategy = manifest_json#>>'{strategy,used}',
+            sample_mode = 'legacy-unspecified',
+            manifest_json = jsonb_set(
+                jsonb_set(
+                    manifest_json,
+                    '{profileKey}',
+                    '"legacy-unspecified"'::jsonb,
+                    true
+                ),
+                '{samplingPolicy,sampleMode}',
+                '"legacy-unspecified"'::jsonb,
+                true
+            );
+
+        ALTER TABLE benchmark.runs
+            ALTER COLUMN profile_key SET NOT NULL,
+            ALTER COLUMN sample_mode SET NOT NULL;
+
+        ALTER TABLE benchmark.runs
+            ADD CONSTRAINT ck_benchmark_runs_profile_key_nonempty CHECK (
+                length(btrim(profile_key)) > 0
+            ),
+            ADD CONSTRAINT ck_benchmark_runs_actual_strategy_nonempty CHECK (
+                actual_strategy IS NULL OR length(btrim(actual_strategy)) > 0
+            ),
+            ADD CONSTRAINT ck_benchmark_runs_sample_mode CHECK (
+                sample_mode IN ('warm', 'cold', 'legacy-unspecified')
+            ),
+            ADD CONSTRAINT ck_benchmark_runs_manifest_identity CHECK (
+                (manifest_json->>'runId')::uuid = run_id
+                AND manifest_json->>'name' = name
+                AND manifest_json#>>'{execution,status}' = status
+                AND manifest_json#>>'{execution,failure,kind}' IS NOT DISTINCT FROM failure_kind
+                AND (manifest_json->>'startedAt')::timestamp with time zone = started_at
+                AND (
+                    (manifest_json->'completedAt' = 'null'::jsonb AND completed_at IS NULL)
+                    OR (manifest_json->>'completedAt')::timestamp with time zone = completed_at
+                )
+                AND manifest_json->>'runnerType' = runner_type
+                AND manifest_json ? 'profileKey'
+                AND manifest_json->>'profileKey' = profile_key
+                AND manifest_json->>'scenarioKey' = scenario_key
+                AND manifest_json->>'operationKey' = operation_key
+                AND manifest_json#>>'{graph,slug}' = graph_slug
+                AND manifest_json#>>'{dataset,datasetInputFingerprint}' = dataset_input_fingerprint
+                AND manifest_json#>>'{algorithm,semanticIdentity}' = algorithm_semantic_identity
+                AND manifest_json#>>'{canonicalParameters,digest}' = parameter_digest
+                AND manifest_json->>'environmentProfile' = environment_profile
+                AND manifest_json->>'buildMode' = build_mode
+                AND manifest_json#>>'{strategy,used}' IS NOT DISTINCT FROM actual_strategy
+                AND manifest_json#>>'{samplingPolicy,sampleMode}' = sample_mode
+                AND manifest_json->'measurementUnits' = measurement_units
+            );
+    END IF;
+END
+$phase4_goal2_runs$;
 
 CREATE TABLE IF NOT EXISTS benchmark.samples (
     entry_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -377,16 +474,56 @@ BEGIN
 END
 $phase35_outputs$;
 
-CREATE INDEX IF NOT EXISTS ix_benchmark_runs_comparison
-    ON benchmark.runs (
-        scenario_key,
-        operation_key,
-        dataset_input_fingerprint,
-        algorithm_semantic_identity,
-        parameter_digest,
-        environment_profile,
-        build_mode
-    );
+-- CREATE INDEX IF NOT EXISTS cannot extend an older index that already has
+-- this name. Compare its ordered key columns and replace it only when needed,
+-- leaving the steady-state index (and its OID) untouched on repeated startup.
+DO $phase4_goal2_comparison_index$
+DECLARE
+    expected_columns text[] := ARRAY[
+        'scenario_key',
+        'profile_key',
+        'operation_key',
+        'dataset_input_fingerprint',
+        'algorithm_semantic_identity',
+        'parameter_digest',
+        'actual_strategy',
+        'environment_profile',
+        'build_mode',
+        'sample_mode',
+        'measurement_units'
+    ];
+    current_columns text[];
+BEGIN
+    SELECT array_agg(attribute.attname::text ORDER BY index_key.ordinality)
+    INTO current_columns
+    FROM pg_catalog.pg_index AS index_metadata
+    CROSS JOIN LATERAL unnest(index_metadata.indkey)
+        WITH ORDINALITY AS index_key(attnum, ordinality)
+    JOIN pg_catalog.pg_attribute AS attribute
+      ON attribute.attrelid = index_metadata.indrelid
+     AND attribute.attnum = index_key.attnum
+    WHERE index_metadata.indexrelid =
+        to_regclass('benchmark.ix_benchmark_runs_comparison');
+
+    IF current_columns IS DISTINCT FROM expected_columns THEN
+        DROP INDEX IF EXISTS benchmark.ix_benchmark_runs_comparison;
+        CREATE INDEX ix_benchmark_runs_comparison
+            ON benchmark.runs (
+                scenario_key,
+                profile_key,
+                operation_key,
+                dataset_input_fingerprint,
+                algorithm_semantic_identity,
+                parameter_digest,
+                actual_strategy,
+                environment_profile,
+                build_mode,
+                sample_mode,
+                measurement_units
+            );
+    END IF;
+END
+$phase4_goal2_comparison_index$;
 
 CREATE INDEX IF NOT EXISTS ix_benchmark_runs_status_started
     ON benchmark.runs (status, started_at DESC);

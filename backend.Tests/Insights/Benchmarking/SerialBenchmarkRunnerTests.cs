@@ -33,27 +33,23 @@ public sealed class SerialBenchmarkRunnerTests
     }
 
     [TestMethod]
-    public async Task QuickDeferredScenario_ProducesExplicitSkippedPortableRun()
+    public void QuickBrowserScenarios_AreConcreteAndKeepUnsafeExpansionNonExecutable()
     {
-        var runner = new SerialBenchmarkRunner(new BenchmarkOperationExecutor());
+        var searches = BenchmarkScenarioRegistry.ForProfile(BenchmarkProfiles.QuickKey)
+            .Where(scenario => scenario.OperationKey == OperationKeys.GraphSearch)
+            .ToArray();
 
-        var result = (await runner.RunAsync(new BenchmarkRunSelection(
-            BenchmarkProfiles.QuickKey,
-            ScenarioKey: "quick.graph-fetch.deferred"))).Runs.Single();
-
-        Assert.AreEqual(ExecutionStatus.Skipped, result.Manifest.Execution.Status);
-        Assert.AreEqual(FailureKind.Skip, result.Manifest.Execution.Failure?.Kind);
-        Assert.AreEqual("deferred-to-phase-4-goal-2", result.Manifest.Execution.Failure?.Code);
-        Assert.AreEqual(2, result.Samples.Count);
-        Assert.IsTrue(result.Samples.All(sample =>
-            sample.Classification.IterationKind == IterationClassificationTokens.Setup));
-        Assert.IsTrue(result.Samples.Any(sample =>
-            sample.Phase == InsightMeasurementPhases.FixtureConstruction));
-        Assert.IsTrue(result.Samples.Any(sample =>
-            sample.Phase == InsightMeasurementPhases.ExportValidation));
-        Assert.AreEqual(0, result.Outputs.Count);
-        Assert.AreEqual(result.Export.Digests.ManifestDigest,
-            result.DeserializedExport.Digests.ManifestDigest);
+        Assert.AreEqual(2, searches.Length);
+        Assert.IsTrue(searches.All(scenario =>
+            scenario.ExecutionTarget == BenchmarkScenarioExecutionTarget.Browser &&
+            scenario.BrowserJourney?.Action == BrowserJourneyActions.Search &&
+            scenario.SkipReason is null));
+        Assert.IsFalse(BenchmarkScenarioRegistry.All.Any(scenario =>
+            scenario.Key == "quick.graph-search.deferred"));
+        Assert.IsFalse(BenchmarkScenarioRegistry.All.Any(scenario =>
+            scenario.BrowserJourney?.Action == BrowserJourneyActions.FullExpansion &&
+            !scenario.IsSkipped &&
+            DeterministicStressGraphFixtureFactory.Create(scenario.DatasetId).NodeCount > 1_000));
     }
 
     [TestMethod]

@@ -28,6 +28,26 @@ public sealed record BenchmarkProfileRunResult(
     BenchmarkProfileDefinition Profile,
     IReadOnlyList<BenchmarkSingleRunResult> Runs);
 
+public sealed record BenchmarkScenarioPreparationResult(
+    PreparedBenchmarkOperation Operation,
+    ExecutionOutcome Execution,
+    IReadOnlyList<RunSample> SetupSamples,
+    GraphRunIdentity? GraphIdentity = null,
+    DatasetRunIdentity? DatasetIdentity = null,
+    DependencyVersions? Dependencies = null,
+    string? EnvironmentProfile = null,
+    RunnerType? RunnerType = null);
+
+public interface IBenchmarkScenarioPreparer
+{
+    Task<BenchmarkScenarioPreparationResult> PrepareAsync(
+        PreparedBenchmarkOperation operation,
+        BenchmarkScenarioDefinition scenario,
+        DeterministicStressGraphFixture fixture,
+        TimeSpan timeout,
+        CancellationToken cancellationToken);
+}
+
 public interface IBenchmarkIdentitySource
 {
     Guid NewRunId();

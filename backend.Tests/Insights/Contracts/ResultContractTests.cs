@@ -187,9 +187,11 @@ public class ResultContractTests
             new DependencyVersions("8.0.407", "24.13.0", "chromium", "0.2.0", "16", new Dictionary<string, string> { ["npgsql"] = "8.0.6" }),
             new HostEnvironment("macOS", "arm64", "Apple", 10, 16_000_000_000),
             "ll-arm64-mac-primary",
-            new WarmupSampleCachePolicy(1, 5, "one warmup", "five samples", "recorded", "warm"),
+            new WarmupSampleCachePolicy(
+                1, 5, "one warmup", "five samples", "recorded", "warm", RunSampleModeTokens.Warm),
             new TimeoutCancellationPolicy(TimeSpan.FromSeconds(30), "cooperative", true),
-            units);
+            units,
+            "standard");
         var sample = new RunSample(
             runId,
             sampleId,

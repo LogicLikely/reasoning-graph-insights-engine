@@ -437,6 +437,107 @@ public class GraphRepositoryTests
     }
 
     [TestMethod]
+    public async Task ResetDatabaseAsync_MatchingTargetExpectation_ProbesBeforeSeedSql()
+    {
+        var seedRoot = CreateSeedRoot(includeStressSeed: true);
+
+        try
+        {
+            const string databaseName = "logiclikely_benchmark_test";
+            const string identityTuple = "[\"logiclikely_benchmark_test\", \"127.0.0.1\", 55432, \"2026-08-16T12:00:00.000000Z\"]";
+            var connection = new FakeDbConnection();
+            connection.WhenCommandContains("current_database()",
+            [
+                new Dictionary<string, object?>
+                {
+                    ["DatabaseName"] = databaseName,
+                    ["IdentityTuple"] = identityTuple
+                }
+            ]);
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            connectionFactoryMock
+                .Setup(factory => factory.CreateConnection())
+                .Returns(connection);
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+            var expectation = new DatabaseResetTargetExpectation(
+                databaseName,
+                DatabaseResetTargetIdentity.ComputeFingerprint(identityTuple));
+
+            await repository.ResetDatabaseAsync(
+                [StressGraphSeedCatalog.All[0]],
+                expectation,
+                CancellationToken.None);
+
+            Assert.AreEqual(3, connection.ExecutedCommands.Count);
+            StringAssert.Contains(connection.ExecutedCommands[0].CommandText, "current_database()");
+            Assert.AreEqual("BASE SEED", connection.ExecutedCommands[1].CommandText);
+            StringAssert.Contains(connection.ExecutedCommands[2].CommandText, "STRESS");
+            Assert.AreEqual(1, connection.CommitCount);
+            Assert.AreEqual(0, connection.RollbackCount);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    [DataTestMethod]
+    [DataRow(DatabaseResetIdentityMismatchKind.DatabaseName)]
+    [DataRow(DatabaseResetIdentityMismatchKind.TargetFingerprint)]
+    public async Task ResetDatabaseAsync_TargetMismatch_RollsBackBeforeAnySeedSql(
+        DatabaseResetIdentityMismatchKind mismatchKind)
+    {
+        var seedRoot = CreateSeedRoot(includeStressSeed: true);
+
+        try
+        {
+            const string actualDatabaseName = "logiclikely_benchmark_test";
+            const string actualIdentityTuple = "[\"logiclikely_benchmark_test\", \"127.0.0.1\", 55432, \"2026-08-16T12:00:00.000000Z\"]";
+            var connection = new FakeDbConnection();
+            connection.WhenCommandContains("current_database()",
+            [
+                new Dictionary<string, object?>
+                {
+                    ["DatabaseName"] = actualDatabaseName,
+                    ["IdentityTuple"] = actualIdentityTuple
+                }
+            ]);
+            var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+            connectionFactoryMock
+                .Setup(factory => factory.CreateConnection())
+                .Returns(connection);
+            var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
+            var expectation = mismatchKind == DatabaseResetIdentityMismatchKind.DatabaseName
+                ? new DatabaseResetTargetExpectation(
+                    "other_benchmark_test",
+                    DatabaseResetTargetIdentity.ComputeFingerprint(actualIdentityTuple))
+                : new DatabaseResetTargetExpectation(
+                    actualDatabaseName,
+                    DatabaseResetTargetIdentity.ComputeFingerprint("different-target-tuple"));
+
+            var exception = await Assert.ThrowsExceptionAsync<DatabaseResetIdentityMismatchException>(() =>
+                repository.ResetDatabaseAsync(
+                    [StressGraphSeedCatalog.All[0]],
+                    expectation,
+                    CancellationToken.None));
+
+            Assert.AreEqual(mismatchKind, exception.MismatchKind);
+            Assert.AreEqual(1, connection.ExecutedCommands.Count);
+            StringAssert.Contains(connection.ExecutedCommands[0].CommandText, "current_database()");
+            Assert.IsFalse(connection.ExecutedCommands.Any(command =>
+                command.CommandText.Contains("BASE SEED", StringComparison.Ordinal) ||
+                command.CommandText.Contains("STRESS", StringComparison.Ordinal)));
+            Assert.AreEqual(1, connection.BeginTransactionCount);
+            Assert.AreEqual(0, connection.CommitCount);
+            Assert.AreEqual(1, connection.RollbackCount);
+        }
+        finally
+        {
+            Directory.Delete(seedRoot, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public async Task ResetDatabaseAsync_BaseOnly_DoesNotRequireStressSeedFile()
     {
         var seedRoot = CreateSeedRoot(

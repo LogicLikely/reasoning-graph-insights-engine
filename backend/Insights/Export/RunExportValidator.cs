@@ -142,6 +142,7 @@ public sealed partial class RunExportValidator
             Add(issues, "$.manifest.runnerType", "enum", "Unknown runner type.");
         }
 
+        Required(manifest.ProfileKey, "$.manifest.profileKey", issues);
         Required(manifest.ScenarioKey, "$.manifest.scenarioKey", issues);
         Required(manifest.OperationKey, "$.manifest.operationKey", issues);
 
@@ -237,6 +238,7 @@ public sealed partial class RunExportValidator
             {
                 Add(issues, $"{path}.measurementUnits", "identity", "Sample units must match manifest units.");
             }
+
         }
     }
 
@@ -539,6 +541,11 @@ public sealed partial class RunExportValidator
         Required(policy.SamplePolicy, $"{path}.samplePolicy", issues);
         Required(policy.JitPolicy, $"{path}.jitPolicy", issues);
         Required(policy.CachePolicy, $"{path}.cachePolicy", issues);
+        Required(policy.SampleMode, $"{path}.sampleMode", issues);
+        if (!RunSampleModeTokens.IsKnown(policy.SampleMode))
+        {
+            Add(issues, $"{path}.sampleMode", "enum", "Unknown run-level sample mode.");
+        }
     }
 
     private static void ValidateExecutionPolicy(
