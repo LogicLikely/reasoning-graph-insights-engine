@@ -1,4 +1,5 @@
 using Backend.Extensions;
+using Backend.Insights.Measurement;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,13 +20,17 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(origins)
         // policy.WithOrigins()
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .WithExposedHeaders(
+                  InsightCorrelationHeaders.RunId,
+                  InsightCorrelationHeaders.SampleId,
+                  "Server-Timing");
     });
 });
 
 var app = builder.Build();
 
-app.UseApplicationPipeline();
 app.UseCors("MyCorsPolicy");
+app.UseApplicationPipeline();
 
 app.Run();

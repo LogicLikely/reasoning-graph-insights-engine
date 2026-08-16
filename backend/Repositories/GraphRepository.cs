@@ -1,4 +1,5 @@
 using Backend.Data;
+using Backend.Insights.Measurement;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Backend.Seeding;
@@ -74,13 +75,16 @@ public class GraphRepository : IGraphRepository
 
     private readonly DbConnectionFactory _dbConnectionFactory;
     private readonly IHostEnvironment _hostEnvironment;
+    private readonly IInsightPhaseTimingCollector _phaseTimings;
 
     public GraphRepository(
         DbConnectionFactory dbConnectionFactory,
-        IHostEnvironment hostEnvironment)
+        IHostEnvironment hostEnvironment,
+        IInsightPhaseTimingCollector? phaseTimings = null)
     {
         _dbConnectionFactory = dbConnectionFactory;
         _hostEnvironment = hostEnvironment;
+        _phaseTimings = phaseTimings ?? new InsightPhaseTimingCollector();
     }
 
     public async Task<IReadOnlyList<GraphSummary>> GetSummariesAsync(
@@ -88,11 +92,23 @@ public class GraphRepository : IGraphRepository
     {
         using var connection = _dbConnectionFactory.CreateConnection();
 
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.ConnectionOpenWait))
+        {
+            connection.Open();
+        }
+
         var command = new CommandDefinition(
             GraphSummariesSql,
             cancellationToken: cancellationToken);
 
-        return (await connection.QueryAsync<GraphSummary>(command)).ToList();
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.CatalogAggregation))
+        {
+            return (await connection.QueryAsync<GraphSummary>(command)).ToList();
+        }
     }
 
     public async Task<Graph?> GetBySlugAsync(
@@ -101,12 +117,25 @@ public class GraphRepository : IGraphRepository
     {
         using var connection = _dbConnectionFactory.CreateConnection();
 
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.ConnectionOpenWait))
+        {
+            connection.Open();
+        }
+
         var command = new CommandDefinition(
             GraphSql,
             new { Slug = slug },
             cancellationToken: cancellationToken);
 
-        var graphRow = await connection.QuerySingleOrDefaultAsync<GraphRow>(command);
+        GraphRow? graphRow;
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.GraphLookup))
+        {
+            graphRow = await connection.QuerySingleOrDefaultAsync<GraphRow>(command);
+        }
         var graph = graphRow == null ? null : new Graph
         {
             Id = graphRow.Id,
@@ -130,34 +159,49 @@ public class GraphRepository : IGraphRepository
             new { GraphId = graph.Id },
             cancellationToken: cancellationToken);
 
-        var nodeRows = (await connection.QueryAsync<NodeRow>(nodesCommand)).ToList();
+        List<NodeRow> nodeRows;
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.NodeQuery))
+        {
+            nodeRows = (await connection.QueryAsync<NodeRow>(nodesCommand)).ToList();
+        }
 
         //Individually assigns each property so can do custom stuff with evidence field
-        graph.Nodes = nodeRows.Select(row => new GraphNode
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.EvidenceJsonMaterialization))
         {
-            Id = row.Id,
-            Kind = row.Kind,
-            Title = row.Title,
-            BodyText = row.BodyText,
-            Category = row.Category,
-            Tags = row.Tags?.ToList() ?? new List<string>(),
-            PriorOdds = row.PriorOdds,
-            PosteriorOdds = row.PosteriorOdds,
-            Evidence = string.IsNullOrEmpty(row.Evidence)
-                ? null
-                : JsonSerializer.Deserialize<GraphEvidenceDetails>(row.Evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-        }).ToList();
+            graph.Nodes = nodeRows.Select(row => new GraphNode
+            {
+                Id = row.Id,
+                Kind = row.Kind,
+                Title = row.Title,
+                BodyText = row.BodyText,
+                Category = row.Category,
+                Tags = row.Tags?.ToList() ?? new List<string>(),
+                PriorOdds = row.PriorOdds,
+                PosteriorOdds = row.PosteriorOdds,
+                Evidence = string.IsNullOrEmpty(row.Evidence)
+                    ? null
+                    : JsonSerializer.Deserialize<GraphEvidenceDetails>(row.Evidence, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            }).ToList();
+        }
 
-
-        var edgeRows = (await connection.QueryAsync<EdgeRow>(edgesCommand)).ToList();
-        graph.Edges = edgeRows.Select(row => new GraphEdge
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.PostgreSqlRepository,
+                   InsightMeasurementPhases.EdgeQuery))
         {
-            Id = row.Id,
-            From = row.From,
-            To = row.To,
-            Kind = row.Kind,
-            ImportanceToParent = row.ImportanceToParent
-        }).ToList();
+            var edgeRows = (await connection.QueryAsync<EdgeRow>(edgesCommand)).ToList();
+            graph.Edges = edgeRows.Select(row => new GraphEdge
+            {
+                Id = row.Id,
+                From = row.From,
+                To = row.To,
+                Kind = row.Kind,
+                ImportanceToParent = row.ImportanceToParent
+            }).ToList();
+        }
 
         return graph;
     }

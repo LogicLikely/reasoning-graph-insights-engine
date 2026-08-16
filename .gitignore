@@ -150,6 +150,8 @@ backend/obj/
 backend.Tests/TestResults/
 backend.Tests/bin/
 backend.Tests/obj/
+backend.Tests.WorkerFixture/bin/
+backend.Tests.WorkerFixture/obj/
 *.lscache
 
 # Maintainer-only stress-corpus editorial policy

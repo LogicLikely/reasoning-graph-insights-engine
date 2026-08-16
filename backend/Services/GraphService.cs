@@ -1,4 +1,5 @@
 using Backend.Calculation;
+using Backend.Insights.Measurement;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Backend.Repositories;
@@ -10,13 +11,16 @@ public class GraphService : IGraphService
 {
     private readonly IGraphRepository _graphRepository;
     private readonly GraphLikelihoodCalculator _calculator;
+    private readonly IInsightPhaseTimingCollector _phaseTimings;
 
     public GraphService(
         IGraphRepository graphRepository,
-        GraphLikelihoodCalculator graphLikelihoodCalculator)
+        GraphLikelihoodCalculator graphLikelihoodCalculator,
+        IInsightPhaseTimingCollector? phaseTimings = null)
     {
         _graphRepository = graphRepository;
         _calculator = graphLikelihoodCalculator;
+        _phaseTimings = phaseTimings ?? new InsightPhaseTimingCollector();
     }
 
     public async Task<IReadOnlyList<GraphSummaryDto>> GetSummariesAsync(
@@ -24,16 +28,21 @@ public class GraphService : IGraphService
     {
         var summaries = await _graphRepository.GetSummariesAsync(cancellationToken);
 
-        return summaries
-            .Select(summary => new GraphSummaryDto
-            {
-                Slug = summary.Slug,
-                Title = summary.Title,
-                Description = summary.Description,
-                NodeCount = summary.NodeCount,
-                EdgeCount = summary.EdgeCount
-            })
-            .ToList();
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.DtoMapping))
+        {
+            return summaries
+                .Select(summary => new GraphSummaryDto
+                {
+                    Slug = summary.Slug,
+                    Title = summary.Title,
+                    Description = summary.Description,
+                    NodeCount = summary.NodeCount,
+                    EdgeCount = summary.EdgeCount
+                })
+                .ToList();
+        }
     }
 
     public async Task<GraphDto?> GetBySlugAsync(
@@ -47,41 +56,46 @@ public class GraphService : IGraphService
             return null;
         }
 
-        return new GraphDto
+        using (_phaseTimings.Measure(
+                   InsightMeasurementLayers.BackendServiceApi,
+                   InsightMeasurementPhases.DtoMapping))
         {
-            Slug = graph.Slug,
-            Title = graph.Title,
-            Description = graph.Description,
-            Nodes = graph.Nodes
-                .Select(node => new GraphNodeDto
-                {
-                    Id = node.Id,
-                    Kind = node.Kind,
-                    Title = node.Title,
-                    BodyText = node.BodyText,
-                    Category = node.Category,
-                    Tags = node.Tags.ToList(),
-                    PriorOdds = node.PriorOdds,
-                    PosteriorOdds = node.PosteriorOdds,
-                    Evidence = node.Evidence == null ? null : new GraphEvidenceDto
+            return new GraphDto
+            {
+                Slug = graph.Slug,
+                Title = graph.Title,
+                Description = graph.Description,
+                Nodes = graph.Nodes
+                    .Select(node => new GraphNodeDto
                     {
-                        Type = node.Evidence.Type,
-                        Score = node.Evidence.Score,
-                        Rationale = node.Evidence.Rationale
-                    }
-                })
-                .ToList(),
-            Edges = graph.Edges
-                .Select(edge => new GraphEdgeDto
-                {
-                    Id = edge.Id,
-                    From = edge.From,
-                    To = edge.To,
-                    Kind = edge.Kind,
-                    ImportanceToParent = edge.ImportanceToParent
-                })
-                .ToList()
-        };
+                        Id = node.Id,
+                        Kind = node.Kind,
+                        Title = node.Title,
+                        BodyText = node.BodyText,
+                        Category = node.Category,
+                        Tags = node.Tags.ToList(),
+                        PriorOdds = node.PriorOdds,
+                        PosteriorOdds = node.PosteriorOdds,
+                        Evidence = node.Evidence == null ? null : new GraphEvidenceDto
+                        {
+                            Type = node.Evidence.Type,
+                            Score = node.Evidence.Score,
+                            Rationale = node.Evidence.Rationale
+                        }
+                    })
+                    .ToList(),
+                Edges = graph.Edges
+                    .Select(edge => new GraphEdgeDto
+                    {
+                        Id = edge.Id,
+                        From = edge.From,
+                        To = edge.To,
+                        Kind = edge.Kind,
+                        ImportanceToParent = edge.ImportanceToParent
+                    })
+                    .ToList()
+            };
+        }
     }
 
     public async Task<List<string>?> GetMinimalCounterSetAsync(

@@ -1,6 +1,6 @@
 # LogicLikely Insights Lab Analysis and Performance Plan
 
-**Status:** Phase 0 implemented; Phases 1–6 have not started
+**Status:** Phases 0–1 implemented; Phases 2–6 have not started
 
 **Last updated:** 2026-08-15
 
@@ -53,7 +53,7 @@ This plan complements the original [Structural Insights Engine Implementation Pl
 ### 3.2 Current gaps
 
 - Analysis responses are mostly logged to the browser console rather than presented as durable, explainable results.
-- No benchmark/result tables, repeatable performance harness, structured phase timing, or historical comparison UI exist.
+- The Phase 1 benchmark tables, correlation/timing seams, export validation, and worker isolation foundation exist; repeatable performance harnesses and historical comparison UI do not yet exist.
 - Existing algorithm endpoints load and map the complete graph for each request.
 - Strongest-path calculations return scalar scores without the ordered node/edge chain needed for visualization.
 - The current minimal-counter endpoint is a one-shot heuristic, not the planned exact/greedy pair.
@@ -605,6 +605,8 @@ Acceptance:
 
 ### Phase 1 — Measurement and persistence foundation
 
+Implementation record: [Phase 1 frozen contracts](../contracts/insights-lab/phase-1-contracts.md).
+
 Deliver:
 
 - Correlation IDs and common phase names.
@@ -853,4 +855,4 @@ No further user decision is required before implementation begins. The following
 4. Calibrate the auto-strategy candidate cutoff on the authoritative host.
 5. Measure dense views and set an edge budget if the evidence requires one.
 
-Until implementation is explicitly authorized, this document is the only planned repository change.
+Implementation authorization currently extends through Phase 1 only. Phases 2–6 remain unstarted until separately authorized.
