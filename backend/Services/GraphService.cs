@@ -78,7 +78,9 @@ public class GraphService : IGraphService
                     From = edge.From,
                     To = edge.To,
                     Kind = edge.Kind,
-                    ImportanceToParent = edge.ImportanceToParent
+                    ImportanceToParent = edge.ImportanceToParent,
+                    ProbabilityGivenParent = edge.ProbabilityGivenParent,
+                    ProbabilityGivenNotParent = edge.ProbabilityGivenNotParent
                 })
                 .ToList()
         };
@@ -298,7 +300,9 @@ public class GraphService : IGraphService
                 From = edge.From,
                 To = edge.To,
                 Kind = edge.Kind,
-                ImportanceToParent = edge.ImportanceToParent
+                ImportanceToParent = edge.ImportanceToParent,
+                ProbabilityGivenParent = edge.ProbabilityGivenParent,
+                ProbabilityGivenNotParent = edge.ProbabilityGivenNotParent
             }).ToList()
         };
     }
@@ -309,9 +313,19 @@ public class GraphService : IGraphService
         string? parentID = null,
         string edgeKind = "support",
         decimal importanceToParent = 1m,
+        decimal probabilityGivenParent = 0.5m,
+        decimal probabilityGivenNotParent = 0.5m,
         CancellationToken cancellationToken = default)
     {
-        var added = await _graphRepository.AddNodeAsync(slug, node, parentID, edgeKind, importanceToParent, cancellationToken);
+        var added = await _graphRepository.AddNodeAsync(
+            slug,
+            node,
+            parentID,
+            edgeKind,
+            importanceToParent,
+            probabilityGivenParent,
+            probabilityGivenNotParent,
+            cancellationToken);
         if (!added)
         {
             return false;

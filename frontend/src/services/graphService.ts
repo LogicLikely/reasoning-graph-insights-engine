@@ -34,13 +34,21 @@ export async function addNode(
   slug: string,
   node: GraphFixtureNode,
   parentId?: string,
-  edge?: Pick<GraphFixtureEdge, 'kind' | 'importanceToParent'>,
+  edge?: Pick<
+    GraphFixtureEdge,
+    | 'kind'
+    | 'importanceToParent'
+    | 'probabilityGivenParent'
+    | 'probabilityGivenNotParent'
+  >,
 ): Promise<void> {
   await httpClient.post(`/api/graphs/${slug}/nodes`, node, {
     params: {
       parentID: parentId,
       edgeKind: edge?.kind,
       importanceToParent: edge?.importanceToParent,
+      probabilityGivenParent: edge?.probabilityGivenParent,
+      probabilityGivenNotParent: edge?.probabilityGivenNotParent,
     },
   })
 }
@@ -145,7 +153,12 @@ export async function addEdge(
 export async function updateEdge(
   slug: string,
   edgeId: string,
-  data: Partial<Pick<GraphFixtureEdge, 'importanceToParent'>>,
+  data: Partial<Pick<
+    GraphFixtureEdge,
+    | 'importanceToParent'
+    | 'probabilityGivenParent'
+    | 'probabilityGivenNotParent'
+  >>,
 ): Promise<void> {
   await httpClient.patch(`/api/graphs/${slug}/edges/${edgeId}`, data)
 }

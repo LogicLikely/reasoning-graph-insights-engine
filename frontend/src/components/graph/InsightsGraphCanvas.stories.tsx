@@ -42,6 +42,8 @@ const moreNodesGraph: GraphFixture = {
       to: 'R1',
       kind: 'support',
       importanceToParent: 4,
+      probabilityGivenParent: 0.5,
+      probabilityGivenNotParent: 0.5,
     },
     {
       id: 'E-R-O3',
@@ -49,6 +51,8 @@ const moreNodesGraph: GraphFixture = {
       to: 'R1',
       kind: 'rebut',
       importanceToParent: 3,
+      probabilityGivenParent: 0.5,
+      probabilityGivenNotParent: 0.5,
     },
   ],
 }

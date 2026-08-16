@@ -5,4 +5,6 @@ public sealed record GraphEdgeCalcState(
     string FromNodeId,
     string ToNodeId,
     string Kind,
-    decimal ImportanceToParent);
+    decimal ImportanceToParent,
+    decimal ProbabilityGivenParent,
+    decimal ProbabilityGivenNotParent);

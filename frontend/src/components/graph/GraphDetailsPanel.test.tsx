@@ -26,9 +26,11 @@ describe('GraphDetailsPanel', () => {
     expect(screen.getByText(/This node supports/i)).toBeInTheDocument()
     expect(screen.getByText('The horizon looks flat')).toBeInTheDocument()
     expect(screen.getByText('Importance to that claim: 5/10')).toBeInTheDocument()
+    expect(screen.getByText('P(this node | parent claim): 0.5')).toBeInTheDocument()
+    expect(screen.getByText('P(this node | not parent claim): 0.5')).toBeInTheDocument()
   })
 
-  it('edits likelihood as a percent and parent edge importance', () => {
+  it('edits likelihood, importance, and conditional probabilities on parent edges', () => {
     const onUpdate = vi.fn()
     const onUpdateEdge = vi.fn()
     const onAddParentEdge = vi.fn()
@@ -55,20 +57,30 @@ describe('GraphDetailsPanel', () => {
 
     fireEvent.change(likelihoodInput, { target: { value: '24.5' } })
     fireEvent.change(screen.getByLabelText('Importance to that claim', { selector: '#edge-importance-E-C1-E1' }), { target: { value: '7' } })
+    fireEvent.change(screen.getByLabelText('P(this node | parent claim)', { selector: '#edge-probability-given-parent-E-C1-E1' }), { target: { value: '0.8' } })
+    fireEvent.change(screen.getByLabelText('P(this node | not parent claim)', { selector: '#edge-probability-given-not-parent-E-C1-E1' }), { target: { value: '0.2' } })
     expect(screen.queryByLabelText('Relation')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Additional Parent Support'), { target: { value: 'C2' } })
     fireEvent.change(screen.getByLabelText('Importance to that claim', { selector: '#new-parent-importance' }), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('P(this node | parent claim)', { selector: '#new-parent-probability-given-parent' }), { target: { value: '0.7' } })
+    fireEvent.change(screen.getByLabelText('P(this node | not parent claim)', { selector: '#new-parent-probability-given-not-parent' }), { target: { value: '0.3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     const submittedData = onUpdate.mock.calls[0][1]
     expect(submittedData.kind).toBeUndefined()
     expect(submittedData.priorOdds).toBeCloseTo(Math.log(0.245 / 0.755), 5)
-    expect(onUpdateEdge).toHaveBeenCalledWith('E-C1-E1', { importanceToParent: 7 })
+    expect(onUpdateEdge).toHaveBeenCalledWith('E-C1-E1', {
+      importanceToParent: 7,
+      probabilityGivenParent: 0.8,
+      probabilityGivenNotParent: 0.2,
+    })
     expect(onAddParentEdge).toHaveBeenCalledWith({
       from: 'E1',
       to: 'C2',
       kind: 'support',
       importanceToParent: 3,
+      probabilityGivenParent: 0.7,
+      probabilityGivenNotParent: 0.3,
     })
   })
 
@@ -84,6 +96,8 @@ describe('GraphDetailsPanel', () => {
     expect(screen.queryByLabelText('Relation')).not.toBeInTheDocument()
     expect(screen.getByText('Relation to selected node: Counter')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Importance to that claim'), { target: { value: '4' } })
+    expect(screen.getByLabelText('P(new node | selected node)')).toHaveValue(0.5)
+    expect(screen.getByLabelText('P(new node | selected node is false)')).toHaveValue(0.5)
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New support' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A new supporting node.' } })
     fireEvent.change(screen.getByLabelText('Likelihood'), { target: { value: '65' } })
@@ -96,6 +110,30 @@ describe('GraphDetailsPanel', () => {
     expect(onAddSupporting.mock.calls[0][2]).toEqual({
       kind: 'rebut',
       importanceToParent: 4,
+      probabilityGivenParent: 0.5,
+      probabilityGivenNotParent: 0.5,
     })
+  })
+
+  it('requires conditional probabilities between zero and one', () => {
+    const node = sampleGraph.nodes.find((graphNode) => graphNode.id === 'E1')
+
+    render(<GraphDetailsPanel node={node} onAddSupporting={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a child node connected to this selected node' }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New support' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A new supporting node.' } })
+
+    const saveButton = screen.getByRole('button', { name: 'Create Node' })
+    expect(saveButton).toBeEnabled()
+
+    fireEvent.change(screen.getByLabelText('P(new node | selected node)'), { target: { value: '-0.01' } })
+    expect(saveButton).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('P(new node | selected node)'), { target: { value: '0' } })
+    expect(saveButton).toBeEnabled()
+
+    fireEvent.change(screen.getByLabelText('P(new node | selected node is false)'), { target: { value: '1.01' } })
+    expect(saveButton).toBeDisabled()
   })
 })

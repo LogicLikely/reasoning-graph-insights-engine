@@ -16,6 +16,8 @@
   <ItemGroup>
     <Content Include="data/sql/insights_seed.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="data/sql/insights_stress_seed.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="data/sql/migrations/20260815_add_edge_conditional_probabilities.sql"
+             CopyToOutputDirectory="PreserveNewest" />
     <Content Update="data/seed/insights_stress_corpus.json"
              TargetPath="Data/Seed/insights_stress_corpus.json"
              CopyToOutputDirectory="PreserveNewest" />

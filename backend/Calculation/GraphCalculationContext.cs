@@ -52,7 +52,9 @@ public sealed class GraphCalculationContext
                     edge.From,
                     edge.To,
                     edge.Kind,
-                    edge.ImportanceToParent);
+                    edge.ImportanceToParent,
+                    edge.ProbabilityGivenParent,
+                    edge.ProbabilityGivenNotParent);
             })
             .ToList();
 

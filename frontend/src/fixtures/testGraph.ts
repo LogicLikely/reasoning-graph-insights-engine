@@ -126,6 +126,8 @@ export const sampleGraph: GraphFixture = {
             to: 'R1',
             kind: 'support',
             importanceToParent: 1.6,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-R-C2',
@@ -133,6 +135,8 @@ export const sampleGraph: GraphFixture = {
             to: 'R1',
             kind: 'support',
             importanceToParent: 1.4,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-R-C3',
@@ -140,6 +144,8 @@ export const sampleGraph: GraphFixture = {
             to: 'R1',
             kind: 'support',
             importanceToParent: 1.2,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-C1-P1',
@@ -147,6 +153,8 @@ export const sampleGraph: GraphFixture = {
             to: 'C1',
             kind: 'support',
             importanceToParent: 1.4,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-C1-E1',
@@ -154,6 +162,8 @@ export const sampleGraph: GraphFixture = {
             to: 'C1',
             kind: 'support',
             importanceToParent: 1,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-C2-P2',
@@ -161,6 +171,8 @@ export const sampleGraph: GraphFixture = {
             to: 'C2',
             kind: 'support',
             importanceToParent: 1.1,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-C2-E2',
@@ -168,6 +180,8 @@ export const sampleGraph: GraphFixture = {
             to: 'C2',
             kind: 'support',
             importanceToParent: 1.2,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-O1-P1',
@@ -175,6 +189,8 @@ export const sampleGraph: GraphFixture = {
             to: 'P1',
             kind: 'rebut',
             importanceToParent: 0.1,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-O2-C3',
@@ -182,6 +198,8 @@ export const sampleGraph: GraphFixture = {
             to: 'C3',
             kind: 'rebut',
             importanceToParent: 0.1,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
         {
             id: 'E-O3-P2',
@@ -189,6 +207,8 @@ export const sampleGraph: GraphFixture = {
             to: 'P2',
             kind: 'rebut',
             importanceToParent: 0.1,
+            probabilityGivenParent: 0.5,
+            probabilityGivenNotParent: 0.5,
         },
     ],
 }

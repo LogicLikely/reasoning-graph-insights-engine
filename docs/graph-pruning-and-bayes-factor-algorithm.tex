@@ -1,0 +1,959 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue
+}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.65em}
+
+\newcommand{\BF}{\operatorname{BF}}
+\newcommand{\Parents}{\operatorname{Parents}}
+\newcommand{\Children}{\operatorname{Children}}
+\newcommand{\MinMode}{\mathsf{Min}}
+\newcommand{\MaxMode}{\mathsf{Max}}
+\newcommand{\Strongest}{\operatorname{Strongest}}
+
+\title{Graph Pruning and Bayes-Factor Calculation\\
+       Step-by-Step Algorithm and Implementation Notes}
+\author{LogicLikely Structural Insights Engine}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Purpose and Scope}
+
+This document describes the two-stage algorithm implemented by
+\texttt{GraphBayesFactorPruner} and \texttt{GraphBayesFactorCalculator}.
+The stages are deliberately separate:
+
+\begin{enumerate}
+    \item The \emph{graph-pruning stage} selects a compatible collection of
+          strong evidence-to-hypothesis paths.
+    \item The \emph{Bayes-factor stage} evaluates the pruned graph using two
+          conditional probabilities on every retained edge.
+\end{enumerate}
+
+Neither stage updates posterior odds.  Leaf Bayes factors are supplied
+explicitly to the calculator, and the result is an ordinary Bayes factor for
+the requested hypothesis.
+
+The complete caller-side flow is therefore
+\[
+    G_H^{\star}
+        = \operatorname{Prune}(G,H),
+    \qquad
+    \BF_H
+        = \operatorname{Calculate}(G_H^{\star},H,\mathcal{B}_{\mathrm{leaf}}),
+\]
+where \(G_H^{\star}\) is the pruned graph and
+\(\mathcal{B}_{\mathrm{leaf}}\) maps relevant leaf-node identifiers to their
+externally supplied Bayes factors.
+
+\section{Graph Model and Direction}
+
+Let
+\[
+    G=(V,E)
+\]
+be a directed graph.  An edge is directed from a child proposition toward its
+parent proposition:
+\[
+    e=(u,v) \in E
+    \quad\Longleftrightarrow\quad
+    u \longrightarrow v.
+\]
+
+Thus evidence is encountered on the \emph{from} side of an edge, and the
+hypothesis is reached by repeatedly following edges in their stored direction.
+For an edge \(e=(u,v)\), the implementation stores three distinct quantities:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Symbol & Implementation field & Meaning \\
+\midrule
+\(r_e\) & \texttt{ImportanceToParent}
+    & positive path-ranking likelihood ratio \\
+\(a_e\) & \texttt{ProbabilityGivenParent}
+    & \(P(u\mid v)\) \\
+\(b_e\) & \texttt{ProbabilityGivenNotParent}
+    & \(P(u\mid\neg v)\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The pruning stage currently uses only \(r_e\).  The Bayes-factor stage uses
+only \(a_e\) and \(b_e\).  This distinction is important: the nonlinear edge
+transform used during Bayes-factor calculation does not, without additional
+assumptions, reduce to one static likelihood ratio suitable for path ranking.
+The two probabilities are separately specified model parameters; neither is
+determined by the other.  The stored edge kind (for example, \texttt{support} or
+\texttt{rebut}) does not alter either numerical algorithm.
+
+For a node \(v\), define
+\begin{align*}
+    \Parents(v)
+        &= \{e=(v,u)\in E\},
+        &&\text{edges continuing from \(v\) toward a parent},\\
+    \Children(v)
+        &= \{e=(u,v)\in E\},
+        &&\text{edges entering \(v\) from direct children}.
+\end{align*}
+
+The selected hypothesis node is denoted by \(H\).  Its target-relevant cone is
+\[
+    R_H
+      = \{v\in V : \text{there is a directed path from \(v\) to \(H\)}\}.
+\]
+The zero-edge path ensures that \(H\in R_H\).
+
+For that hypothesis, the relevant evidence-source set is
+\[
+    \mathcal{S}_H
+      = \{v\in R_H\setminus\{H\} :
+           \operatorname{kind}(v)\text{ is \texttt{evidence} or
+           \texttt{objection}}\}.
+\]
+
+\section{Assumptions and Preconditions}
+
+The algorithms use the following assumptions.
+
+\begin{enumerate}
+    \item Node identifiers and edge identifiers are unique.
+    \item Every edge endpoint refers to an existing node.
+    \item The portion of the graph that can reach \(H\) is acyclic.
+    \item Every relevant path-ranking weight satisfies \(r_e>0\).
+    \item Every retained conditional probability satisfies
+          \(0\leq a_e\leq 1\) and \(0\leq b_e\leq 1\).
+    \item Every relevant leaf has a supplied Bayes factor greater than zero.
+    \item Claim co-dependencies have been removed before multiplying child
+          contributions.  The product recurrence treats direct child
+          contributions as conditionally independent at their parent.
+\end{enumerate}
+
+The implementation recognizes node kinds \texttt{evidence} and
+\texttt{objection}, case-insensitively, as evidence sources for pruning.
+By contrast, a leaf for BF evaluation is defined structurally by the absence
+of relevant child edges, regardless of its node kind.
+
+\section{Stage I: Graph Pruning}
+
+\subsection{Desired Output}
+
+The pruning stage returns a new graph containing the selected hypothesis,
+initially strongest evidence-path prefixes, and locally strongest compatible
+shared suffixes.  It enforces the following structural rule:
+
+\begin{quote}
+All prefixes entering a merge are preserved, but a merge has only one
+continuation toward the hypothesis.
+\end{quote}
+
+Consequently, several evidence branches may enter the same node, but every
+retained non-hypothesis node has one retained outgoing continuation toward
+\(H\).
+
+\subsection{Step 1: Build Adjacency Indexes and Validate Identifiers}
+
+The pruner first checks for duplicate node and edge identifiers.  The BF
+calculator assumes its input was produced by this stage and therefore relies
+on the same uniqueness precondition.  The graph context then builds the
+following indexes:
+
+\begin{itemize}
+    \item a node-identifier-to-node dictionary;
+    \item outgoing parent edges keyed by their child, corresponding to
+          \(\Parents(v)\);
+    \item incoming child edges keyed by their parent, corresponding to
+          \(\Children(v)\).
+\end{itemize}
+
+These indexes allow both evidence-to-hypothesis and hypothesis-to-evidence
+traversals without rescanning all edges.
+
+\subsection{Step 2: Restrict Work to Nodes That Can Reach the Hypothesis}
+
+The target-relevant node set is
+\[
+    R_H
+      = \{v\in V : \text{there is a directed path from \(v\) to \(H\)}\}.
+\]
+
+The algorithm starts a queue at \(H\) and follows child edges in reverse graph
+direction.  Whenever it sees an edge \((u,v)\) while visiting \(v\), it adds
+\(u\) to the queue if \(u\) has not already been discovered.
+
+This step has three practical effects:
+
+\begin{enumerate}
+    \item disconnected evidence is ignored;
+    \item edges continuing above or away from the selected hypothesis are
+          ignored;
+    \item cycle and edge-weight validation for pruning are target-local.
+\end{enumerate}
+
+Endpoint validation is the exception: the adjacency context rejects a
+dangling edge anywhere in the input graph before \(R_H\) is collected, even
+if that malformed edge is disconnected from \(H\).
+
+The hypothesis itself is always in \(R_H\).
+
+\subsection{Step 3: Define Log-Likelihood Path Scores}
+
+Each path-ranking edge weight is converted to log space:
+\[
+    \ell_e = \log r_e.
+\]
+
+For a path
+\[
+    \pi=(e_1,e_2,\ldots,e_t),
+\]
+its log-likelihood-ratio score is
+\[
+    L(\pi)
+      = \sum_{i=1}^{t}\ell_{e_i}
+      = \log\left(\prod_{i=1}^{t}r_{e_i}\right).
+\]
+
+Using sums of logarithms avoids repeatedly multiplying path weights and makes
+supporting and counter paths symmetric around the neutral value
+\(L=0\), which corresponds to a path likelihood ratio of \(1\).
+
+\subsection{Step 4: Calculate the Min/Max Dynamic-Programming Table}
+
+For every \(v\in R_H\), the algorithm stores
+\[
+    T(v)=
+    \bigl(m(v),M(v),p_{\min}(v),p_{\max}(v),d(v)\bigr),
+\]
+where
+
+\begin{itemize}
+    \item \(m(v)\) is the minimum log score of any path from \(v\) to \(H\);
+    \item \(M(v)\) is the maximum log score of any path from \(v\) to \(H\);
+    \item \(p_{\min}(v)\) is the first edge on the selected minimum path;
+    \item \(p_{\max}(v)\) is the first edge on the selected maximum path;
+    \item \(d(v)\) is the longest-hop distance from \(v\) to \(H\).
+\end{itemize}
+
+The base case is
+\[
+    m(H)=M(H)=0,
+    \qquad
+    p_{\min}(H)=p_{\max}(H)=\varnothing,
+    \qquad
+    d(H)=0.
+\]
+
+For \(v\neq H\), consider each relevant continuation edge
+\(e=(v,u)\).  Once \(T(u)\) is known, this edge produces candidates
+\begin{align*}
+    c_{\min}(e) &= \ell_e + m(u),\\
+    c_{\max}(e) &= \ell_e + M(u).
+\end{align*}
+
+The recurrence is
+\begin{align*}
+    m(v)
+      &= \min_{e=(v,u)}\bigl(\ell_e+m(u)\bigr),\\
+    M(v)
+      &= \max_{e=(v,u)}\bigl(\ell_e+M(u)\bigr),\\
+    d(v)
+      &= 1+\max_{e=(v,u)}d(u).
+\end{align*}
+
+The corresponding minimizing and maximizing edges are stored in
+\(p_{\min}(v)\) and \(p_{\max}(v)\).  Edge identifiers, rather than only
+destination node identifiers, are stored because parallel edges are allowed.
+
+If two candidates have exactly the same computed log score, the edge with the
+ordinally earlier identifier is selected; the destination identifier is the
+secondary deterministic tie-break.  This makes the selected identifier sets
+independent of input edge ordering.  The returned node and edge lists still
+preserve the relative order of the original graph objects that survive.
+
+\subsection{Step 5: Evaluate the Table in Reverse Topological Order}
+
+For every relevant node, let
+\[
+    q_{\mathrm{parent}}(v)
+      = \left|\{(v,u)\in E : u\in R_H\}\right|
+\]
+be the number of unresolved continuations from \(v\) toward \(H\).
+
+The algorithm initially queues nodes for which
+\(q_{\mathrm{parent}}(v)=0\).  In a valid target-relevant DAG this begins with
+\(H\).  After a node's table entry is computed, the algorithm visits its child
+edges and decrements the corresponding child's unresolved count.  A child is
+queued when all of its possible continuations have already been evaluated.
+
+If fewer than \(|R_H|\) nodes are processed, the target-relevant subgraph
+contains a cycle and pruning stops with an error.
+
+\subsection{Step 6: Choose the Strongest Extreme at a Node}
+
+Path strength is defined as distance from the neutral log score zero.  The
+locally strongest mode at \(v\) is therefore
+\[
+    \Strongest(v)
+      =
+      \begin{cases}
+        \MinMode, & |m(v)|>|M(v)|,\\
+        \MaxMode, & |m(v)|\leq |M(v)|.
+      \end{cases}
+\]
+
+Thus a sufficiently strong counter path can defeat a supporting path with a
+larger raw log score.  An exact absolute-strength tie selects the maximum mode,
+matching the existing maximum-mode tie convention.
+
+Once a mode has been selected, it is followed consistently:
+
+\begin{itemize}
+    \item \(\MinMode\) follows \(p_{\min}(v)\) and remains in
+          \(\MinMode\) at the next node;
+    \item \(\MaxMode\) follows \(p_{\max}(v)\) and remains in
+          \(\MaxMode\) at the next node.
+\end{itemize}
+
+The mode is changed only when multiple path components merge at a node.
+
+\subsection{Step 7: Create Distance Buckets and Arrival Lists}
+
+If \(\mathcal{S}_H=\varnothing\), the algorithm skips the arrival sweep and
+returns a graph containing only \(H\).  Otherwise, let
+\[
+    D=\max_{s\in\mathcal{S}_H} d(s)
+\]
+be the largest distance of any relevant evidence node, where
+\(\mathcal{S}_H\) is the set of evidence sources in \(R_H\).
+The algorithm creates buckets
+\[
+    B_0,B_1,\ldots,B_D.
+\]
+
+It also maintains an arrival list \(A(v)\) for each node that is reached by a
+selected path token.  Each arrival is either \(\MinMode\) or \(\MaxMode\).
+An arrival represents one still-distinct evidence component, which can be
+either a single evidence source or a group of sources that merged earlier.
+
+The local operation
+\[
+    \operatorname{AddArrival}(v,s)
+\]
+performs the following steps:
+
+\begin{enumerate}
+    \item If this is the first arrival at \(v\), create \(A(v)\) and schedule
+          \(v\) exactly once by appending it to bucket \(B_{d(v)}\).
+    \item Append mode \(s\) to \(A(v)\).
+\end{enumerate}
+
+Later arrivals append to the same list but do not schedule the node again.
+
+\subsection{Step 8: Seed One Arrival per Evidence Node}
+
+For each relevant evidence node \(s\in\mathcal{S}_H\), initialize
+\[
+    \operatorname{AddArrival}\bigl(s,\Strongest(s)\bigr).
+\]
+
+At this point no complete path has been materialized.  Each evidence source has
+only a token that records which precomputed extreme it initially prefers.
+
+\subsection{Step 9: Sweep Buckets from Farthest to Nearest}
+
+Buckets are processed in the order
+\[
+    B_D,B_{D-1},\ldots,B_0.
+\]
+
+For every scheduled node \(v\):
+
+\begin{enumerate}
+    \item Add \(v\) to the selected-node set.
+    \item If \(v=H\), stop processing this token.
+    \item Inspect the number of arrivals in \(A(v)\).
+    \item If \(|A(v)|=1\), preserve that arrival's current min/max mode.
+    \item If \(|A(v)|>1\), treat \(v\) as a merge and reset the continuation
+          mode to \(\Strongest(v)\).
+    \item Select \(p_{\min}(v)\) or \(p_{\max}(v)\), according to the chosen
+          mode.
+    \item Add that edge and its destination to the selected sets.
+    \item Emit exactly one arrival at the destination, carrying the chosen
+          mode.
+\end{enumerate}
+
+Emitting one arrival after a merge collapses all incoming evidence components
+into one component for the remainder of their shared suffix.
+
+\subsection{Why the Distance Order Is Correct}
+
+For every relevant edge \((v,u)\), the longest-hop recurrence guarantees
+\[
+    d(v) \geq d(u)+1,
+\]
+and hence
+\[
+    d(v)>d(u).
+\]
+
+Every emitted arrival therefore moves to a strictly lower, not-yet-processed
+bucket.  By induction, all possible arrivals at a node have been collected
+before that node's bucket is processed.  This remains true even if an edge
+skips one or more distance values.
+
+This ordering provides three useful guarantees:
+
+\begin{enumerate}
+    \item a node is scheduled and processed at most once;
+    \item a merge sees all of its incoming evidence components;
+    \item selecting a previously unused suffix can safely create a new merge
+          nearer to \(H\), because the newly reached node has not yet been
+          processed.
+\end{enumerate}
+
+\subsection{How Nested Merges Are Handled}
+
+Suppose two paths merge at \(M\), and the resulting shared path later meets a
+third evidence path at \(N\):
+
+\begin{verbatim}
+E1 --> A --\
+           M --> C --\
+E2 --> B --/          N --> ... --> H
+                    /
+E3 --> D -----------/
+\end{verbatim}
+
+At \(M\), the arrivals from \(E_1\) and \(E_2\) collapse into one token.  All
+edges in their distinct prefixes have already been selected and remain in the
+output.  The collapsed token moves from \(M\) toward \(N\).
+The suffix chosen at \(M\) may be one that neither incoming token would have
+followed without the merge.  Its call to \(\operatorname{AddArrival}\) still
+records the new token at \(N\) before the lower-distance bucket for \(N\) is
+processed.
+
+At \(N\), the algorithm sees two arrivals:
+
+\begin{enumerate}
+    \item one token representing the already-merged component
+          \(\{E_1,E_2\}\);
+    \item one token representing \(E_3\).
+\end{enumerate}
+
+It therefore performs another merge, preserves all three prefixes, and emits
+one token along a single continuation from \(N\) to \(H\).
+
+\subsection{Worked Pruning Example}
+
+Consider the following path-ranking weights:
+
+\begin{center}
+\begin{tabular}{cl@{\qquad}cl}
+\toprule
+Edge & \(r_e\) & Edge & \(r_e\) \\
+\midrule
+\(E_1\to A\) & \(2\)       & \(E_2\to B\) & \(0.5\) \\
+\(A\to M\)   & \(2\)       & \(B\to M\)   & \(0.5\) \\
+\(M\to C\)   & \(4\)       & \(M\to X\)   & \(0.25\) \\
+\(C\to N\)   & \(1\)       & \(X\to N\)   & \(1\) \\
+\(E_3\to D\) & \(3\)       & \(D\to N\)   & \(1\) \\
+\(N\to H\)   & \(2\)       &                 & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For \(E_1\), the path through \(C\) has ratio
+\[
+    2\cdot 2\cdot 4\cdot 1\cdot 2=32,
+\]
+whereas the path through \(X\) has ratio \(2\).  Thus \(E_1\) initially
+selects the maximum mode and prefers \(C\).
+
+For \(E_2\), the path through \(C\) has ratio
+\[
+    0.5\cdot 0.5\cdot 4\cdot 1\cdot 2=2,
+\]
+whereas the path through \(X\) has ratio
+\[
+    0.5\cdot 0.5\cdot 0.25\cdot 1\cdot 2=0.125.
+\]
+Because
+\[
+    |\log 0.125|>|\log 2|,
+\]
+\(E_2\) initially selects the minimum mode and prefers \(X\).
+
+Both tokens reach \(M\).  At \(M\), the complete suffix ratios are
+\[
+    M\to C\to N\to H: 4\cdot 1\cdot 2=8,
+\]
+and
+\[
+    M\to X\to N\to H: 0.25\cdot 1\cdot 2=0.5.
+\]
+Since \(|\log 8|>|\log 0.5|\), the merge selects the maximum suffix through
+\(C\).  The unused \(M\to X\) suffix is never added to the result.
+
+The merged token then reaches \(N\), where it joins the token from \(E_3\).
+The output retains
+\[
+\begin{split}
+    &E_1\to A\to M,\\
+    &E_2\to B\to M,\\
+    &M\to C\to N,\\
+    &E_3\to D\to N,\\
+    &N\to H,
+\end{split}
+\]
+but excludes \(M\to X\to N\).
+
+\subsection{Step 10: Construct the Returned Graph}
+
+After the sweep, the algorithm scans the original graph and copies only
+selected nodes and edges into a new graph.  Graph metadata is preserved, and
+nodes, edge objects, tag collections, and evidence details are cloned so that
+mutating the pruned result does not mutate the input graph.
+
+If no relevant evidence reaches \(H\), the returned graph contains \(H\) and
+no edges.
+
+\subsection{Pruning Invariants}
+
+The bucket sweep establishes the following invariants.
+
+\begin{enumerate}
+    \item \textbf{Reachability:} every selected node has a selected path to
+          \(H\).
+    \item \textbf{Prefix preservation:} every edge selected before a merge
+          remains in the returned graph.
+    \item \textbf{Single continuation:} every selected node other than \(H\)
+          has one selected outgoing edge toward \(H\).
+    \item \textbf{Complete merge detection:} every component that reaches a
+          node arrives before that node is processed.
+    \item \textbf{Nested-merge safety:} a merged component can participate in
+          later merges without reopening or copying its earlier prefixes.
+\end{enumerate}
+
+\subsection{Pruning Complexity}
+
+Let \(V_H=|R_H|\), let \(E_R\) be the number of target-relevant edges, and let
+\(K=|\mathcal{S}_H|\).
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Operation & Expected cost \\
+\midrule
+Build graph indexes & \(O(|V|+|E|)\) \\
+Find \(R_H\) & \(O(V_H+E_R)\) \\
+Topological min/max DP & \(O(V_H+E_R)\) \\
+Arrival/bucket sweep & \(O(V_H+K)\) \\
+Clone selected output & \(O(|V|+|E|)\) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+With expected constant-time dictionary and set operations, the complete
+implementation is therefore
+\[
+    O(|V|+|E|+K),
+\]
+and hence linear because \(K\leq |V|\).  The implementation achieves this by
+reusing one DP table and never rerunning a graph search for each merge.
+Auxiliary storage is linear in the graph and the number of arrivals.
+
+\section{Stage II: Bayes-Factor Calculation}
+
+\subsection{Input and Structural Requirement}
+
+Write the already-pruned graph as
+\[
+    G_H^{\star}=(V_H^{\star},E_H^{\star}).
+\]
+The calculator receives
+
+\begin{enumerate}
+    \item an already-pruned graph \(G_H^{\star}\);
+    \item the hypothesis identifier \(H\);
+    \item a dictionary \(\mathcal{B}_{\mathrm{leaf}}\) of positive leaf Bayes
+          factors.
+\end{enumerate}
+
+The relevant portion of the input must be a DAG in which every relevant
+non-hypothesis node has at most one continuation toward \(H\), and \(H\) has no
+continuation within the relevant subgraph.  Multiple child branches may enter
+the same parent; those are precisely the contributions multiplied at that
+parent.
+
+\subsection{Bayes-Factor Recurrence}
+
+For a node \(v\), let
+\[
+    N(v)
+      = \{u : (u,v)\in E_H^{\star}\}
+\]
+be its direct children in the pruned graph.
+
+The node Bayes factor is
+\[
+    \BF_v
+      =
+      \begin{cases}
+        \mathcal{B}_{\mathrm{leaf}}[v],
+            & N(v)=\varnothing,\\[0.8em]
+        \displaystyle
+        \prod_{u\in N(v)} \BF_{u\rightarrow v},
+            & N(v)\neq\varnothing.
+      \end{cases}
+\]
+
+For edge \(e=(u,v)\), transform the child's Bayes factor through the edge:
+\[
+    \boxed{
+    \BF_{u\rightarrow v}
+      =
+      \frac{
+        \BF_u a_e + (1-a_e)
+      }{
+        \BF_u b_e + (1-b_e)
+      }}.
+\]
+
+The final return value is \(\BF_H\).
+
+\subsection{Interpretation of the Edge Transform}
+
+The transform maps the strength of the entire child subtree into a Bayes-factor
+contribution for its parent.  It has several useful boundary cases:
+
+\begin{itemize}
+    \item If \(a_e=b_e\), then \(\BF_{u\rightarrow v}=1\) for every positive
+          \(\BF_u\).  The edge is BF-neutral.
+    \item If \(a_e=1\) and \(b_e=0\), then
+          \(\BF_{u\rightarrow v}=\BF_u\).
+    \item If \(a_e=0\) and \(b_e=1\), then
+          \(\BF_{u\rightarrow v}=1/\BF_u\).
+    \item If \(\BF_u=1\), then \(\BF_{u\rightarrow v}=1\), regardless of
+          the valid edge probabilities.
+\end{itemize}
+
+Values with \(a_e<b_e\) are valid; depending on the child BF, such an edge can
+reverse the direction of the child's contribution.  No sign is inferred from
+the edge's \texttt{support} or \texttt{rebut} label.
+
+The schema default \(a_e=b_e=0.5\) is therefore neutral.  Existing or seeded
+edges contribute no BF effect until their probabilities are calibrated.
+
+\subsection{Step 1: Restrict Calculation to the Hypothesis Subgraph}
+
+As in pruning, the calculator begins at \(H\) and follows child edges backward
+to collect all nodes that can reach \(H\).  Disconnected nodes and edges are
+not evaluated.
+
+\subsection{Step 2: Count Unresolved Child Contributions}
+
+For every relevant node \(v\), initialize
+\[
+    q_{\mathrm{child}}(v)=|N(v)|
+\]
+and a multiplicative accumulator
+\[
+    C(v)=1.
+\]
+
+Every node with \(q_{\mathrm{child}}(v)=0\) is a leaf and is placed in the
+ready queue.
+
+\subsection{Step 3: Evaluate Leaves}
+
+When a leaf \(v\) leaves the queue, retrieve
+\[
+    \BF_v=\mathcal{B}_{\mathrm{leaf}}[v].
+\]
+
+The value must exist and must be strictly positive.  Extra dictionary values
+for irrelevant or non-leaf nodes are not needed by the recurrence.
+
+\subsection{Step 4: Evaluate Internal Nodes}
+
+An internal node is queued only after every direct child contribution has been
+accumulated.  Its Bayes factor is therefore already available as
+\[
+    \BF_v=C(v).
+\]
+
+\subsection{Step 5: Transform and Propagate to the Parent}
+
+For every relevant continuation edge \(e=(v,u)\):
+
+\begin{enumerate}
+    \item validate \(a_e,b_e\in[0,1]\);
+    \item calculate \(\BF_{v\rightarrow u}\) with the edge transform;
+    \item update
+          \[
+              C(u)\leftarrow C(u)\,\BF_{v\rightarrow u};
+          \]
+    \item decrement \(q_{\mathrm{child}}(u)\);
+    \item if \(q_{\mathrm{child}}(u)=0\), enqueue \(u\).
+\end{enumerate}
+
+The arithmetic is checked decimal arithmetic in the implementation, so an
+overflow is reported rather than silently wrapping.
+
+\subsection{Step 6: Detect Cycles and Validate Compatibility}
+
+Let \(n_{\mathrm{processed}}\) be the number of nodes removed from the ready
+queue.  If
+\[
+    n_{\mathrm{processed}}<|R_H|,
+\]
+then some relevant nodes never reached zero unresolved children, which implies
+a cycle.
+
+The calculator also rejects an unpruned relevant node with multiple
+continuations toward \(H\).  This prevents a shared child subtree from being
+propagated along competing parent paths and counted more than once.
+
+\subsection{Step 7: Return the Hypothesis Bayes Factor}
+
+After all relevant nodes have been evaluated, return the memoized value
+\[
+    \BF_H.
+\]
+
+No node odds are read, divided, multiplied, or updated during this process.
+
+\subsection{Worked Bayes-Factor Example}
+
+Consider the pruned graph
+\[
+    E_1\longrightarrow M\longrightarrow H,
+    \qquad
+    E_2\longrightarrow M,
+\]
+with leaf values
+\[
+    \BF_{E_1}=4,
+    \qquad
+    \BF_{E_2}=2.
+\]
+
+Let edge \(E_1\to M\) have
+\[
+    a_1=\frac{3}{4},
+    \qquad
+    b_1=\frac{1}{4}.
+\]
+Its contribution is
+\[
+    \BF_{E_1\rightarrow M}
+      =
+      \frac{4(3/4)+(1-3/4)}{4(1/4)+(1-1/4)}
+      =
+      \frac{13/4}{7/4}
+      =
+      \frac{13}{7}.
+\]
+
+Let edge \(E_2\to M\) have \(a_2=0\) and \(b_2=1\).  Then
+\[
+    \BF_{E_2\rightarrow M}
+      =
+      \frac{2(0)+(1-0)}{2(1)+(1-1)}
+      =\frac{1}{2}.
+\]
+
+The two independent child contributions multiply at \(M\):
+\[
+    \BF_M
+      =\frac{13}{7}\cdot\frac{1}{2}
+      =\frac{13}{14}.
+\]
+
+Finally, let edge \(M\to H\) have
+\[
+    a_3=\frac{4}{5},
+    \qquad
+    b_3=\frac{1}{5}.
+\]
+Then
+\begin{align*}
+    \BF_H
+      &=
+      \frac{(13/14)(4/5)+(1-4/5)}
+           {(13/14)(1/5)+(1-1/5)}\\[0.4em]
+      &=
+      \frac{66/70}{69/70}
+       =\frac{22}{23}
+       \approx 0.95652.
+\end{align*}
+
+This value is returned directly.  The calculator does not apply it to any
+prior odds.
+
+\subsection{Bayes-Factor Complexity}
+
+Every relevant node is queued once, and every relevant edge is transformed
+once.  The target-local traversal and recurrence therefore cost
+\[
+    O(|V_H^{\star}|+|E_H^{\star}|),
+\]
+with target-local auxiliary structures of
+\[
+    O(|V_H^{\star}|+|E_H^{\star}|).
+\]
+The public call first constructs adjacency indexes for the entire input graph,
+so its total time and storage bounds are
+\[
+    O(|V|+|E|).
+\]
+
+\section{End-to-End Properties}
+
+The two stages together provide the following behavior.
+
+\begin{enumerate}
+    \item Pruning removes competing continuations before BF multiplication.
+    \item Evidence-specific prefixes survive merges.
+    \item Every merged component has one shared suffix to \(H\).
+    \item Each retained edge's two probabilities are preserved when the graph
+          is cloned.
+    \item The BF calculator visits each retained node and edge once.
+    \item Prior and posterior odds remain unchanged.
+\end{enumerate}
+
+\section{Validation and Failure Conditions}
+
+The implementation rejects or reports the following conditions:
+
+\begin{center}
+\begin{tabular}{p{0.37\textwidth}p{0.53\textwidth}}
+\toprule
+Condition & Result \\
+\midrule
+Missing hypothesis & calculation or pruning stops \\
+Duplicate node or edge identifier & pruning stops \\
+Dangling edge endpoint & graph-context construction stops \\
+Relevant cycle & topological processing stops \\
+Nonpositive relevant \(r_e\) & pruning stops \\
+Missing or nonpositive leaf BF & BF calculation stops \\
+\(a_e\) or \(b_e\) outside \([0,1]\) & BF calculation stops \\
+Multiple continuations in BF input & caller is instructed to prune first \\
+Cancellation requested & the active operation stops \\
+Decimal overflow & checked arithmetic throws \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Implementation Choices Requiring Product Confirmation}
+
+The current implementation makes several explicit choices where the general
+problem statement admits more than one interpretation.
+
+\subsection{Path Metric}
+
+Pruning uses \texttt{ImportanceToParent} as a multiplicative path likelihood
+ratio.  It does not derive a pruning score from \(a_e\) and \(b_e\).  Changing
+this requires defining how the nonlinear BF transform should be scored before
+the child Bayes factor is known.
+
+\subsection{Meaning of ``Strongest''}
+
+The strongest path is the path farthest from neutral BF \(1\):
+\[
+    \max |\log(\text{path LR})|.
+\]
+This treats strong supporting and strong counter paths symmetrically.
+
+\subsection{Merge Objective}
+
+At a merge, the implementation chooses the merge node's locally strongest
+suffix.  This is a deterministic greedy structural rule.  It is not claimed
+to optimize a global objective such as the sum or product of all evidence-path
+strengths, because no such aggregate objective is presently defined.
+
+\subsection{Tie Rules}
+
+An exact absolute-strength tie selects the maximum path.  Equal computed DP
+scores use ordinal edge identifier and then destination identifier as stable
+tie-breaks.  The equality is equality of the computed log values, not symbolic
+equality of the original products.
+
+\subsection{Evidence Kinds}
+
+Both \texttt{evidence} and \texttt{objection} nodes start pruning tokens.  If
+the domain later introduces other evidence-like kinds, that policy should be
+centralized or replaced with an explicit evidence-node input set.
+
+\subsection{Posterior-Odds Integration}
+
+Posterior integration remains intentionally out of scope.  Before adding it,
+the application must decide whether stored values are ordinary odds or
+log-odds:
+
+\begin{itemize}
+    \item for ordinary odds,
+          \(O_{\mathrm{post}}=O_{\mathrm{prior}}\BF_H\);
+    \item for log-odds,
+          \(\log O_{\mathrm{post}}
+             =\log O_{\mathrm{prior}}+\log\BF_H\).
+\end{itemize}
+
+That decision should be implemented in a separate integration layer rather
+than inside either algorithm described here.
+
+\section{Mapping from the Document to the C\# Implementation}
+
+\begin{center}
+\begin{tabular}{p{0.36\textwidth}p{0.54\textwidth}}
+\toprule
+Document operation & Implementation member \\
+\midrule
+Collect \(R_H\) & \texttt{CollectNodesThatReachHypothesis} \\
+Calculate \(m,M,p_{\min},p_{\max},d\) & \texttt{CalculatePathMetrics} and
+    \texttt{CalculateNodePathMetrics} \\
+Choose min/max extreme & \texttt{SelectStrongest} \\
+Register and schedule a token & local function \texttt{AddArrival} \\
+Perform compatible merge sweep & \texttt{SelectCompatiblePaths} \\
+Clone the selected result & \texttt{CreatePrunedGraph} \\
+Retrieve a leaf BF & \texttt{GetLeafBayesFactor} \\
+Apply edge recurrence & \texttt{TransformThroughEdge} \\
+Calculate \(\BF_H\) & \texttt{GraphBayesFactorCalculator.Calculate} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Summary}
+
+The pruning algorithm first computes the minimum and maximum log-LR path from
+every target-relevant node to \(H\).  It then propagates evidence-component
+tokens through longest-distance buckets.  A single token preserves its chosen
+extreme, while multiple tokens at one node trigger a merge and one locally
+strongest shared suffix.  This preserves all incoming prefixes and naturally
+handles later nested merges.
+
+The BF calculator then processes the pruned DAG from leaves toward \(H\).
+Explicit leaf Bayes factors are transformed through edge probabilities, direct
+child contributions are multiplied, and the resulting \(\BF_H\) is returned.
+Posterior odds are neither consulted nor modified.
+
+\end{document}

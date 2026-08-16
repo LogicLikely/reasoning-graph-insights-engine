@@ -49,6 +49,8 @@ CREATE TABLE public.edges (
     to_node_id text NOT NULL,
     kind text NOT NULL,
     importance_to_parent numeric(10,3) NOT NULL,
+    probability_given_parent numeric(10,9) DEFAULT 0.5 NOT NULL,
+    probability_given_not_parent numeric(10,9) DEFAULT 0.5 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT edges_pkey PRIMARY KEY (graph_id, id),
@@ -62,6 +64,10 @@ CREATE TABLE public.edges (
         REFERENCES public.nodes(graph_id, id) ON DELETE CASCADE,
     CONSTRAINT ck_edges_importance_to_parent
         CHECK (importance_to_parent > 0 AND importance_to_parent <= 10),
+    CONSTRAINT ck_edges_probability_given_parent
+        CHECK (probability_given_parent BETWEEN 0 AND 1),
+    CONSTRAINT ck_edges_probability_given_not_parent
+        CHECK (probability_given_not_parent BETWEEN 0 AND 1),
     CONSTRAINT ck_edges_kind
         CHECK (kind = ANY (ARRAY['support'::text, 'rebut'::text])),
     CONSTRAINT ck_edges_not_self CHECK (from_node_id <> to_node_id)

@@ -171,7 +171,9 @@ public class GraphServiceTests
                     Id = "E-R-C1",
                     From = "C1",
                     To = "R1",
-                    Kind = "support"
+                    Kind = "support",
+                    ProbabilityGivenParent = 0.82m,
+                    ProbabilityGivenNotParent = 0.18m
                 }
             ]
         };
@@ -198,6 +200,18 @@ public class GraphServiceTests
         Assert.AreEqual("C1", result.Edges[0].From);
         Assert.AreEqual("R1", result.Edges[0].To);
         Assert.AreEqual("support", result.Edges[0].Kind);
+        Assert.AreEqual(0.82m, result.Edges[0].ProbabilityGivenParent);
+        Assert.AreEqual(0.18m, result.Edges[0].ProbabilityGivenNotParent);
+
+        var toDomainGraph = typeof(GraphService).GetMethod(
+            "ToDomainGraph",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(toDomainGraph);
+
+        var roundTrippedGraph = toDomainGraph.Invoke(null, new object?[] { result }) as Graph;
+        Assert.IsNotNull(roundTrippedGraph);
+        Assert.AreEqual(0.82m, roundTrippedGraph.Edges[0].ProbabilityGivenParent);
+        Assert.AreEqual(0.18m, roundTrippedGraph.Edges[0].ProbabilityGivenNotParent);
     }
 
     [TestMethod]
@@ -378,6 +392,41 @@ public class GraphServiceTests
         Assert.IsTrue(result);
         VerifyBatch(repositoryMock, graph.Id, expected =>
             expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
+    }
+
+    [TestMethod]
+    public async Task UpdateEdgeAsync_ProbabilityOnlyUpdateDoesNotPersistPosteriorOdds()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var update = new GraphEdgeUpdateDto
+        {
+            ProbabilityGivenParent = 0.8m,
+            ProbabilityGivenNotParent = 0.2m
+        };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateEdgeAsync(
+                "sample-medium",
+                "E-B-A",
+                update,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await CreateService(repositoryMock.Object)
+            .UpdateEdgeAsync("sample-medium", "E-B-A", update);
+
+        Assert.IsTrue(result);
+        repositoryMock.Verify(
+            repository => repository.GetBySlugAsync(
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        repositoryMock.Verify(
+            repository => repository.UpdateNodePosteriorOddsBatchAsync(
+                It.IsAny<int>(),
+                It.IsAny<IReadOnlyDictionary<string, decimal>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [TestMethod]

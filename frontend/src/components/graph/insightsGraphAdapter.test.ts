@@ -36,6 +36,8 @@ describe('insightsGraphAdapter', () => {
       targetId: 'R1',
     })
     expect(edge?.raw.importanceToParent).toBe(8)
+    expect(edge?.raw.probabilityGivenParent).toBe(0.5)
+    expect(edge?.raw.probabilityGivenNotParent).toBe(0.5)
     expect(edge?.raw.kind).toBe('support')
   })
 
@@ -79,6 +81,8 @@ describe('insightsGraphAdapter', () => {
       to: 'C2',
       kind: 'support' as const,
       importanceToParent: 4,
+      probabilityGivenParent: 0.5,
+      probabilityGivenNotParent: 0.5,
     }
     const graph: GraphFixture = {
       ...sampleGraph,
@@ -94,5 +98,7 @@ describe('insightsGraphAdapter', () => {
     expect(sharedRelations[0].raw).toBe(sampleGraph.edges[4])
     expect(sharedRelations[1].raw).toBe(secondParentEdge)
     expect(sharedRelations[1].raw.importanceToParent).toBe(4)
+    expect(sharedRelations[1].raw.probabilityGivenParent).toBe(0.5)
+    expect(sharedRelations[1].raw.probabilityGivenNotParent).toBe(0.5)
   })
 })

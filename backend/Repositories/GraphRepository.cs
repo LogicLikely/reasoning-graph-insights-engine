@@ -64,7 +64,9 @@ public class GraphRepository : IGraphRepository
             from_node_id AS "From", 
             to_node_id AS "To", 
             kind,
-            importance_to_parent AS "ImportanceToParent"
+            importance_to_parent AS "ImportanceToParent",
+            probability_given_parent AS "ProbabilityGivenParent",
+            probability_given_not_parent AS "ProbabilityGivenNotParent"
         FROM edges
         WHERE graph_id = @GraphId
         ORDER BY id;
@@ -156,7 +158,9 @@ public class GraphRepository : IGraphRepository
             From = row.From,
             To = row.To,
             Kind = row.Kind,
-            ImportanceToParent = row.ImportanceToParent
+            ImportanceToParent = row.ImportanceToParent,
+            ProbabilityGivenParent = row.ProbabilityGivenParent,
+            ProbabilityGivenNotParent = row.ProbabilityGivenNotParent
         }).ToList();
 
         return graph;
@@ -183,6 +187,8 @@ public class GraphRepository : IGraphRepository
         public string To { get; set; } = default!;
         public string Kind { get; set; } = default!;
         public decimal ImportanceToParent { get; set; } = 1m;
+        public decimal ProbabilityGivenParent { get; set; } = 0.5m;
+        public decimal ProbabilityGivenNotParent { get; set; } = 0.5m;
     }
 
     private sealed class NodeRow
@@ -266,6 +272,8 @@ public class GraphRepository : IGraphRepository
         string? parentID = null,
         string edgeKind = "support",
         decimal importanceToParent = 1m,
+        decimal probabilityGivenParent = 0.5m,
+        decimal probabilityGivenNotParent = 0.5m,
         CancellationToken cancellationToken = default)
     {
         using var connection = _dbConnectionFactory.CreateConnection();
@@ -303,8 +311,25 @@ public class GraphRepository : IGraphRepository
             if (!string.IsNullOrEmpty(parentID))
             {
                 const string InsertEdgeSql = """
-                    INSERT INTO edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent)
-                    VALUES (@EdgeId, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, @Kind, @ImportanceToParent);
+                    INSERT INTO edges (
+                        id,
+                        graph_id,
+                        from_node_id,
+                        to_node_id,
+                        kind,
+                        importance_to_parent,
+                        probability_given_parent,
+                        probability_given_not_parent
+                    ) VALUES (
+                        @EdgeId,
+                        (SELECT id FROM graphs WHERE slug = @Slug),
+                        @From,
+                        @To,
+                        @Kind,
+                        @ImportanceToParent,
+                        @ProbabilityGivenParent,
+                        @ProbabilityGivenNotParent
+                    );
                     """;
 
                 // Invert the From/To so the new supporting node points TO the parent claim.
@@ -315,7 +340,9 @@ public class GraphRepository : IGraphRepository
                     From = node.Id,
                     To = parentID,
                     Kind = edgeKind,
-                    ImportanceToParent = importanceToParent
+                    ImportanceToParent = importanceToParent,
+                    ProbabilityGivenParent = probabilityGivenParent,
+                    ProbabilityGivenNotParent = probabilityGivenNotParent
                 };
                 await connection.ExecuteAsync(new CommandDefinition(InsertEdgeSql, edgeParams, transaction, cancellationToken: cancellationToken));
             }
@@ -382,8 +409,25 @@ public class GraphRepository : IGraphRepository
         using var connection = _dbConnectionFactory.CreateConnection();
 
         const string InsertEdgeSql = """
-            INSERT INTO edges (id, graph_id, from_node_id, to_node_id, kind, importance_to_parent)
-            VALUES (@Id, (SELECT id FROM graphs WHERE slug = @Slug), @From, @To, @Kind, @ImportanceToParent);
+            INSERT INTO edges (
+                id,
+                graph_id,
+                from_node_id,
+                to_node_id,
+                kind,
+                importance_to_parent,
+                probability_given_parent,
+                probability_given_not_parent
+            ) VALUES (
+                @Id,
+                (SELECT id FROM graphs WHERE slug = @Slug),
+                @From,
+                @To,
+                @Kind,
+                @ImportanceToParent,
+                @ProbabilityGivenParent,
+                @ProbabilityGivenNotParent
+            );
             """;
 
         var edgeId = string.IsNullOrWhiteSpace(edge.Id)
@@ -399,7 +443,9 @@ public class GraphRepository : IGraphRepository
                 edge.From,
                 edge.To,
                 edge.Kind,
-                edge.ImportanceToParent
+                edge.ImportanceToParent,
+                edge.ProbabilityGivenParent,
+                edge.ProbabilityGivenNotParent
             },
             cancellationToken: cancellationToken));
 
@@ -418,6 +464,8 @@ public class GraphRepository : IGraphRepository
             UPDATE edges
             SET
                 importance_to_parent = COALESCE(@ImportanceToParent, importance_to_parent),
+                probability_given_parent = COALESCE(@ProbabilityGivenParent, probability_given_parent),
+                probability_given_not_parent = COALESCE(@ProbabilityGivenNotParent, probability_given_not_parent),
                 updated_at = now()
             WHERE id = @EdgeId
             AND graph_id = (SELECT id FROM graphs WHERE slug = @Slug);
@@ -429,7 +477,9 @@ public class GraphRepository : IGraphRepository
             {
                 Slug = slug,
                 EdgeId = edgeId,
-                edge.ImportanceToParent
+                edge.ImportanceToParent,
+                edge.ProbabilityGivenParent,
+                edge.ProbabilityGivenNotParent
             },
             cancellationToken: cancellationToken));
 
