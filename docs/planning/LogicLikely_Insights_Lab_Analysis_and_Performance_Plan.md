@@ -1,6 +1,6 @@
 # LogicLikely Insights Lab Analysis and Performance Plan
 
-**Status:** Final planning document; implementation has not started
+**Status:** Phase 0 implemented; Phases 1–6 have not started
 
 **Last updated:** 2026-08-15
 
@@ -584,6 +584,8 @@ Cover trees, shared DAGs, cycles, synthetic More controls, graph replacement, an
 ## 13. Phased Implementation Plan
 
 ### Phase 0 — Freeze contracts
+
+Implementation record: [Phase 0 frozen contracts](../contracts/insights-lab/phase-0-contracts.md).
 
 Deliver:
 

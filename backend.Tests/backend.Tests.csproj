@@ -18,4 +18,13 @@
     <ProjectReference Include="..\backend\backend.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\docs\contracts\insights-lab\run-export-v1.schema.json"
+          Link="Contracts\InsightsLab\run-export-v1.schema.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\docs\contracts\insights-lab\run-export-v1.example.json"
+          Link="Contracts\InsightsLab\run-export-v1.example.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

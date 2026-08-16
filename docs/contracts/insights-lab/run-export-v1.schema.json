@@ -1,0 +1,1509 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://logiclikely.dev/schemas/insights-lab/run-export-v1.schema.json",
+  "title": "LogicLikely Insights Lab run export v1",
+  "description": "Logical Phase 0 schema for the canonical camel-case serialization of Backend.Insights.Contracts.VersionedRunExport.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaIdentity",
+    "schemaVersion",
+    "manifest",
+    "samples",
+    "outputs",
+    "digests"
+  ],
+  "properties": {
+    "schemaIdentity": {
+      "const": "insights-run-export-v1"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "manifest": {
+      "$ref": "#/$defs/runManifest"
+    },
+    "samples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/runSample"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/compactRunOutput"
+      }
+    },
+    "digests": {
+      "$ref": "#/$defs/runExportDigests"
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        }
+      ]
+    },
+    "sha256Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$(?![\\s\\S])"
+    },
+    "semanticIdentity": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-v(?:0|[1-9][0-9]*)$(?![\\s\\S])"
+    },
+    "operationKey": {
+      "enum": [
+        "graph.catalog",
+        "graph.fetch",
+        "graph.search",
+        "path.strongest",
+        "path.single-pair",
+        "evidence.impact-ranking",
+        "counter.critical-set",
+        "node.robustness",
+        "likelihood.recalculate"
+      ]
+    },
+    "executionStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "timed-out",
+        "cancelled",
+        "crashed",
+        "skipped"
+      ]
+    },
+    "visualizationAdmission": {
+      "enum": [
+        "not-requested",
+        "allowed",
+        "warned",
+        "blocked"
+      ]
+    },
+    "failureKind": {
+      "enum": [
+        "validation",
+        "execution",
+        "timeout",
+        "cancellation",
+        "crash",
+        "skip"
+      ]
+    },
+    "validationFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "failureDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "code",
+        "message",
+        "exceptionType",
+        "retryable",
+        "validationFailures"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/failureKind"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exceptionType": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "validationFailures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/validationFailure"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "validation"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "validationFailures": {
+                "minItems": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "validationFailures": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "executionOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "failure"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/executionStatus"
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/failureDetails"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "succeeded"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failure": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failure": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/failureDetails"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "validation",
+                          "execution"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "timed-out"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failure": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/failureDetails"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "timeout"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "cancelled"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failure": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/failureDetails"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "cancellation"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "crashed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failure": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/failureDetails"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "crash"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "skipped"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failure": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/failureDetails"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "skip"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "strategySelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested",
+        "used"
+      ],
+      "properties": {
+        "requested": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "used": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "succeededResultStrategy": {
+      "if": {
+        "required": [
+          "execution"
+        ],
+        "properties": {
+          "execution": {
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "const": "succeeded"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "oneOf": [
+          {
+            "required": [
+              "operationKey",
+              "strategy"
+            ],
+            "properties": {
+              "operationKey": {
+                "enum": [
+                  "graph.catalog",
+                  "graph.fetch",
+                  "graph.search",
+                  "path.strongest",
+                  "evidence.impact-ranking",
+                  "node.robustness",
+                  "likelihood.recalculate"
+                ]
+              },
+              "strategy": {
+                "properties": {
+                  "requested": {
+                    "type": "null"
+                  },
+                  "used": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "required": [
+              "operationKey",
+              "strategy"
+            ],
+            "properties": {
+              "operationKey": {
+                "const": "path.single-pair"
+              },
+              "strategy": {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "requested": {
+                        "const": "minimum"
+                      },
+                      "used": {
+                        "const": "minimum"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "requested": {
+                        "const": "maximum"
+                      },
+                      "used": {
+                        "const": "maximum"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "required": [
+              "operationKey",
+              "strategy"
+            ],
+            "properties": {
+              "operationKey": {
+                "const": "counter.critical-set"
+              },
+              "strategy": {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "requested": {
+                        "const": "exact"
+                      },
+                      "used": {
+                        "const": "exact"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "requested": {
+                        "const": "greedy"
+                      },
+                      "used": {
+                        "const": "greedy"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "requested": {
+                        "const": "auto"
+                      },
+                      "used": {
+                        "const": "exact"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "requested": {
+                        "const": "auto"
+                      },
+                      "used": {
+                        "const": "greedy"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "canonicalParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "digest"
+      ],
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/jsonValue"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256Digest"
+        }
+      }
+    },
+    "graphTargetIdentifiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "graphSlug",
+        "graphId",
+        "targetNodeId",
+        "targetPathIds"
+      ],
+      "properties": {
+        "graphSlug": {
+          "type": "string",
+          "minLength": 1
+        },
+        "graphId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "targetNodeId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "targetPathIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "orderedPathProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodeIds",
+        "edgeIds",
+        "accumulatedScore"
+      ],
+      "properties": {
+        "nodeIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "edgeIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "accumulatedScore": {
+          "type": "number"
+        }
+      }
+    },
+    "measurementUnitContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wallClockDuration",
+        "cpuTime",
+        "memory",
+        "payloadSize",
+        "counts",
+        "density"
+      ],
+      "properties": {
+        "wallClockDuration": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cpuTime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "memory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "payloadSize": {
+          "type": "string",
+          "minLength": 1
+        },
+        "counts": {
+          "type": "string",
+          "minLength": 1
+        },
+        "density": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "runtimeResourceMeasurements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allocatedBytes",
+        "generation0Collections",
+        "generation1Collections",
+        "generation2Collections",
+        "cpuTime",
+        "cpuTimeUnit",
+        "workingSetChangeBytes"
+      ],
+      "properties": {
+        "allocatedBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "generation0Collections": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "generation1Collections": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "generation2Collections": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cpuTime": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cpuTimeUnit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workingSetChangeBytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "runManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "name",
+        "execution",
+        "startedAt",
+        "completedAt",
+        "runnerType",
+        "scenarioKey",
+        "operationKey",
+        "graph",
+        "dataset",
+        "algorithm",
+        "strategy",
+        "canonicalParameters",
+        "targets",
+        "sourceRevision",
+        "buildConfiguration",
+        "buildMode",
+        "dependencies",
+        "host",
+        "environmentProfile",
+        "samplingPolicy",
+        "executionPolicy",
+        "measurementUnits"
+      ],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "execution": {
+          "$ref": "#/$defs/executionOutcome"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?[+-][0-9]{2}:[0-9]{2}$(?![\\s\\S])"
+        },
+        "completedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?[+-][0-9]{2}:[0-9]{2}$(?![\\s\\S])"
+        },
+        "runnerType": {
+          "enum": [
+            "command-line",
+            "lab-user-interface",
+            "benchmark-dot-net",
+            "api-browser-journey"
+          ]
+        },
+        "scenarioKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operationKey": {
+          "$ref": "#/$defs/operationKey"
+        },
+        "graph": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "slug",
+            "graphId",
+            "shape",
+            "actualNodeCount",
+            "actualEdgeCount",
+            "maximumDepth"
+          ],
+          "properties": {
+            "slug": {
+              "type": "string",
+              "minLength": 1
+            },
+            "graphId": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "shape": {
+              "type": "string",
+              "minLength": 1
+            },
+            "actualNodeCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "actualEdgeCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maximumDepth": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "dataset": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "generatorVersion",
+            "corpusId",
+            "corpusFingerprint",
+            "topologyFingerprint",
+            "inputFingerprint",
+            "datasetInputFingerprint"
+          ],
+          "properties": {
+            "generatorVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "corpusId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "corpusFingerprint": {
+              "$ref": "#/$defs/sha256Digest"
+            },
+            "topologyFingerprint": {
+              "$ref": "#/$defs/sha256Digest"
+            },
+            "inputFingerprint": {
+              "$ref": "#/$defs/sha256Digest"
+            },
+            "datasetInputFingerprint": {
+              "$ref": "#/$defs/sha256Digest"
+            }
+          }
+        },
+        "algorithm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "semanticIdentity"
+          ],
+          "properties": {
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "semanticIdentity": {
+              "$ref": "#/$defs/semanticIdentity"
+            }
+          }
+        },
+        "strategy": {
+          "$ref": "#/$defs/strategySelection"
+        },
+        "canonicalParameters": {
+          "$ref": "#/$defs/canonicalParameters"
+        },
+        "targets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nodeIds",
+            "pathIds"
+          ],
+          "properties": {
+            "nodeIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "pathIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "sourceRevision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gitCommitSha",
+            "dirtyWorktree"
+          ],
+          "properties": {
+            "gitCommitSha": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{7,64}$(?![\\s\\S])"
+            },
+            "dirtyWorktree": {
+              "type": "boolean"
+            }
+          }
+        },
+        "buildConfiguration": {
+          "type": "string",
+          "minLength": 1
+        },
+        "buildMode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dotNet",
+            "node",
+            "browser",
+            "graphMap",
+            "postgreSql",
+            "relevantDependencies"
+          ],
+          "properties": {
+            "dotNet": {
+              "type": "string",
+              "minLength": 1
+            },
+            "node": {
+              "type": "string",
+              "minLength": 1
+            },
+            "browser": {
+              "type": "string",
+              "minLength": 1
+            },
+            "graphMap": {
+              "type": "string",
+              "minLength": 1
+            },
+            "postgreSql": {
+              "type": "string",
+              "minLength": 1
+            },
+            "relevantDependencies": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operatingSystem",
+            "architecture",
+            "cpu",
+            "logicalCoreCount",
+            "memoryBytes"
+          ],
+          "properties": {
+            "operatingSystem": {
+              "type": "string",
+              "minLength": 1
+            },
+            "architecture": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cpu": {
+              "type": "string",
+              "minLength": 1
+            },
+            "logicalCoreCount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "memoryBytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "environmentProfile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "samplingPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "warmupIterations",
+            "sampleIterations",
+            "warmupPolicy",
+            "samplePolicy",
+            "jitPolicy",
+            "cachePolicy"
+          ],
+          "properties": {
+            "warmupIterations": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sampleIterations": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warmupPolicy": {
+              "type": "string",
+              "minLength": 1
+            },
+            "samplePolicy": {
+              "type": "string",
+              "minLength": 1
+            },
+            "jitPolicy": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cachePolicy": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "executionPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "timeout",
+            "cancellationPolicy",
+            "isolatedWorker"
+          ],
+          "properties": {
+            "timeout": {
+              "type": "string",
+              "pattern": "^-?(?:[0-9]+\\.)?[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,7})?$(?![\\s\\S])"
+            },
+            "cancellationPolicy": {
+              "type": "string",
+              "minLength": 1
+            },
+            "isolatedWorker": {
+              "type": "boolean"
+            }
+          }
+        },
+        "measurementUnits": {
+          "$ref": "#/$defs/measurementUnitContract"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/succeededResultStrategy"
+        }
+      ]
+    },
+    "iterationClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "iterationKind",
+        "temperature",
+        "jitState",
+        "cacheState"
+      ],
+      "properties": {
+        "iterationKind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "temperature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "jitState": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cacheState": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "sampleNodeCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested",
+        "canonical",
+        "synthetic",
+        "rendered"
+      ],
+      "properties": {
+        "requested": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "canonical": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "synthetic": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "rendered": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "sampleEdgeCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested",
+        "rendered",
+        "density"
+      ],
+      "properties": {
+        "requested": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "rendered": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "density": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "sampleSearchCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "matches",
+        "completeRequiredAncestorUnion"
+      ],
+      "properties": {
+        "matches": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "completeRequiredAncestorUnion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "sampleTransportMeasurements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestBytes",
+        "responseBytes",
+        "timeToFirstByte",
+        "fullTransferDuration"
+      ],
+      "properties": {
+        "requestBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "responseBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "timeToFirstByte": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "fullTransferDuration": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "runSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "sampleId",
+        "scenarioKey",
+        "operationKey",
+        "layer",
+        "phase",
+        "wallClockDuration",
+        "iteration",
+        "classification",
+        "nodeCounts",
+        "edgeCounts",
+        "searchCounts",
+        "resultCardinality",
+        "transport",
+        "resources",
+        "execution",
+        "visualizationAdmission",
+        "warnings",
+        "measurementUnits"
+      ],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sampleId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "scenarioKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operationKey": {
+          "$ref": "#/$defs/operationKey"
+        },
+        "layer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phase": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wallClockDuration": {
+          "type": "number",
+          "minimum": 0
+        },
+        "iteration": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "classification": {
+          "$ref": "#/$defs/iterationClassification"
+        },
+        "nodeCounts": {
+          "$ref": "#/$defs/sampleNodeCounts"
+        },
+        "edgeCounts": {
+          "$ref": "#/$defs/sampleEdgeCounts"
+        },
+        "searchCounts": {
+          "$ref": "#/$defs/sampleSearchCounts"
+        },
+        "resultCardinality": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "transport": {
+          "$ref": "#/$defs/sampleTransportMeasurements"
+        },
+        "resources": {
+          "$ref": "#/$defs/runtimeResourceMeasurements"
+        },
+        "execution": {
+          "$ref": "#/$defs/executionOutcome"
+        },
+        "visualizationAdmission": {
+          "$ref": "#/$defs/visualizationAdmission"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "measurementUnits": {
+          "$ref": "#/$defs/measurementUnitContract"
+        }
+      }
+    },
+    "compactRunOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "sampleId",
+        "scenarioKey",
+        "operationKey",
+        "algorithmSemanticIdentity",
+        "strategy",
+        "identifiers",
+        "canonicalParameters",
+        "execution",
+        "visualizationAdmission",
+        "summary",
+        "distribution",
+        "totalResultCardinality",
+        "items",
+        "resultDigest",
+        "fullResultArtifactReference",
+        "orderedPaths",
+        "warnings"
+      ],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sampleId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "scenarioKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operationKey": {
+          "$ref": "#/$defs/operationKey"
+        },
+        "algorithmSemanticIdentity": {
+          "$ref": "#/$defs/semanticIdentity"
+        },
+        "strategy": {
+          "$ref": "#/$defs/strategySelection"
+        },
+        "identifiers": {
+          "$ref": "#/$defs/graphTargetIdentifiers"
+        },
+        "canonicalParameters": {
+          "$ref": "#/$defs/canonicalParameters"
+        },
+        "execution": {
+          "$ref": "#/$defs/executionOutcome"
+        },
+        "visualizationAdmission": {
+          "$ref": "#/$defs/visualizationAdmission"
+        },
+        "summary": {
+          "$ref": "#/$defs/jsonValue"
+        },
+        "distribution": {
+          "$ref": "#/$defs/jsonValue"
+        },
+        "totalResultCardinality": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        "resultDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "fullResultArtifactReference": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "orderedPaths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/orderedPathProjection"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/succeededResultStrategy"
+        }
+      ]
+    },
+    "runExportDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestDigest",
+        "samplesDigest",
+        "outputsDigest"
+      ],
+      "properties": {
+        "manifestDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "samplesDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "outputsDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        }
+      }
+    }
+  }
+}

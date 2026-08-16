@@ -1,0 +1,282 @@
+{
+  "schemaIdentity": "insights-run-export-v1",
+  "schemaVersion": 1,
+  "manifest": {
+    "runId": "11111111-1111-1111-1111-111111111111",
+    "name": "phase-0-contract-example",
+    "execution": {
+      "status": "succeeded",
+      "failure": null
+    },
+    "startedAt": "2026-08-15T18:15:00+00:00",
+    "completedAt": "2026-08-15T18:15:08.412+00:00",
+    "runnerType": "command-line",
+    "scenarioKey": "contract.example.deep-3.strongest-upstream",
+    "operationKey": "path.strongest",
+    "graph": {
+      "slug": "contract-example-deep-3",
+      "graphId": null,
+      "shape": "deep",
+      "actualNodeCount": 3,
+      "actualEdgeCount": 2,
+      "maximumDepth": 2
+    },
+    "dataset": {
+      "generatorVersion": "contract-example-v1",
+      "corpusId": "contract-example-corpus",
+      "corpusFingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "topologyFingerprint": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "inputFingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "datasetInputFingerprint": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "algorithm": {
+      "key": "path.strongest",
+      "semanticIdentity": "strongest-path-v1"
+    },
+    "strategy": {
+      "requested": null,
+      "used": null
+    },
+    "canonicalParameters": {
+      "value": {
+        "direction": "upstream",
+        "targetNodeId": "deep-09999"
+      },
+      "digest": "sha256:bcddffa18364eab3dfe4ff0e86ccbca289ae18a5b05b82a051fcb0f6d765f5a4"
+    },
+    "targets": {
+      "nodeIds": [
+        "deep-09999"
+      ],
+      "pathIds": []
+    },
+    "sourceRevision": {
+      "gitCommitSha": "cccccccccccccccccccccccccccccccccccccccc",
+      "dirtyWorktree": false
+    },
+    "buildConfiguration": "Release",
+    "buildMode": "release",
+    "dependencies": {
+      "dotNet": "10.0.0",
+      "node": "24.12.0",
+      "browser": "chromium 140.0.0",
+      "graphMap": "0.2.0",
+      "postgreSql": "18.0",
+      "relevantDependencies": {
+        "Npgsql": "10.0.0"
+      }
+    },
+    "host": {
+      "operatingSystem": "macOS 26.0",
+      "architecture": "arm64",
+      "cpu": "Apple Silicon",
+      "logicalCoreCount": 10,
+      "memoryBytes": 34359738368
+    },
+    "environmentProfile": "ll-arm64-mac-primary",
+    "samplingPolicy": {
+      "warmupIterations": 3,
+      "sampleIterations": 10,
+      "warmupPolicy": "three unrecorded warmup iterations",
+      "samplePolicy": "ten serial measured iterations",
+      "jitPolicy": "recorded after warmup",
+      "cachePolicy": "warm"
+    },
+    "executionPolicy": {
+      "timeout": "00:00:30",
+      "cancellationPolicy": "cooperative then terminate worker",
+      "isolatedWorker": true
+    },
+    "measurementUnits": {
+      "wallClockDuration": "ms",
+      "cpuTime": "ms",
+      "memory": "bytes",
+      "payloadSize": "bytes",
+      "counts": "count",
+      "density": "ratio"
+    }
+  },
+  "samples": [
+    {
+      "runId": "11111111-1111-1111-1111-111111111111",
+      "sampleId": "22222222-2222-2222-2222-222222222222",
+      "scenarioKey": "contract.example.deep-3.strongest-upstream",
+      "operationKey": "path.strongest",
+      "layer": "backend-service-api",
+      "phase": "algorithm.traversal",
+      "wallClockDuration": 12.875,
+      "iteration": 0,
+      "classification": {
+        "iterationKind": "measured",
+        "temperature": "warm",
+        "jitState": "post-jit",
+        "cacheState": "warm-cache"
+      },
+      "nodeCounts": {
+        "requested": 3,
+        "canonical": 3,
+        "synthetic": 0,
+        "rendered": null
+      },
+      "edgeCounts": {
+        "requested": 2,
+        "rendered": null,
+        "density": null
+      },
+      "searchCounts": {
+        "matches": null,
+        "completeRequiredAncestorUnion": null
+      },
+      "resultCardinality": 3,
+      "transport": {
+        "requestBytes": 280,
+        "responseBytes": 16384,
+        "timeToFirstByte": 10.25,
+        "fullTransferDuration": 1.5
+      },
+      "resources": {
+        "allocatedBytes": 524288,
+        "generation0Collections": 1,
+        "generation1Collections": 0,
+        "generation2Collections": 0,
+        "cpuTime": 11.75,
+        "cpuTimeUnit": "ms",
+        "workingSetChangeBytes": 1048576
+      },
+      "execution": {
+        "status": "succeeded",
+        "failure": null
+      },
+      "visualizationAdmission": "allowed",
+      "warnings": [],
+      "measurementUnits": {
+        "wallClockDuration": "ms",
+        "cpuTime": "ms",
+        "memory": "bytes",
+        "payloadSize": "bytes",
+        "counts": "count",
+        "density": "ratio"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "runId": "11111111-1111-1111-1111-111111111111",
+      "sampleId": "22222222-2222-2222-2222-222222222222",
+      "scenarioKey": "contract.example.deep-3.strongest-upstream",
+      "operationKey": "path.strongest",
+      "algorithmSemanticIdentity": "strongest-path-v1",
+      "strategy": {
+        "requested": null,
+        "used": null
+      },
+      "identifiers": {
+        "graphSlug": "contract-example-deep-3",
+        "graphId": null,
+        "targetNodeId": "deep-09999",
+        "targetPathIds": []
+      },
+      "canonicalParameters": {
+        "value": {
+          "direction": "upstream",
+          "targetNodeId": "deep-09999"
+        },
+        "digest": "sha256:bcddffa18364eab3dfe4ff0e86ccbca289ae18a5b05b82a051fcb0f6d765f5a4"
+      },
+      "execution": {
+        "status": "succeeded",
+        "failure": null
+      },
+      "visualizationAdmission": "allowed",
+      "summary": {
+        "pathCount": 3,
+        "projectionRequiredNodeCount": 3,
+        "projectionBlockAboveNodes": 1200
+      },
+      "distribution": {
+        "metric": "accumulated-log-lr",
+        "count": 3,
+        "minimum": 0,
+        "maximum": 8.75,
+        "median": 7.5
+      },
+      "totalResultCardinality": 3,
+      "items": [
+        {
+          "rank": 1,
+          "accumulatedScore": 8.75,
+          "terminalNodeId": "deep-09997",
+          "nodeIds": [
+            "deep-09999",
+            "deep-09998",
+            "deep-09997"
+          ],
+          "edgeIds": [
+            "deep-edge-09998",
+            "deep-edge-09997"
+          ]
+        },
+        {
+          "rank": 2,
+          "accumulatedScore": 7.5,
+          "terminalNodeId": "deep-09998",
+          "nodeIds": [
+            "deep-09999",
+            "deep-09998"
+          ],
+          "edgeIds": [
+            "deep-edge-09998"
+          ]
+        },
+        {
+          "rank": 3,
+          "accumulatedScore": 0,
+          "terminalNodeId": "deep-09999",
+          "nodeIds": [
+            "deep-09999"
+          ],
+          "edgeIds": []
+        }
+      ],
+      "resultDigest": "sha256:1e68e247610777cb4a31bc37b2c133dc4150c3a3db32399ac58ca89503421453",
+      "fullResultArtifactReference": null,
+      "orderedPaths": [
+        {
+          "nodeIds": [
+            "deep-09999",
+            "deep-09998",
+            "deep-09997"
+          ],
+          "edgeIds": [
+            "deep-edge-09998",
+            "deep-edge-09997"
+          ],
+          "accumulatedScore": 8.75
+        },
+        {
+          "nodeIds": [
+            "deep-09999",
+            "deep-09998"
+          ],
+          "edgeIds": [
+            "deep-edge-09998"
+          ],
+          "accumulatedScore": 7.5
+        },
+        {
+          "nodeIds": [
+            "deep-09999"
+          ],
+          "edgeIds": [],
+          "accumulatedScore": 0
+        }
+      ],
+      "warnings": []
+    }
+  ],
+  "digests": {
+    "manifestDigest": "sha256:ac284ac6f6177301f56481a03838d8edce714950f7c13f6d325c53824a05f71e",
+    "samplesDigest": "sha256:df48cd436f573daedfcf8bfe17a46e7d6aac64b022940f0c78e5e03800cc520d",
+    "outputsDigest": "sha256:87ea1950be3d12b261366fb83c6005ada1629578758f19c71ac6ed4f90bd8cb5"
+  }
+}
