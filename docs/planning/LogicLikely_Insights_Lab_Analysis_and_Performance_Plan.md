@@ -1,6 +1,6 @@
 # LogicLikely Insights Lab Analysis and Performance Plan
 
-**Status:** Phases 0, 1, and 3 are implemented and committed; Phase 2 was dropped; Phase 3.5 is implemented and verified with its commit left to the user; Phases 4–6 have not started
+**Status:** Phases 0, 1, and 3 are implemented and committed; Phase 2 was dropped; Phase 3.5 is implemented, verified, and committed by the user as `0c3415a`; Phases 4–6 have not started
 
 **Last updated:** 2026-08-16
 
@@ -632,12 +632,12 @@ Acceptance:
 
 ### Phase 3.5 — Remove dropped GraphMap node-limit artifacts
 
-**Status:** Implemented and verified on 2026-08-16; commit left to the user. Phase 4 has not started.
+**Status:** Implemented and verified on 2026-08-16; committed by the user as `0c3415a`. Phase 4 has not started.
 
 Completion record:
 
 - The user confirmed that no durable v1 export corpus exists outside this project, so the pre-baseline `insights-run-export-v1` schema and example were revised in place.
-- Existing in-project benchmark rows are reconciled without deleting runs, samples, outputs, or unrelated JSON data. Retired identifiers remain only in the idempotent migration statements and migration tests that remove them from stores initialized by the earlier v1 DDL.
+- Existing in-project benchmark rows are reconciled without deleting runs, samples, outputs, or unrelated JSON data. Retired identifiers may remain only in compatibility migration code that removes them from stores initialized by the earlier v1 DDL and in cleanup-regression tests that prove their removal.
 - The shared warning member was removed as required, including the Phase 3 worker prefix-reduction notice. Prefix reduction remains observable from retained item count versus total cardinality; ordered paths and the complete-result digest remain unchanged.
 - The accepted vendored GraphMap `0.2.0` artifact, dependency declaration, lockfile entry, and public API remain unchanged.
 
@@ -885,4 +885,4 @@ Phase 3.5 is complete. Before the corresponding later baseline and presentation 
 4. Calibrate the auto-strategy candidate cutoff on the authoritative host.
 5. Establish the named browser/result-render scenarios used for authoritative comparison.
 
-Phase 3.5 is implemented and verified. Phases 4–6 remain unstarted until the user explicitly starts them. All implementation commits are left for the user to make.
+Phase 3.5 is implemented and verified. Phases 4–6 remain unstarted until the user explicitly starts them. All future implementation commits remain for the user to make.
