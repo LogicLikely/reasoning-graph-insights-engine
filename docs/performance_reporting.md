@@ -2,7 +2,7 @@
 
 The application records backend performance runs for the current graph algorithms and for recalculation after a node-likelihood edit. The Insights Lab launches individual operations or a sequential standard stress suite in the current browser session, exposes the persisted run history, and charts compute-time trends for named benchmark sets. It does not schedule repetitions or enforce non-overlap across clients.
 
-Open **Insights Lab** from the Graph Overview panel. The **Run** tab creates or selects a benchmark set and launches an operation against the active graph; each information button expands a plain-language explanation of what that operation measures and its important limitations. The **History** tab shows every persisted run newest-first in a bounded, scrollable table. Selecting a run opens a dedicated detail view with its complete recorded metadata and bounded result preview; **Back to all runs** returns to the table. The **Trends** tab compares compute time across stress-graph sizes, shapes, and benchmark sets.
+Open **Insights Lab** from the Graph Overview panel. The **Run** tab creates or selects a benchmark set and launches an operation against the active graph; each information button expands a plain-language explanation of what that operation measures and its important limitations. The **History** tab shows every persisted run newest-first in a bounded, scrollable table. Selecting a run opens a dedicated detail view with its complete recorded metadata and bounded result preview; **Back to all runs** returns to the table. The **Trends** tab compares the selected performance metric across stress-graph sizes, shapes, and benchmark sets.
 
 ## Recorded operations
 
@@ -71,12 +71,23 @@ The frontend reads the same document through `GET /api/performance-runs` and cre
 
 ## Trends
 
-Trends includes assigned stress-graph runs with successful outcomes and uses `computeElapsedMilliseconds` as the performance measure. Cancelled, failed, timed-out, unassigned, and non-stress runs remain available in History but are not charted.
+Trends includes assigned stress-graph runs with successful outcomes. Cancelled, failed, timed-out, unassigned, and non-stress runs remain available in History but are not charted.
+
+The **Metric** selector offers:
+
+- **Compute time** (the default): wall-clock algorithm compute time.
+- **Total operation time**: backend graph loading, computation, and operation persistence where applicable.
+- **CPU time**: process-wide CPU consumed during the compute scope.
+- **Managed allocations**: current-thread managed allocation volume during the compute scope, not retained or peak memory.
+
+Repeated matching runs use the median of the selected metric. Runs without a valid value for that metric do not contribute to its median, sample count, or run-number list. Time and CPU values are shown in milliseconds; allocation values use one consistent IEC byte unit for the visible chart and table.
 
 - **Scale within benchmark set** compares node counts inside one set, using graph shapes as series.
 - **Compare benchmark sets** compares selected sets across node counts for one graph shape.
 
 Each plotted value shows the median when more than one matching run exists and exposes its sample count. A single observation remains visibly identified as `n=1`; the Lab does not imply statistical confidence from one run. A data table accompanies the chart so the selected values are available without relying on color or pointer interaction.
+
+Graph size always uses a logarithmic X-axis. The Y-axis can use linear spacing for absolute differences or logarithmic spacing for ratios and widely separated values. Positive values retain true logarithmic spacing; zero uses a separate baseline below the positive range. **How to read** expands an inline guide explaining the axes, series, points, selected metric, scale, and comparison caveats without opening another modal.
 
 ## Bounded brute-force proof semantics
 
@@ -104,7 +115,7 @@ For each algorithm and graph combination:
 
 2. Select or create the intended benchmark set in the Lab.
 3. Execute each measured operation one at a time, or use **Run standard stress suite** for the installed balanced, wide, and shared-diamond stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up.
-4. If repetitions are useful, keep the graph, canonical target, and inputs unchanged. Trends retains the raw runs and plots their median compute time with the sample count.
+4. If repetitions are useful, keep the graph, canonical target, and inputs unchanged. Trends retains the raw runs and plots the selected metric's median with the sample count.
 
 The Lab's same-value leaf update does not require restoration. If benchmarking an ordinary value-changing likelihood edit instead, restore the leaf to the same starting likelihood before every measured edit. A restoration performed through the application creates another recorded run and must be excluded from the comparison.
 

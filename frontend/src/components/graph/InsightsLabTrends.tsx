@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import type { BenchmarkSet, PerformanceRunRecord } from '../../services/performanceRuns'
 import { isStressGraphId } from '../../services/stressGraphs'
 import './InsightsLabTrends.css'
@@ -9,6 +9,18 @@ export interface InsightsLabTrendsProps {
 }
 
 type TrendMode = 'within' | 'across'
+type TrendMetricId = 'compute' | 'operation' | 'cpu' | 'allocations'
+type YAxisScale = 'linear' | 'logarithmic'
+
+type TrendMetricDefinition = {
+  id: TrendMetricId
+  label: string
+  axisLabel: string
+  unitKind: 'milliseconds' | 'bytes'
+  explanation: string
+  significance: string
+  readValue: (run: PerformanceRunRecord) => number | null | undefined
+}
 
 type TrendRun = {
   runNumber: number
@@ -19,7 +31,11 @@ type TrendRun = {
   shapeId: string
   shapeLabel: string
   nodeCount: number
-  computeMilliseconds: number
+  metricValues: Partial<Record<TrendMetricId, number>>
+}
+
+type SelectedMetricTrendRun = TrendRun & {
+  metricValue: number
 }
 
 type TrendPoint = {
@@ -27,7 +43,7 @@ type TrendPoint = {
   benchmarkSetName: string
   shapeLabel: string
   nodeCount: number
-  computeMilliseconds: number
+  metricValue: number
   sampleCount: number
   runNumbers: number[]
 }
@@ -38,6 +54,13 @@ type TrendSeries = {
   points: TrendPoint[]
 }
 
+type MetricPresentation = {
+  axisLabel: string
+  divisor: number
+  formatValue: (value: number) => string
+  formatAxisValue: (value: number) => string
+}
+
 const MAX_WITHIN_SHAPES = 4
 const CHART_WIDTH = 920
 const CHART_HEIGHT = 360
@@ -45,6 +68,49 @@ const PLOT_LEFT = 82
 const PLOT_RIGHT = 28
 const PLOT_TOP = 22
 const PLOT_BOTTOM = 58
+
+const TREND_METRICS: readonly TrendMetricDefinition[] = [
+  {
+    id: 'compute',
+    label: 'Compute time',
+    axisLabel: 'Compute time',
+    unitKind: 'milliseconds',
+    explanation: 'Wall-clock time spent running the algorithm after its graph is loaded.',
+    significance: 'Lower values mean the selected algorithm completed its compute work faster.',
+    readValue: (run) => (
+      run.timing?.computeElapsedMilliseconds ?? run.timing?.computeElapsedMs
+    ),
+  },
+  {
+    id: 'operation',
+    label: 'Total operation time',
+    axisLabel: 'Total operation time',
+    unitKind: 'milliseconds',
+    explanation: 'Wall-clock backend time for graph loading, computation, and any operation persistence.',
+    significance: 'Lower values mean the complete backend operation finished faster.',
+    readValue: (run) => (
+      run.timing?.operationElapsedMilliseconds ?? run.timing?.operationElapsedMs
+    ),
+  },
+  {
+    id: 'cpu',
+    label: 'CPU time',
+    axisLabel: 'CPU time',
+    unitKind: 'milliseconds',
+    explanation: 'Process-wide CPU time consumed while the algorithm compute scope was measured.',
+    significance: 'Lower values generally mean less processor work, but other backend activity can affect this measurement and multicore CPU time can exceed wall-clock time.',
+    readValue: (run) => run.resources?.cpuTimeMilliseconds,
+  },
+  {
+    id: 'allocations',
+    label: 'Managed allocations',
+    axisLabel: 'Managed allocations',
+    unitKind: 'bytes',
+    explanation: 'Managed bytes allocated on the compute thread while the algorithm ran.',
+    significance: 'Lower values mean less allocation pressure. This is allocation traffic, not retained or peak memory.',
+    readValue: (run) => run.resources?.allocatedBytes,
+  },
+] as const
 
 const SERIES_COLORS = [
   'var(--insights-trend-series-1)',
@@ -150,16 +216,21 @@ function median(values: readonly number[]): number {
     : ordered[midpoint]
 }
 
-function formatMilliseconds(value: number): string {
-  return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`
-}
-
 function formatNodeCount(value: number): string {
   return value.toLocaleString()
 }
 
 function formatAxisNumber(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: value < 10 ? 1 : 0 })
+  const absoluteValue = Math.abs(value)
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: absoluteValue > 0 && absoluteValue < 0.01
+      ? 4
+      : absoluteValue < 1
+        ? 3
+        : absoluteValue < 10
+          ? 2
+          : 0,
+  })
 }
 
 function niceMaximum(value: number): number {
@@ -174,6 +245,59 @@ function niceMaximum(value: number): number {
         ? 5
         : 10
   return niceNormalized * exponent
+}
+
+function validMetricValue(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+function metricDefinition(metricId: TrendMetricId): TrendMetricDefinition {
+  return TREND_METRICS.find(({ id }) => id === metricId) ?? TREND_METRICS[0]
+}
+
+function metricPresentation(
+  metric: TrendMetricDefinition,
+  series: readonly TrendSeries[],
+): MetricPresentation {
+  const rawMaximum = Math.max(
+    ...series.flatMap(({ points }) => points.map(({ metricValue }) => metricValue)),
+    0,
+  )
+
+  if (metric.unitKind === 'milliseconds') {
+    return {
+      axisLabel: `${metric.axisLabel} (ms)`,
+      divisor: 1,
+      formatValue: (value) => `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`,
+      formatAxisValue: formatAxisNumber,
+    }
+  }
+
+  const byteUnits = [
+    { divisor: 1024 ** 3, label: 'GiB' },
+    { divisor: 1024 ** 2, label: 'MiB' },
+    { divisor: 1024, label: 'KiB' },
+  ] as const
+  const unit = byteUnits.find(({ divisor }) => rawMaximum >= divisor)
+    ?? { divisor: 1, label: 'bytes' }
+  const formatBytes = (value: number) => (
+    `${formatAxisNumber(value / unit.divisor)} ${unit.label}`
+  )
+
+  return {
+    axisLabel: `${metric.axisLabel} (${unit.label})`,
+    divisor: unit.divisor,
+    formatValue: formatBytes,
+    formatAxisValue: formatAxisNumber,
+  }
+}
+
+function downsampleTicks(values: readonly number[], maximumCount = 5): number[] {
+  if (values.length <= maximumCount) return [...values]
+  const lastIndex = values.length - 1
+  return Array.from({ length: maximumCount }, (_, index) => (
+    values[Math.round((lastIndex * index) / (maximumCount - 1))]
+  )).filter((value, index, selected) => selected.indexOf(value) === index)
 }
 
 function markerShape(index: number): 'circle' | 'square' | 'diamond' | 'triangle' {
@@ -219,12 +343,12 @@ function SeriesMarker({ index, x, y, size = 5 }: SeriesMarkerProps) {
 }
 
 function aggregateSeries(
-  runs: readonly TrendRun[],
+  runs: readonly SelectedMetricTrendRun[],
   seriesDefinitions: readonly { id: string; label: string }[],
-  seriesIdForRun: (run: TrendRun) => string,
+  seriesIdForRun: (run: SelectedMetricTrendRun) => string,
 ): TrendSeries[] {
   return seriesDefinitions.flatMap((definition) => {
-    const grouped = new Map<number, TrendRun[]>()
+    const grouped = new Map<number, SelectedMetricTrendRun[]>()
     for (const run of runs) {
       if (seriesIdForRun(run) !== definition.id) continue
       const current = grouped.get(run.nodeCount) ?? []
@@ -239,7 +363,7 @@ function aggregateSeries(
         benchmarkSetName: matches[0].benchmarkSetName,
         shapeLabel: matches[0].shapeLabel,
         nodeCount,
-        computeMilliseconds: median(matches.map(({ computeMilliseconds }) => computeMilliseconds)),
+        metricValue: median(matches.map(({ metricValue }) => metricValue)),
         sampleCount: matches.length,
         runNumbers: matches.map(({ runNumber }) => runNumber).sort((left, right) => left - right),
       }))
@@ -253,32 +377,121 @@ interface TrendChartProps {
   title: string
   description: string
   series: readonly TrendSeries[]
+  metric: TrendMetricDefinition
+  presentation: MetricPresentation
+  yAxisScale: YAxisScale
 }
 
-function TrendChart({ idPrefix, title, description, series }: TrendChartProps) {
+function TrendChart({
+  idPrefix,
+  title,
+  description,
+  series,
+  metric,
+  presentation,
+  yAxisScale,
+}: TrendChartProps) {
   const points = series.flatMap(({ points: seriesPoints }) => seriesPoints)
   const nodeCounts = [...new Set(points.map(({ nodeCount }) => nodeCount))].sort((left, right) => left - right)
   const plotWidth = CHART_WIDTH - PLOT_LEFT - PLOT_RIGHT
   const plotHeight = CHART_HEIGHT - PLOT_TOP - PLOT_BOTTOM
   const minimumLog = Math.log10(Math.max(nodeCounts[0] ?? 1, 1))
   const maximumLog = Math.log10(Math.max(nodeCounts[nodeCounts.length - 1] ?? 1, 1))
-  const rawMaximum = Math.max(...points.map(({ computeMilliseconds }) => computeMilliseconds), 0)
-  const yMaximum = niceMaximum(rawMaximum * 1.08)
-  const yTicks = Array.from({ length: 5 }, (_, index) => (yMaximum * index) / 4)
+  const displayedValues = points.map(({ metricValue }) => metricValue / presentation.divisor)
+  const rawMaximum = Math.max(...displayedValues, 0)
+  const linearMaximum = niceMaximum(rawMaximum * 1.08)
+  const linearTicks = Array.from({ length: 5 }, (_, index) => (linearMaximum * index) / 4)
+  const positiveValues = displayedValues.filter((value) => value > 0)
+  const hasZeroValue = displayedValues.some((value) => value === 0)
+  const allValuesAreZero = displayedValues.length > 0 && positiveValues.length === 0
+  const minimumPositive = Math.min(...positiveValues)
+  const maximumPositive = Math.max(...positiveValues)
+  const positiveLogMinimum = Number.isFinite(minimumPositive) ? Math.log10(minimumPositive) : 0
+  const positiveLogMaximum = Number.isFinite(maximumPositive) ? Math.log10(maximumPositive) : 0
+  const positiveLogSpan = positiveLogMaximum - positiveLogMinimum
+  const logarithmicMinimum = allValuesAreZero
+    ? 0
+    : hasZeroValue
+      ? positiveLogMinimum - 1
+    : positiveLogSpan === 0
+      ? positiveLogMinimum - 0.5
+      : positiveLogMinimum - positiveLogSpan * 0.05
+  const logarithmicMaximum = allValuesAreZero
+    ? 1
+    : positiveLogSpan === 0
+      ? positiveLogMaximum + 0.5
+      : positiveLogMaximum + positiveLogSpan * 0.05
+  const logarithmicPowerTicks = !allValuesAreZero && Number.isFinite(minimumPositive)
+    ? Array.from(
+        {
+          length: Math.max(
+            0,
+            Math.floor(logarithmicMaximum) - Math.ceil(logarithmicMinimum) + 1,
+          ),
+        },
+        (_, index) => 10 ** (Math.ceil(logarithmicMinimum) + index),
+      )
+    : []
+  const sampledPowerTicks = downsampleTicks(
+    logarithmicPowerTicks,
+    hasZeroValue ? 4 : 5,
+  )
+  const positiveLogarithmicTicks = sampledPowerTicks.length >= 2
+    ? sampledPowerTicks
+    : [...new Set([
+        minimumPositive,
+        ...sampledPowerTicks,
+        maximumPositive,
+      ])].filter(Number.isFinite).sort((left, right) => left - right)
+  const logarithmicTicks = [
+    ...(hasZeroValue ? [{ value: 0, transformedValue: logarithmicMinimum }] : []),
+    ...positiveLogarithmicTicks
+      .map((value) => ({ value, transformedValue: Math.log10(value) })),
+  ]
+  const yTicks = yAxisScale === 'linear'
+    ? linearTicks.map((value) => ({ value, transformedValue: value }))
+    : logarithmicTicks
 
   const xForNodeCount = (nodeCount: number) => {
     if (minimumLog === maximumLog) return PLOT_LEFT + plotWidth / 2
     return PLOT_LEFT + ((Math.log10(Math.max(nodeCount, 1)) - minimumLog) / (maximumLog - minimumLog)) * plotWidth
   }
-  const yForMilliseconds = (milliseconds: number) => (
-    PLOT_TOP + plotHeight - (milliseconds / yMaximum) * plotHeight
-  )
+  const yForMetricValue = (rawValue: number) => {
+    const value = rawValue / presentation.divisor
+    if (yAxisScale === 'linear') {
+      return PLOT_TOP + plotHeight - (value / linearMaximum) * plotHeight
+    }
+    const transformedValue = value === 0 ? logarithmicMinimum : Math.log10(value)
+    const logarithmicSpan = logarithmicMaximum - logarithmicMinimum
+    if (logarithmicSpan === 0) return PLOT_TOP + plotHeight / 2
+    const normalizedValue = Math.min(
+      1,
+      Math.max(0, (transformedValue - logarithmicMinimum) / logarithmicSpan),
+    )
+    return PLOT_TOP + plotHeight - normalizedValue * plotHeight
+  }
+  const yForTick = (transformedValue: number) => {
+    if (yAxisScale === 'linear') {
+      return PLOT_TOP + plotHeight - (transformedValue / linearMaximum) * plotHeight
+    }
+    const logarithmicSpan = logarithmicMaximum - logarithmicMinimum
+    if (logarithmicSpan === 0) return PLOT_TOP + plotHeight / 2
+    const normalizedValue = Math.min(
+      1,
+      Math.max(0, (transformedValue - logarithmicMinimum) / logarithmicSpan),
+    )
+    return PLOT_TOP + plotHeight - normalizedValue * plotHeight
+  }
+  const yAxisScaleLabel = yAxisScale === 'linear' ? 'linear' : 'logarithmic'
 
   return (
     <figure className="insights-lab-trends__figure">
       <figcaption>
         <strong>{title}</strong>
         <span>{description}</span>
+        {yAxisScale === 'logarithmic' && allValuesAreZero ? (
+          <span>All selected values are zero; logarithmic spacing is not applicable.</span>
+        ) : null}
       </figcaption>
       <ul aria-label="Chart series" className="insights-lab-trends__legend">
         {series.map((item, index) => (
@@ -314,12 +527,17 @@ function TrendChart({ idPrefix, title, description, series }: TrendChartProps) {
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
         >
           <title id={`${idPrefix}-chart-title`}>{title}</title>
-          <desc id={`${idPrefix}-chart-description`}>{description}. Points show compute time by graph size.</desc>
+          <desc id={`${idPrefix}-chart-description`}>
+            {description}. Points show {metric.label.toLowerCase()} by graph size on a {yAxisScaleLabel} Y-axis.
+            {yAxisScale === 'logarithmic' && allValuesAreZero
+              ? ' All selected values are zero, so logarithmic spacing is not applicable.'
+              : ''}
+          </desc>
 
           {yTicks.map((tick) => {
-            const y = yForMilliseconds(tick)
+            const y = yForTick(tick.transformedValue)
             return (
-              <g key={tick}>
+              <g key={`${tick.value}-${tick.transformedValue}`}>
                 <line
                   className="insights-lab-trends__grid-line"
                   x1={PLOT_LEFT}
@@ -328,7 +546,7 @@ function TrendChart({ idPrefix, title, description, series }: TrendChartProps) {
                   y2={y}
                 />
                 <text className="insights-lab-trends__axis-tick" textAnchor="end" x={PLOT_LEFT - 12} y={y + 4}>
-                  {formatAxisNumber(tick)}
+                  {presentation.formatAxisValue(tick.value)}
                 </text>
               </g>
             )
@@ -379,7 +597,7 @@ function TrendChart({ idPrefix, title, description, series }: TrendChartProps) {
             x="20"
             y={PLOT_TOP + plotHeight / 2}
           >
-            Compute time (ms)
+            {presentation.axisLabel}{yAxisScale === 'logarithmic' ? ' — logarithmic' : ''}
           </text>
           <text
             className="insights-lab-trends__axis-label"
@@ -394,7 +612,7 @@ function TrendChart({ idPrefix, title, description, series }: TrendChartProps) {
             const chartPoints = item.points.map((point) => ({
               ...point,
               x: xForNodeCount(point.nodeCount),
-              y: yForMilliseconds(point.computeMilliseconds),
+              y: yForMetricValue(point.metricValue),
             }))
             const pointList = chartPoints.map(({ x, y }) => `${x},${y}`).join(' ')
             const color = SERIES_COLORS[seriesIndex % SERIES_COLORS.length]
@@ -414,7 +632,7 @@ function TrendChart({ idPrefix, title, description, series }: TrendChartProps) {
                 {chartPoints.map((point) => (
                   <g key={point.nodeCount}>
                     <title>
-                      {`${item.label}, ${formatNodeCount(point.nodeCount)} nodes: ${formatMilliseconds(point.computeMilliseconds)}${point.sampleCount > 1 ? ` median, n=${point.sampleCount}` : ', n=1'}`}
+                      {`${item.label}, ${formatNodeCount(point.nodeCount)} nodes: ${presentation.formatValue(point.metricValue)}${point.sampleCount > 1 ? ` median, n=${point.sampleCount}` : ', n=1'}`}
                     </title>
                     <SeriesMarker index={seriesIndex} x={point.x} y={point.y} />
                   </g>
@@ -430,7 +648,10 @@ function TrendChart({ idPrefix, title, description, series }: TrendChartProps) {
 
 export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProps) {
   const idPrefix = useId().replace(/:/g, '')
+  const howToReadButtonRef = useRef<HTMLButtonElement>(null)
   const [mode, setMode] = useState<TrendMode>('within')
+  const [requestedMetricId, setRequestedMetricId] = useState<TrendMetricId>('compute')
+  const [yAxisScale, setYAxisScale] = useState<YAxisScale>('linear')
   const [requestedAlgorithmId, setRequestedAlgorithmId] = useState('')
   const [requestedWithinSetId, setRequestedWithinSetId] = useState('')
   const [requestedWithinShapeIds, setRequestedWithinShapeIds] = useState<string[]>([])
@@ -438,6 +659,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
   const [requestedAcrossSetIds, setRequestedAcrossSetIds] = useState<string[]>([])
   const [requestedNodeCounts, setRequestedNodeCounts] = useState<number[]>([])
   const [showData, setShowData] = useState(false)
+  const [showHowToRead, setShowHowToRead] = useState(false)
 
   const benchmarkSetsById = useMemo(
     () => new Map(benchmarkSets.map((benchmarkSet) => [benchmarkSet.id, benchmarkSet])),
@@ -449,9 +671,16 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     const benchmarkSet = benchmarkSetId ? benchmarkSetsById.get(benchmarkSetId) : undefined
     const slug = run.graph?.slug
     const nodeCount = run.graph?.nodeCount
-    const computeMilliseconds = run.timing?.computeElapsedMilliseconds
     const algorithmIdForRun = getAlgorithmId(run)
     const shapeId = getShapeId(run)
+    const metricValues = TREND_METRICS.reduce<Partial<Record<TrendMetricId, number>>>(
+      (values, metric) => {
+        const value = metric.readValue(run)
+        if (validMetricValue(value)) values[metric.id] = value
+        return values
+      },
+      {},
+    )
 
     if (
       !benchmarkSet
@@ -463,9 +692,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
       || typeof nodeCount !== 'number'
       || !Number.isFinite(nodeCount)
       || nodeCount <= 0
-      || typeof computeMilliseconds !== 'number'
-      || !Number.isFinite(computeMilliseconds)
-      || computeMilliseconds < 0
+      || Object.keys(metricValues).length === 0
     ) {
       return []
     }
@@ -479,9 +706,24 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
       shapeId,
       shapeLabel: getShapeLabel(shapeId),
       nodeCount,
-      computeMilliseconds,
+      metricValues,
     }]
   }), [benchmarkSets, benchmarkSetsById, runs])
+
+  const availableMetricIds = useMemo(() => new Set(
+    TREND_METRICS
+      .filter((metric) => trendRuns.some((run) => validMetricValue(run.metricValues[metric.id])))
+      .map(({ id }) => id),
+  ), [trendRuns])
+  const metricId = availableMetricIds.has(requestedMetricId)
+    ? requestedMetricId
+    : TREND_METRICS.find(({ id }) => availableMetricIds.has(id))?.id ?? 'compute'
+  const metric = metricDefinition(metricId)
+
+  const selectedMetricRuns = useMemo<SelectedMetricTrendRun[]>(() => trendRuns.flatMap((run) => {
+    const metricValue = run.metricValues[metricId]
+    return validMetricValue(metricValue) ? [{ ...run, metricValue }] : []
+  }), [metricId, trendRuns])
 
   const algorithmOptions = useMemo(() => {
     const options = new Map<string, string>()
@@ -496,8 +738,8 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     : algorithmOptions[0]?.id ?? ''
 
   const algorithmRuns = useMemo(
-    () => trendRuns.filter((run) => run.algorithmId === algorithmId),
-    [algorithmId, trendRuns],
+    () => selectedMetricRuns.filter((run) => run.algorithmId === algorithmId),
+    [algorithmId, selectedMetricRuns],
   )
 
   const withinSetOptions = useMemo(() => benchmarkSets.filter((benchmarkSet) => (
@@ -619,6 +861,10 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     .sort((left, right) => (
       left.nodeCount - right.nodeCount || left.seriesIndex - right.seriesIndex
     )), [series])
+  const presentation = useMemo(
+    () => metricPresentation(metric, series),
+    [metric, series],
+  )
 
   if (trendRuns.length === 0) {
     return (
@@ -638,17 +884,112 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     ? 'all available graph sizes'
     : `${selectedNodeCounts.map(formatNodeCount).join(', ')} nodes`
   const chartDescription = mode === 'within'
-    ? `${selectedWithinSet ? getBenchmarkSetLabel(selectedWithinSet, benchmarkSets) : 'Selected benchmark set'} · ${graphSizeDescription} · median compute time for repeated runs`
-    : `${selectedAcrossShapeLabel} · ${graphSizeDescription} · median compute time for repeated runs`
+    ? `${selectedWithinSet ? getBenchmarkSetLabel(selectedWithinSet, benchmarkSets) : 'Selected benchmark set'} · ${graphSizeDescription} · median ${metric.label.toLowerCase()} for repeated runs`
+    : `${selectedAcrossShapeLabel} · ${graphSizeDescription} · median ${metric.label.toLowerCase()} for repeated runs`
 
   return (
-    <section aria-labelledby={`${idPrefix}-heading`} className="insights-lab-trends">
+    <section
+      aria-labelledby={`${idPrefix}-heading`}
+      className="insights-lab-trends"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !showHowToRead) return
+        event.preventDefault()
+        event.stopPropagation()
+        setShowHowToRead(false)
+        howToReadButtonRef.current?.focus()
+      }}
+    >
       <div className="insights-lab-trends__intro">
         <div>
           <h3 id={`${idPrefix}-heading`}>Historical trends</h3>
-          <p>Compare compute time across the graph sizes and shapes you choose.</p>
+          <p>Compare performance across the graph sizes, shapes, and benchmark sets you choose.</p>
+        </div>
+        <div className="insights-lab-trends__intro-actions">
+          <fieldset className="insights-lab-trends__scale" role="radiogroup">
+            <legend>Y-axis scale</legend>
+            <div>
+              <label>
+                <input
+                  checked={yAxisScale === 'linear'}
+                  name={`${idPrefix}-y-axis-scale`}
+                  onChange={() => setYAxisScale('linear')}
+                  type="radio"
+                />
+                <span>Linear</span>
+              </label>
+              <label>
+                <input
+                  checked={yAxisScale === 'logarithmic'}
+                  name={`${idPrefix}-y-axis-scale`}
+                  onChange={() => setYAxisScale('logarithmic')}
+                  type="radio"
+                />
+                <span>Logarithmic</span>
+              </label>
+            </div>
+          </fieldset>
+          <button
+            aria-controls={`${idPrefix}-how-to-read`}
+            aria-expanded={showHowToRead}
+            onClick={() => setShowHowToRead((current) => !current)}
+            ref={howToReadButtonRef}
+            type="button"
+          >
+            How to read
+          </button>
         </div>
       </div>
+
+      <section
+        aria-labelledby={`${idPrefix}-how-to-read-title`}
+        className="insights-lab-trends__guide"
+        hidden={!showHowToRead}
+        id={`${idPrefix}-how-to-read`}
+        role="region"
+      >
+        <header>
+          <strong id={`${idPrefix}-how-to-read-title`}>How to read this chart</strong>
+          <button
+            onClick={() => {
+              setShowHowToRead(false)
+              howToReadButtonRef.current?.focus()
+            }}
+            type="button"
+          >
+            Close how to read
+          </button>
+        </header>
+        <dl>
+          <div>
+            <dt>Axes</dt>
+            <dd>
+              Graph size runs left to right on a logarithmic scale, so each tenfold increase gets equal space. The Y-axis shows the selected metric; lower is generally better.
+            </dd>
+          </div>
+          <div>
+            <dt>Lines and points</dt>
+            <dd>
+              A line represents a graph shape within one set, or a benchmark set in the across-set view. Lines connect measured sizes to guide the eye; they do not measure the sizes between them. One run is shown raw; repeated matching runs are represented by their median and sample count.
+            </dd>
+          </div>
+          <div>
+            <dt>{metric.label}</dt>
+            <dd>{metric.explanation} {metric.significance}</dd>
+          </div>
+          <div>
+            <dt>Y-axis scale</dt>
+            <dd>
+              Linear spacing emphasizes absolute differences. Logarithmic spacing emphasizes ratios and keeps widely separated values readable; a zero value uses a separate baseline below the positive values.
+            </dd>
+          </div>
+          <div>
+            <dt>Fair comparisons</dt>
+            <dd>
+              Compare matching algorithms, graph shapes, sizes, and targets. Differences between benchmark sets can also reflect build configuration, hardware, and other backend activity.
+            </dd>
+          </div>
+        </dl>
+      </section>
 
       <div className="insights-lab-trends__controls">
         <fieldset className="insights-lab-trends__mode">
@@ -694,6 +1035,27 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
           >
             {algorithmOptions.map((option) => (
               <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="insights-lab-trends__select">
+          <span>Metric</span>
+          <select
+            onChange={(event) => {
+              setRequestedMetricId(event.target.value as TrendMetricId)
+              setRequestedNodeCounts([])
+            }}
+            value={metricId}
+          >
+            {TREND_METRICS.map((option) => (
+              <option
+                disabled={!availableMetricIds.has(option.id)}
+                key={option.id}
+                value={option.id}
+              >
+                {option.label}
+              </option>
             ))}
           </select>
         </label>
@@ -817,8 +1179,11 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
           <TrendChart
             description={chartDescription}
             idPrefix={idPrefix}
+            metric={metric}
+            presentation={presentation}
             series={series}
             title={chartTitle}
+            yAxisScale={yAxisScale}
           />
           <div className="insights-lab-trends__data-actions">
             <button
@@ -834,13 +1199,17 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
           {showData && (
             <div className="insights-lab-trends__table-wrap" id={`${idPrefix}-data-table`}>
               <table>
-                <caption>Compute-time values plotted above</caption>
+                <caption>
+                  {metric.id === 'compute'
+                    ? 'Compute-time values plotted above'
+                    : `${metric.label} values plotted above`}
+                </caption>
                 <thead>
                   <tr>
                     <th scope="col">Benchmark set</th>
                     <th scope="col">Graph shape</th>
                     <th scope="col">Nodes</th>
-                    <th scope="col">Compute time</th>
+                    <th scope="col">{metric.label}</th>
                     <th scope="col">Samples</th>
                     <th scope="col">Runs</th>
                   </tr>
@@ -852,7 +1221,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
                       <td>{row.shapeLabel}</td>
                       <td>{formatNodeCount(row.nodeCount)}</td>
                       <td>
-                        {formatMilliseconds(row.computeMilliseconds)}
+                        {presentation.formatValue(row.metricValue)}
                         {row.sampleCount > 1 && <span> median</span>}
                       </td>
                       <td>{row.sampleCount}</td>
@@ -866,7 +1235,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
         </>
       ) : (
         <p aria-live="polite" className="insights-lab-trends__no-match">
-          No comparable runs match these selections.
+          No comparable runs with {metric.label.toLowerCase()} data match these selections.
         </p>
       )}
     </section>
