@@ -251,6 +251,83 @@ public class GraphServiceTests
     }
 
     [TestMethod]
+    public async Task GetMinimalCounterSetAsync_UsesBfImpactToSelectStrongestCounterFirst()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        decimal counterLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = GraphWith(
+            [
+                Node("H", priorOdds: 0.2m),
+                Node("weak", kind: "objection", posteriorOdds: counterLogBayesFactor),
+                Node("strong", kind: "objection", posteriorOdds: counterLogBayesFactor)
+            ],
+            [
+                Edge(
+                    "E-weak-H",
+                    "weak",
+                    "H",
+                    "counter",
+                    0.25m,
+                    probabilityGivenParent: 0.2m,
+                    probabilityGivenNotParent: 0.8m),
+                Edge(
+                    "E-strong-H",
+                    "strong",
+                    "H",
+                    "counter",
+                    0.000000001m,
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m)
+            ]);
+
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .GetMinimalCounterSetAsync("sample-medium", "H", CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { "strong" }, result);
+    }
+
+    [TestMethod]
+    public async Task GetMinimalCounterSetAsync_AddsRankedCountersUntilBfLogOddsCrossThreshold()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("H", priorOdds: 0.4m),
+                Node("third", kind: "objection", posteriorOdds: 0.6m),
+                Node("second", kind: "objection", posteriorOdds: 0.7m),
+                Node("first", kind: "objection", posteriorOdds: 0.8m)
+            ],
+            [
+                Edge("E-third-H", "third", "H", "counter", 0.000000001m,
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m),
+                Edge("E-second-H", "second", "H", "counter", 0.000000001m,
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m),
+                Edge("E-first-H", "first", "H", "counter", 0.000000001m,
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m)
+            ]);
+
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .GetMinimalCounterSetAsync("sample-medium", "H", CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { "first", "second" }, result);
+    }
+
+    [TestMethod]
     public async Task AddNodeAsync_RootClaimResetsStalePosteriorToPrior()
     {
         var repositoryMock = new Mock<IGraphRepository>();

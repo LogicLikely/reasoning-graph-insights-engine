@@ -113,15 +113,14 @@ public class GraphService : IGraphService
             return null;
         }
 
-        Console.WriteLine("got here");
-        return await GetMinimalCounterSet(
+        return GetMinimalCounterSet(
             graph,
             targetNodeId,
             graph.Nodes.Select(node => node.Id),
             cancellationToken);
     }
 
-    public async Task<List<string>?> GetMinimalCounterSetAsync(
+    public Task<List<string>?> GetMinimalCounterSetAsync(
         string slug,
         string targetNodeId,
         GraphDto graphContext,
@@ -129,12 +128,16 @@ public class GraphService : IGraphService
     {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
         {
-            return null;
+            return Task.FromResult<List<string>?>(null);
         }
 
         var graph = ToDomainGraph(graphContext);
 
-        return await GetMinimalCounterSet(graph, targetNodeId, graph.Nodes.Select(node => node.Id), cancellationToken);
+        return Task.FromResult(GetMinimalCounterSet(
+            graph,
+            targetNodeId,
+            graph.Nodes.Select(node => node.Id),
+            cancellationToken));
     }
 
     public NodeRobustnessDto? GetLeastRobustNode(
@@ -516,176 +519,136 @@ public class GraphService : IGraphService
         return recalculatedLogOdds;
     }
 
-    private async Task<List<string>?> GetMinimalCounterSet(
+    private List<string>? GetMinimalCounterSet(
         Graph graph,
         string targetClaimId,
         IEnumerable<string> nodeIds,
         CancellationToken cancellationToken
     )
     {
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        const decimal targetLogOddsThreshold = -1m;
 
-        // registerdNodeIds starts by not including any counter evidence, adding counters 1 by 1
-        var registeredNodeIds = ExcludeCounterNodes(context, nodeIds);
-        if (!registeredNodeIds.Contains(targetClaimId, StringComparer.Ordinal))
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(targetClaimId);
+        ArgumentNullException.ThrowIfNull(nodeIds);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var nodesById = graph.Nodes.ToDictionary(
+            node => node.Id,
+            StringComparer.Ordinal);
+        if (!nodesById.ContainsKey(targetClaimId))
         {
-            registeredNodeIds.Add(targetClaimId);
+            throw new InvalidOperationException(
+                $"Target node '{targetClaimId}' does not exist in the graph.");
         }
 
-        PriorityQueue<string, decimal> counterQueue = GetCounterQueue(context, targetClaimId, nodeIds);
-
-        //Dictionary mapping log odds to every node (including counters)
-        var normalLogOdds = _calculator.RecalculateNodesAndAncestors(context, nodeIds);
-
-        //Calculates odds without considering counters
-        var recalculatedLogOdds = _calculator.RecalculateNodesAndAncestors(context, registeredNodeIds);
-        List<string> countersUsed = new List<string>();
-        if (!recalculatedLogOdds.TryGetValue(targetClaimId, out var targetClaimLogOdds))
+        var availableNodeIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string nodeId in nodeIds.Distinct(StringComparer.Ordinal))
         {
-            throw new InvalidOperationException($"Target node '{targetClaimId}' does not exist in the recalculatedLogOdds dictionary.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!nodesById.ContainsKey(nodeId))
+            {
+                throw new InvalidOperationException(
+                    $"Node '{nodeId}' does not exist in the graph.");
+            }
+
+            availableNodeIds.Add(nodeId);
         }
 
-        //Walk through every counter from queue, ordered by likelihood, and include it in new odds calculation
-        Console.WriteLine($"initial log odds for target node (no counters)'{targetClaimId}': {targetClaimLogOdds}");
-        while (counterQueue.Count > 0 && targetClaimLogOdds > -1)
-        {
-            string counterNodeId = counterQueue.Dequeue();
-            Console.WriteLine($"current counter: '{counterNodeId}': {normalLogOdds[counterNodeId]}");
-            registeredNodeIds.Add(counterNodeId);
-            countersUsed.Add(counterNodeId);
-            Console.WriteLine("------------------------------");
-            double? counterLikelihoodRatio = (double?)_calculator.GetSingleAccumulatedLR(context, counterNodeId, targetClaimId);
-            Console.WriteLine("------------------------------");
-            if (!counterLikelihoodRatio.HasValue) continue;
+        availableNodeIds.Add(targetClaimId);
 
-            decimal logCounterLikelihoodRatio = (decimal)Math.Log(counterLikelihoodRatio.Value);
-            Console.WriteLine($"counterLikelihood: {counterLikelihoodRatio}");
-            targetClaimLogOdds += normalLogOdds[counterNodeId] + logCounterLikelihoodRatio;
+        var counterNodeIds = availableNodeIds
+            .Where(nodeId =>
+                nodeId != targetClaimId &&
+                IsCounterNode(nodesById[nodeId]))
+            .ToList();
+        var includedNodeIds = availableNodeIds
+            .Where(nodeId => !IsCounterNode(nodesById[nodeId]))
+            .ToHashSet(StringComparer.Ordinal);
+        includedNodeIds.Add(targetClaimId);
+
+        decimal targetClaimLogOdds = CalculateTargetLogOdds(
+            graph,
+            targetClaimId,
+            includedNodeIds,
+            cancellationToken);
+        if (targetClaimLogOdds <= targetLogOddsThreshold)
+        {
+            return [];
         }
 
-        Console.WriteLine($"posterior log odds for target node '{targetClaimId}': {targetClaimLogOdds}");
-
-        if (targetClaimLogOdds > -1)
+        // Rank once against the no-counter graph. The BF calculation includes
+        // pruning and every nonlinear edge transform, so the lowest resulting
+        // target log odds is the strongest counter.
+        var rankedCounters = new List<(string NodeId, decimal TargetLogOdds)>(
+            counterNodeIds.Count);
+        foreach (string counterNodeId in counterNodeIds)
         {
-            return null;
+            cancellationToken.ThrowIfCancellationRequested();
+            includedNodeIds.Add(counterNodeId);
+            decimal candidateTargetLogOdds = CalculateTargetLogOdds(
+                graph,
+                targetClaimId,
+                includedNodeIds,
+                cancellationToken);
+            includedNodeIds.Remove(counterNodeId);
+            rankedCounters.Add((counterNodeId, candidateTargetLogOdds));
         }
-        return countersUsed;
+
+        var countersUsed = new List<string>();
+        foreach (var counter in rankedCounters
+                     .OrderBy(counter => counter.TargetLogOdds)
+                     .ThenBy(counter => counter.NodeId, StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            includedNodeIds.Add(counter.NodeId);
+            countersUsed.Add(counter.NodeId);
+            targetClaimLogOdds = CalculateTargetLogOdds(
+                graph,
+                targetClaimId,
+                includedNodeIds,
+                cancellationToken);
+
+            if (targetClaimLogOdds <= targetLogOddsThreshold)
+            {
+                return countersUsed;
+            }
+        }
+
+        return null;
     }
 
-    //Get queue of counters ranked by their likelihood
-    private static PriorityQueue<string, decimal> GetCounterQueue(
-        GraphCalculationContext context,
-        string targetNodeId,
-        IEnumerable<string> nodeIds)
+    private decimal CalculateTargetLogOdds(
+        Graph source,
+        string targetClaimId,
+        HashSet<string> includedNodeIds,
+        CancellationToken cancellationToken)
     {
-        if (!context.NodesById.ContainsKey(targetNodeId))
+        var graph = new Graph
         {
-            throw new InvalidOperationException($"Target node '{targetNodeId}' does not exist in the calculation context.");
-        }
+            Id = source.Id,
+            Slug = source.Slug,
+            Title = source.Title,
+            Description = source.Description,
+            Nodes = source.Nodes
+                .Where(node => includedNodeIds.Contains(node.Id))
+                .ToList(),
+            Edges = source.Edges
+                .Where(edge =>
+                    includedNodeIds.Contains(edge.From) &&
+                    includedNodeIds.Contains(edge.To))
+                .ToList()
+        };
 
-        var counterQueue = new PriorityQueue<string, decimal>(
-            Comparer<decimal>.Create((left, right) => right.CompareTo(left)));
-
-        foreach (var nodeId in nodeIds.Distinct(StringComparer.Ordinal))
-        {
-            if (!context.NodesById.TryGetValue(nodeId, out var node))
-            {
-                throw new InvalidOperationException($"Node '{nodeId}' does not exist in the calculation context.");
-            }
-
-            if (nodeId == targetNodeId || !IsCounterNode(node))
-            {
-                continue;
-            }
-
-            var multiplier = GetAncestorLikelihoodMultiplier(context, nodeId, targetNodeId);
-            if (multiplier is null)
-            {
-                continue;
-            }
-
-            counterQueue.Enqueue(nodeId, node.PosteriorOdds * multiplier.Value);
-        }
-
-        return counterQueue;
+        return _posteriorOddsCalculator.CalculateNodeLogPosteriorOdds(
+            graph,
+            targetClaimId,
+            cancellationToken);
     }
 
-    private static decimal? GetAncestorLikelihoodMultiplier(
-        GraphCalculationContext context,
-        string startNodeId,
-        string targetNodeId)
-    {
-        var stack = new Stack<CounterTraversalState>();
-        stack.Push(new CounterTraversalState(startNodeId, 1m, [startNodeId]));
-
-        decimal? bestMultiplier = null;
-        while (stack.Count > 0)
-        {
-            var current = stack.Pop();
-            if (current.NodeId == targetNodeId)
-            {
-                bestMultiplier = bestMultiplier is null
-                    ? current.Multiplier
-                    : Math.Max(bestMultiplier.Value, current.Multiplier);
-                continue;
-            }
-
-            if (!context.ParentEdgesByChildId.TryGetValue(current.NodeId, out var parentEdges))
-            {
-                continue;
-            }
-
-            foreach (var parentEdge in parentEdges)
-            {
-                var parentNodeId = parentEdge.ToNodeId;
-                if (!context.NodesById.ContainsKey(parentNodeId))
-                {
-                    throw new InvalidOperationException(
-                        $"Edge '{parentEdge.Id}' references missing to node '{parentNodeId}'.");
-                }
-
-                //Cycle detection
-                if (current.Path.Contains(parentNodeId))
-                {
-                    throw new InvalidOperationException(
-                        $"Cycle detected while finding counter priority at node '{parentNodeId}'.");
-                }
-
-                var nextMultiplier = current.Multiplier *
-                    EdgeProbabilityMath.GetLikelihoodRatio(parentEdge);
-                var nextPath = new HashSet<string>(current.Path) { parentNodeId };
-                stack.Push(new CounterTraversalState(parentNodeId, nextMultiplier, nextPath));
-            }
-        }
-
-        return bestMultiplier;
-    }
-
-    private static bool IsCounterNode(GraphNodeCalcState node)
+    private static bool IsCounterNode(GraphNode node)
     {
         return string.Equals(node.Kind, "objection", StringComparison.OrdinalIgnoreCase)
             || string.Equals(node.Kind, "counter", StringComparison.OrdinalIgnoreCase);
     }
-
-    private static List<string> ExcludeCounterNodes(
-        GraphCalculationContext context,
-        IEnumerable<string> nodeIds)
-    {
-        return nodeIds
-            .Where(id =>
-            {
-                if (!context.NodesById.TryGetValue(id, out var node))
-                {
-                    throw new InvalidOperationException($"Node '{id}' does not exist in the calculation context.");
-                }
-
-                return !IsCounterNode(node);
-            })
-            .ToList();
-    }
-
-    private sealed record CounterTraversalState(
-        string NodeId,
-        decimal Multiplier,
-        HashSet<string> Path);
 }
