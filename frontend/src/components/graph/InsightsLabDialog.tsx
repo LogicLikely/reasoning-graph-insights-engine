@@ -512,7 +512,7 @@ function OpenInsightsLabDialog({
         role="dialog"
       >
         <header className="insights-lab-dialog__header">
-          <div>
+          <div className="insights-lab-dialog__header-copy">
             <span className="eyebrow">Performance workspace</span>
             <h2 id="insights-lab-title">Insights Lab</h2>
             <p>{graph ? `${graph.title} · ${graph.slug}` : 'No active graph'}</p>
@@ -527,39 +527,38 @@ function OpenInsightsLabDialog({
           >
             Close
           </button>
+          <div aria-label="Insights Lab sections" className="insights-lab-dialog__tabs" role="tablist">
+            <button
+              aria-controls="insights-lab-run-panel"
+              aria-selected={tab === 'run'}
+              id="insights-lab-run-tab"
+              onClick={() => setTab('run')}
+              onKeyDown={handleTabKeyDown}
+              ref={runTabRef}
+              role="tab"
+              tabIndex={tab === 'run' ? 0 : -1}
+              type="button"
+            >
+              Run
+            </button>
+            <button
+              aria-controls="insights-lab-history-panel"
+              aria-selected={tab === 'history'}
+              id="insights-lab-history-tab"
+              onClick={() => {
+                setExpandedOperationId(undefined)
+                setTab('history')
+              }}
+              onKeyDown={handleTabKeyDown}
+              ref={historyTabRef}
+              role="tab"
+              tabIndex={tab === 'history' ? 0 : -1}
+              type="button"
+            >
+              History <span>{runs.length}</span>
+            </button>
+          </div>
         </header>
-
-        <div aria-label="Insights Lab sections" className="insights-lab-dialog__tabs" role="tablist">
-          <button
-            aria-controls="insights-lab-run-panel"
-            aria-selected={tab === 'run'}
-            id="insights-lab-run-tab"
-            onClick={() => setTab('run')}
-            onKeyDown={handleTabKeyDown}
-            ref={runTabRef}
-            role="tab"
-            tabIndex={tab === 'run' ? 0 : -1}
-            type="button"
-          >
-            Run
-          </button>
-          <button
-            aria-controls="insights-lab-history-panel"
-            aria-selected={tab === 'history'}
-            id="insights-lab-history-tab"
-            onClick={() => {
-              setExpandedOperationId(undefined)
-              setTab('history')
-            }}
-            onKeyDown={handleTabKeyDown}
-            ref={historyTabRef}
-            role="tab"
-            tabIndex={tab === 'history' ? 0 : -1}
-            type="button"
-          >
-            History <span>{runs.length}</span>
-          </button>
-        </div>
 
         {activeOperation ? (
           <div

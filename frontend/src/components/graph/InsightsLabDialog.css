@@ -37,11 +37,15 @@
 }
 
 .insights-lab-dialog__header {
-  align-items: flex-start;
-  gap: 1rem;
+  display: grid;
+  grid-template-areas: 'copy tabs close';
+  grid-template-columns: minmax(18rem, 1fr) minmax(18rem, 0.9fr) auto;
+  align-items: center;
+  gap: 1.25rem;
 }
 
-.insights-lab-dialog__header > div {
+.insights-lab-dialog__header-copy {
+  grid-area: copy;
   display: grid;
   gap: 0.65rem;
 }
@@ -65,6 +69,8 @@
 }
 
 .insights-lab-dialog__close {
+  grid-area: close;
+  align-self: start;
   min-height: 2.55rem;
   padding: 0.55rem 0.9rem;
   border-radius: 999px;
@@ -76,9 +82,9 @@
 }
 
 .insights-lab-dialog__tabs {
+  grid-area: tabs;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 1.25rem;
   padding: 0.25rem;
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
@@ -530,6 +536,14 @@
     border-radius: 1.25rem 1.25rem 0 0;
   }
 
+  .insights-lab-dialog__header {
+    grid-template-areas:
+      'copy close'
+      'tabs tabs';
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+  }
+
   .insights-lab-dialog__operations,
   .insights-lab-dialog__preview > div,
   .insights-lab-dialog__report-section > dl {
@@ -542,7 +556,6 @@
 }
 
 @media (max-width: 520px) {
-  .insights-lab-dialog__header,
   .insights-lab-dialog__report > header,
   .insights-lab-dialog__running {
     align-items: stretch;
@@ -552,6 +565,14 @@
   .insights-lab-dialog__close,
   .insights-lab-dialog__running button {
     width: 100%;
+  }
+
+  .insights-lab-dialog__header {
+    grid-template-areas:
+      'copy'
+      'tabs'
+      'close';
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .insights-lab-dialog__operation {
