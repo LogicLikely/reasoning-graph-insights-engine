@@ -10,7 +10,7 @@ public class GraphService : IGraphService
 {
     private readonly IGraphRepository _graphRepository;
 
-    // Legacy likelihood-ratio ranking, robustness, and counter analytics.
+    // Legacy likelihood-ratio evidence-impact analytics.
     private readonly GraphLikelihoodCalculator _calculator;
 
     // BF-based pruning, recurrence, and persisted posterior-log-odds updates.
@@ -145,13 +145,16 @@ public class GraphService : IGraphService
         CancellationToken cancellationToken = default
     )
     {
-        var robustnessValues = _calculator.GetAllNodeRobustness(graph, cancellationToken);
+        var robustnessValues = GetAllNodeRobustness(graph, cancellationToken);
         if (robustnessValues.Count == 0)
         {
             return null;
         }
 
-        var leastRobust = robustnessValues.MinBy(entry => entry.Value);
+        var leastRobust = robustnessValues
+            .OrderBy(entry => entry.Value)
+            .ThenBy(entry => entry.Key, StringComparer.Ordinal)
+            .First();
         var node = graph.Nodes.First(node => node.Id == leastRobust.Key);
 
         return new NodeRobustnessDto
@@ -168,7 +171,7 @@ public class GraphService : IGraphService
     {
         var nodesById = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
 
-        return _calculator.GetAllNodeRobustness(graph, cancellationToken)
+        return GetAllNodeRobustness(graph, cancellationToken)
             .OrderBy(entry => entry.Value)
             .ThenBy(entry => entry.Key, StringComparer.Ordinal)
             .Select(entry => new NodeRobustnessDto
@@ -178,6 +181,119 @@ public class GraphService : IGraphService
                 Robustness = entry.Value
             })
             .ToList();
+    }
+
+    // Robustness is exp(-d), where d is the largest absolute change in the
+    // node's BF-derived probability after removing one downstream evidence or
+    // objection node. A leaf or evidence-independent node therefore scores 1.
+    private Dictionary<string, decimal> GetAllNodeRobustness(
+        Graph graph,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        var includedNodeIds = context.NodesById.Keys.ToHashSet(StringComparer.Ordinal);
+        var robustnessByNodeId = new Dictionary<string, decimal>(
+            context.NodesById.Count,
+            StringComparer.Ordinal);
+
+        foreach (string targetNodeId in context.NodesById.Keys)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            decimal targetLogOdds = CalculateTargetLogOdds(
+                graph,
+                targetNodeId,
+                includedNodeIds,
+                cancellationToken);
+            double targetProbability = LogOddsToProbability(targetLogOdds);
+            double largestProbabilityChange = 0d;
+
+            foreach (string evidenceNodeId in CollectEvidenceReachingTarget(
+                         context,
+                         targetNodeId,
+                         cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                includedNodeIds.Remove(evidenceNodeId);
+                decimal logOddsWithoutEvidence = CalculateTargetLogOdds(
+                    graph,
+                    targetNodeId,
+                    includedNodeIds,
+                    cancellationToken);
+                includedNodeIds.Add(evidenceNodeId);
+
+                double probabilityWithoutEvidence =
+                    LogOddsToProbability(logOddsWithoutEvidence);
+                largestProbabilityChange = Math.Max(
+                    largestProbabilityChange,
+                    Math.Abs(targetProbability - probabilityWithoutEvidence));
+            }
+
+            robustnessByNodeId[targetNodeId] =
+                (decimal)Math.Exp(-largestProbabilityChange);
+        }
+
+        return robustnessByNodeId;
+    }
+
+    private static List<string> CollectEvidenceReachingTarget(
+        GraphCalculationContext context,
+        string targetNodeId,
+        CancellationToken cancellationToken)
+    {
+        var evidenceNodeIds = new List<string>();
+        var visitedNodeIds = new HashSet<string>(StringComparer.Ordinal)
+        {
+            targetNodeId
+        };
+        var nodesToVisit = new Queue<string>();
+        nodesToVisit.Enqueue(targetNodeId);
+
+        while (nodesToVisit.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string parentNodeId = nodesToVisit.Dequeue();
+            if (!context.ChildEdgesByParentId.TryGetValue(
+                    parentNodeId,
+                    out var childEdges))
+            {
+                continue;
+            }
+
+            foreach (var childEdge in childEdges)
+            {
+                string childNodeId = childEdge.FromNodeId;
+                if (!visitedNodeIds.Add(childNodeId))
+                {
+                    continue;
+                }
+
+                if (IsEvidenceLikeNodeKind(context.NodesById[childNodeId].Kind))
+                {
+                    evidenceNodeIds.Add(childNodeId);
+                }
+
+                nodesToVisit.Enqueue(childNodeId);
+            }
+        }
+
+        return evidenceNodeIds;
+    }
+
+    private static double LogOddsToProbability(decimal logOdds)
+    {
+        double value = (double)logOdds;
+        if (value >= 0d)
+        {
+            double inverseOdds = Math.Exp(-value);
+            return 1d / (1d + inverseOdds);
+        }
+
+        double odds = Math.Exp(value);
+        return odds / (1d + odds);
     }
 
     public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(

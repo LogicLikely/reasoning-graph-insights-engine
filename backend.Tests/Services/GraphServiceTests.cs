@@ -328,6 +328,48 @@ public class GraphServiceTests
     }
 
     [TestMethod]
+    public void GetNodeRobustnessRanking_UsesBfProbabilityImpactOfRemovingEvidence()
+    {
+        decimal evidenceLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = GraphWith(
+            [
+                Node("H", priorOdds: 0m, posteriorOdds: -90m),
+                Node(
+                    "E",
+                    kind: "evidence",
+                    posteriorOdds: evidenceLogBayesFactor)
+            ],
+            [
+                Edge(
+                    "E-E-H",
+                    "E",
+                    "H",
+                    "support",
+                    4m,
+                    probabilityGivenParent: 0.8m,
+                    probabilityGivenNotParent: 0.2m)
+            ]);
+
+        var result = CreateService(new Mock<IGraphRepository>().Object)
+            .GetNodeRobustnessRanking(graph);
+
+        decimal expectedTargetLogOdds = TransformLogBayesFactor(
+            evidenceLogBayesFactor,
+            0.8m,
+            0.2m);
+        double targetProbability =
+            1d / (1d + Math.Exp(-(double)expectedTargetLogOdds));
+        decimal expectedRobustness =
+            (decimal)Math.Exp(-Math.Abs(targetProbability - 0.5d));
+
+        CollectionAssert.AreEqual(
+            new[] { "H", "E" },
+            result.Select(entry => entry.NodeId).ToArray());
+        Assert.IsTrue(Approximately(result[0].Robustness, expectedRobustness));
+        Assert.AreEqual(1m, result[1].Robustness);
+    }
+
+    [TestMethod]
     public async Task AddNodeAsync_RootClaimResetsStalePosteriorToPrior()
     {
         var repositoryMock = new Mock<IGraphRepository>();
