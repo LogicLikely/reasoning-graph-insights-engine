@@ -148,7 +148,8 @@ public class GraphRepositoryTests
                     ["From"] = "C1",
                     ["To"] = "R1",
                     ["kind"] = "support",
-                    ["ImportanceToParent"] = 8
+                    ["ProbabilityGivenParent"] = 0.85m,
+                    ["ProbabilityGivenNotParent"] = 0.15m
                 }
             ]);
 
@@ -176,7 +177,8 @@ public class GraphRepositoryTests
         Assert.AreEqual("C1", result.Edges[0].From);
         Assert.AreEqual("R1", result.Edges[0].To);
         Assert.AreEqual("support", result.Edges[0].Kind);
-        Assert.AreEqual(8, result.Edges[0].ImportanceToParent);
+        Assert.AreEqual(0.85m, result.Edges[0].ProbabilityGivenParent);
+        Assert.AreEqual(0.15m, result.Edges[0].ProbabilityGivenNotParent);
         Assert.AreEqual(3, connection.ExecutedCommands.Count);
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual(1, connection.ExecutedCommands[1].Parameters["GraphId"]);
@@ -227,10 +229,12 @@ public class GraphRepositoryTests
             .Returns(connection);
 
         var repository = CreateRepository(connectionFactoryMock.Object);
+        decimal posteriorLogOdds = (decimal)Math.Log(0.7 / 0.3);
         var update = new GraphNodeUpdateDto
         {
             Kind = "evidence",
-            PriorOdds = 0m
+            PriorOdds = 4m,
+            PosteriorOdds = posteriorLogOdds
         };
 
         var result = await repository.UpdateNodeAsync("sample-medium", "E1", update, CancellationToken.None);
@@ -238,7 +242,10 @@ public class GraphRepositoryTests
         Assert.IsTrue(result);
         Assert.AreEqual(1, connection.ExecutedCommands.Count);
         Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("jsonb_set"));
-        Assert.AreEqual(50.00m, connection.ExecutedCommands[0].Parameters["EvidenceScore"]);
+        StringAssert.Contains(
+            connection.ExecutedCommands[0].CommandText,
+            "WHEN LOWER(kind) IN ('evidence', 'objection') THEN 0");
+        Assert.AreEqual(70.00m, connection.ExecutedCommands[0].Parameters["EvidenceScore"]);
     }
 
     [TestMethod]
@@ -258,7 +265,8 @@ public class GraphRepositoryTests
             Kind = "evidence",
             Title = "New evidence",
             BodyText = "New evidence body",
-            PriorOdds = 0m,
+            PriorOdds = 5m,
+            PosteriorOdds = (decimal)Math.Log(0.8 / 0.2),
             Evidence = new GraphEvidenceDto
             {
                 Type = "observational",
@@ -270,14 +278,57 @@ public class GraphRepositoryTests
 
         Assert.IsTrue(result);
         Assert.AreEqual(1, connection.ExecutedCommands.Count);
+        Assert.AreEqual(0m, connection.ExecutedCommands[0].Parameters["PriorOdds"]);
+        Assert.AreEqual(
+            (decimal)Math.Log(0.8 / 0.2),
+            connection.ExecutedCommands[0].Parameters["PosteriorOdds"]);
 
         var evidenceJson = connection.ExecutedCommands[0].Parameters["Evidence"] as string;
         Assert.IsNotNull(evidenceJson);
 
         using var evidence = JsonDocument.Parse(evidenceJson);
         Assert.AreEqual("observational", evidence.RootElement.GetProperty("type").GetString());
-        Assert.AreEqual(50.00m, evidence.RootElement.GetProperty("score").GetDecimal());
+        Assert.AreEqual(80.00m, evidence.RootElement.GetProperty("score").GetDecimal());
         Assert.AreEqual("A rationale", evidence.RootElement.GetProperty("rationale").GetString());
+    }
+
+    [TestMethod]
+    public async Task AddNodeAsync_PropagatesProbabilityWeightsToParentEdge()
+    {
+        var connection = new FakeDbConnection();
+
+        var connectionFactoryMock = new Mock<DbConnectionFactory>(Mock.Of<Microsoft.Extensions.Options.IOptions<Backend.Configuration.DatabaseOptions>>());
+        connectionFactoryMock
+            .Setup(factory => factory.CreateConnection())
+            .Returns(connection);
+
+        var repository = CreateRepository(connectionFactoryMock.Object);
+        var node = new GraphNodeDto
+        {
+            Id = "E-new",
+            Kind = "evidence",
+            Title = "New evidence",
+            BodyText = "New evidence body"
+        };
+
+        var result = await repository.AddNodeAsync(
+            "sample-medium",
+            node,
+            parentID: "C1",
+            edgeKind: "support",
+            probabilityGivenParent: 0.8m,
+            probabilityGivenNotParent: 0.2m,
+            cancellationToken: CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(2, connection.ExecutedCommands.Count);
+
+        var edgeCommand = connection.ExecutedCommands[1];
+        StringAssert.Contains(edgeCommand.CommandText, "INSERT INTO edges");
+        StringAssert.Contains(edgeCommand.CommandText, "probability_given_parent");
+        StringAssert.Contains(edgeCommand.CommandText, "probability_given_not_parent");
+        Assert.AreEqual(0.8m, edgeCommand.Parameters["ProbabilityGivenParent"]);
+        Assert.AreEqual(0.2m, edgeCommand.Parameters["ProbabilityGivenNotParent"]);
     }
 
     [TestMethod]
@@ -296,7 +347,8 @@ public class GraphRepositoryTests
             From = "E1",
             To = "C2",
             Kind = "rebut",
-            ImportanceToParent = 3
+            ProbabilityGivenParent = 0.25m,
+            ProbabilityGivenNotParent = 0.75m
         };
 
         var result = await repository.AddEdgeAsync("sample-medium", edge, CancellationToken.None);
@@ -308,11 +360,12 @@ public class GraphRepositoryTests
         Assert.AreEqual("E1", connection.ExecutedCommands[0].Parameters["From"]);
         Assert.AreEqual("C2", connection.ExecutedCommands[0].Parameters["To"]);
         Assert.AreEqual("rebut", connection.ExecutedCommands[0].Parameters["Kind"]);
-        Assert.AreEqual(3m, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
+        Assert.AreEqual(0.25m, connection.ExecutedCommands[0].Parameters["ProbabilityGivenParent"]);
+        Assert.AreEqual(0.75m, connection.ExecutedCommands[0].Parameters["ProbabilityGivenNotParent"]);
     }
 
     [TestMethod]
-    public async Task UpdateEdgeAsync_UpdatesImportanceToParent()
+    public async Task UpdateEdgeAsync_UpdatesBothConditionalProbabilities()
     {
         var connection = new FakeDbConnection();
 
@@ -324,7 +377,8 @@ public class GraphRepositoryTests
         var repository = CreateRepository(connectionFactoryMock.Object);
         var edge = new GraphEdgeUpdateDto
         {
-            ImportanceToParent = 7
+            ProbabilityGivenParent = 0.9m,
+            ProbabilityGivenNotParent = 0.1m
         };
 
         var result = await repository.UpdateEdgeAsync("sample-medium", "E-C1-E1", edge, CancellationToken.None);
@@ -334,7 +388,10 @@ public class GraphRepositoryTests
         Assert.IsTrue(connection.ExecutedCommands[0].CommandText.Contains("UPDATE edges"));
         Assert.AreEqual("sample-medium", connection.ExecutedCommands[0].Parameters["Slug"]);
         Assert.AreEqual("E-C1-E1", connection.ExecutedCommands[0].Parameters["EdgeId"]);
-        Assert.AreEqual(7m, connection.ExecutedCommands[0].Parameters["ImportanceToParent"]);
+        Assert.AreEqual(0.9m, connection.ExecutedCommands[0].Parameters["ProbabilityGivenParent"]);
+        Assert.AreEqual(0.1m, connection.ExecutedCommands[0].Parameters["ProbabilityGivenNotParent"]);
+        StringAssert.Contains(connection.ExecutedCommands[0].CommandText, "probability_given_parent = COALESCE");
+        StringAssert.Contains(connection.ExecutedCommands[0].CommandText, "probability_given_not_parent = COALESCE");
     }
 
     [TestMethod]

@@ -19,6 +19,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGraphRepository, GraphRepository>();
         services.AddScoped<IGraphService, GraphService>();
         services.AddSingleton<GraphLikelihoodCalculator>();
+        services.AddSingleton<GraphBayesFactorPruner>();
+        services.AddSingleton<GraphBayesFactorCalculator>();
+        services.AddSingleton<GraphPosteriorOddsCalculator>();
 
         return services;
     }

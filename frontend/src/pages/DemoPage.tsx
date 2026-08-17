@@ -4,7 +4,11 @@ import { DatabaseResetDialog } from '../components/graph/DatabaseResetDialog'
 import { InsightsGraphCanvas } from '../components/graph/InsightsGraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
-import type { GraphFixture, GraphFixtureNode } from '../fixtures/sampleGraph'
+import type {
+  GraphFixture,
+  GraphFixtureEdge,
+  GraphFixtureNode,
+} from '../fixtures/sampleGraph'
 import {
   addEdge,
   addNode,
@@ -34,6 +38,19 @@ const DB_CATALOG_UNREACHABLE_MESSAGE = 'Unable to load the database graph list r
 const DB_EMPTY_TITLE = 'No database graphs'
 const DB_EMPTY_MESSAGE = 'The database does not contain any graphs yet. Reset the database to restore the seed data.'
 const DB_RESET_ERROR_MESSAGE = 'The database reset failed or could not be confirmed. The current view has been retained.'
+
+type EdgeCreateFields = Pick<
+  GraphFixtureEdge,
+  | 'kind'
+  | 'probabilityGivenParent'
+  | 'probabilityGivenNotParent'
+>
+
+type EdgeUpdateFields = Partial<Pick<
+  GraphFixtureEdge,
+  | 'probabilityGivenParent'
+  | 'probabilityGivenNotParent'
+>>
 
 export function DemoPage() {
   const graphCatalogRequestVersionRef = useRef(0)
@@ -271,7 +288,11 @@ export function DemoPage() {
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
     data: Partial<GraphFixtureNode> = {},
-    edge: { kind: 'support' | 'rebut', importanceToParent: number } = { kind: 'support', importanceToParent: 1 },
+    edge: EdgeCreateFields = {
+      kind: 'support',
+      probabilityGivenParent: 0.5,
+      probabilityGivenNotParent: 0.5,
+    },
   ) => {
     if (graphDataSource === 'fixture') {
       alert(FIXTURE_MUTATION_MESSAGE)
@@ -279,13 +300,16 @@ export function DemoPage() {
     }
 
     const newNodeId = `node-${Date.now()}`
+    const priorOdds = data.priorOdds ?? 0
     const newNode: GraphFixtureNode = {
       ...data,
       id: newNodeId,
       kind: data.kind ?? 'claim',
       title: data.title ?? 'New Node',
       bodyText: data.bodyText ?? '',
-    } as GraphFixtureNode
+      priorOdds,
+      posteriorOdds: data.posteriorOdds ?? priorOdds,
+    }
 
     if (!activeGraphSlug) {
       return
@@ -302,7 +326,7 @@ export function DemoPage() {
 
   const handleUpdateEdge = useCallback(async (
     edgeId: string,
-    data: { importanceToParent?: number },
+    data: EdgeUpdateFields,
   ) => {
     if (graphDataSource === 'fixture') {
       alert(FIXTURE_MUTATION_MESSAGE)
@@ -322,7 +346,7 @@ export function DemoPage() {
   }, [activeGraphSlug, graphDataSource])
 
   const handleAddParentEdge = useCallback(async (
-    edge: { from: string, to: string, kind: 'support' | 'rebut', importanceToParent: number },
+    edge: Omit<GraphFixtureEdge, 'id'>,
   ) => {
     if (graphDataSource === 'fixture') {
       alert(FIXTURE_MUTATION_MESSAGE)

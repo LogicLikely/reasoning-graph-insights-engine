@@ -2,6 +2,15 @@ import { useState } from 'react'
 import type { GraphFixtureEdge, GraphFixtureNode } from '../../fixtures/sampleGraph'
 import './GraphDetailsPanel.css'
 
+type EditableEdgeWeights = Pick<
+  GraphFixtureEdge,
+  | 'probabilityGivenParent'
+  | 'probabilityGivenNotParent'
+>
+
+type EdgeCreateFields = Pick<GraphFixtureEdge, 'kind'> & EditableEdgeWeights
+type EdgeWeightFormData = Record<keyof EditableEdgeWeights, string>
+
 interface GraphDetailsPanelProps {
   node?: GraphFixtureNode
   nodes?: GraphFixtureNode[]
@@ -10,10 +19,10 @@ interface GraphDetailsPanelProps {
   onAddSupporting?: (
     parentId: string,
     data: Partial<GraphFixtureNode>,
-    edge: Pick<GraphFixtureEdge, 'kind' | 'importanceToParent'>,
+    edge: EdgeCreateFields,
   ) => void
   onUpdate?: (id: string, data: Partial<GraphFixtureNode>) => void
-  onUpdateEdge?: (edgeId: string, data: Partial<Pick<GraphFixtureEdge, 'importanceToParent'>>) => void
+  onUpdateEdge?: (edgeId: string, data: Partial<EditableEdgeWeights>) => void
   onAddParentEdge?: (edge: Omit<GraphFixtureEdge, 'id'>) => void
 }
 
@@ -21,6 +30,50 @@ type PanelMode = 'view' | 'add' | 'edit'
 type PanelModeState = {
   nodeId?: string
   mode: PanelMode
+}
+
+const neutralEdgeWeightFormData: EdgeWeightFormData = {
+  probabilityGivenParent: '0.5',
+  probabilityGivenNotParent: '0.5',
+}
+
+function createEmptyParentEdgeFormData() {
+  return {
+    parentId: '',
+    ...neutralEdgeWeightFormData,
+  }
+}
+
+function getEdgeWeightFormData(edge: GraphFixtureEdge): EdgeWeightFormData {
+  return {
+    probabilityGivenParent: String(edge.probabilityGivenParent),
+    probabilityGivenNotParent: String(edge.probabilityGivenNotParent),
+  }
+}
+
+function parseEdgeWeightFormData(data: EdgeWeightFormData): EditableEdgeWeights {
+  return {
+    probabilityGivenParent: Number(data.probabilityGivenParent),
+    probabilityGivenNotParent: Number(data.probabilityGivenNotParent),
+  }
+}
+
+function isProbabilityValid(value: number) {
+  return Number.isFinite(value) && value > 0 && value <= 1
+}
+
+function areEdgeWeightsValid(weights: EditableEdgeWeights) {
+  return isProbabilityValid(weights.probabilityGivenParent)
+    && isProbabilityValid(weights.probabilityGivenNotParent)
+}
+
+function getDerivedLikelihoodRatio(edge: EditableEdgeWeights) {
+  return edge.probabilityGivenParent / edge.probabilityGivenNotParent
+}
+
+function isEdgeWeightFormDataValid(data: EdgeWeightFormData) {
+  return Object.values(data).every((value) => value.trim().length > 0)
+    && areEdgeWeightsValid(parseEdgeWeightFormData(data))
 }
 
 function logOddsToProbability(logOdds: number): number {
@@ -50,7 +103,7 @@ const emptyFormData = {
   bodyText: '',
   kind: 'claim' as GraphFixtureNode['kind'],
   likelihoodPercent: formatLogOddsAsPercent(0) ?? '',
-  parentImportance: '1'
+  parentEdgeWeights: neutralEdgeWeightFormData,
 }
 
 const editableNodeKinds = ['claim', 'evidence', 'objection'] satisfies GraphFixtureNode['kind'][]
@@ -61,6 +114,10 @@ function formatEdgeVerb(kind: GraphFixtureEdge['kind']) {
 
 function getEdgeKindForNodeKind(kind: GraphFixtureNode['kind']): GraphFixtureEdge['kind'] {
   return kind === 'objection' ? 'rebut' : 'support'
+}
+
+function isEvidenceLikeNode(kind: GraphFixtureNode['kind']) {
+  return kind === 'evidence' || kind === 'objection'
 }
 
 function formatEdgeKindLabel(kind: GraphFixtureEdge['kind']) {
@@ -79,11 +136,8 @@ export function GraphDetailsPanel({
 }: GraphDetailsPanelProps) {
   const [modeState, setModeState] = useState<PanelModeState>({ mode: 'view' })
   const [formData, setFormData] = useState(emptyFormData)
-  const [edgeImportanceData, setEdgeImportanceData] = useState<Record<string, string>>({})
-  const [newParentEdge, setNewParentEdge] = useState({
-    parentId: '',
-    importanceToParent: '1'
-  })
+  const [edgeWeightData, setEdgeWeightData] = useState<Record<string, EdgeWeightFormData>>({})
+  const [newParentEdge, setNewParentEdge] = useState(createEmptyParentEdgeFormData)
   const mode = node && modeState.nodeId === node.id ? modeState.mode : 'view'
 
   if (!node) {
@@ -111,53 +165,73 @@ export function GraphDetailsPanel({
   const existingParentIds = new Set(parentRelations.map((relation) => relation.parent.id))
   const availableParentNodes = nodes.filter((candidate) => candidate.id !== node.id && !existingParentIds.has(candidate.id))
   const likelihoodPercentValue = Number(formData.likelihoodPercent)
-  const parentImportanceValue = Number(formData.parentImportance)
+  const parentEdgeWeights = parseEdgeWeightFormData(formData.parentEdgeWeights)
   const derivedEdgeKind = getEdgeKindForNodeKind(formData.kind)
   const derivedEdgeKindLabel = formatEdgeKindLabel(derivedEdgeKind)
-  const edgeImportanceValues = parentRelations.map((relation) => Number(edgeImportanceData[relation.edge.id] ?? relation.edge.importanceToParent))
-  const newParentImportanceValue = Number(newParentEdge.importanceToParent)
+  const existingEdgeWeightForms = parentRelations.map((relation) => (
+    edgeWeightData[relation.edge.id] ?? getEdgeWeightFormData(relation.edge)
+  ))
+  const newParentEdgeWeights = parseEdgeWeightFormData(newParentEdge)
   const isLikelihoodValid =
     formData.likelihoodPercent.trim().length > 0 &&
     Number.isFinite(likelihoodPercentValue) &&
     likelihoodPercentValue > 0 &&
     likelihoodPercentValue < 100
-  const isImportanceValid = (value: number) => Number.isFinite(value) && value > 0 && value <= 10
-  const isParentImportanceValid = isImportanceValid(parentImportanceValue)
-  const areEdgeImportancesValid = edgeImportanceValues.every(isImportanceValid)
+  const areParentEdgeWeightsValid = isEdgeWeightFormDataValid(formData.parentEdgeWeights)
+  const areExistingEdgeWeightsValid = existingEdgeWeightForms.every(isEdgeWeightFormDataValid)
   const isNewParentEdgeValid =
     newParentEdge.parentId.length === 0 ||
-    (isImportanceValid(newParentImportanceValue) && availableParentNodes.some((parent) => parent.id === newParentEdge.parentId))
+    (isEdgeWeightFormDataValid(newParentEdge) && availableParentNodes.some((parent) => parent.id === newParentEdge.parentId))
   const isFormValid =
     (formData.title?.trim() ?? '').length > 0 &&
     (formData.bodyText?.trim() ?? '').length > 0 &&
     isLikelihoodValid &&
-    (mode === 'add' ? isParentImportanceValid : areEdgeImportancesValid && isNewParentEdgeValid)
+    (mode === 'add' ? areParentEdgeWeightsValid : areExistingEdgeWeightsValid && isNewParentEdgeValid)
 
   const handleSave = () => {
     if (!isFormValid) return
 
     const probability = Number(formData.likelihoodPercent) / 100
+    const likelihoodLogOdds = probabilityToLogOdds(probability)
+    const isEvidenceLike = isEvidenceLikeNode(formData.kind)
     const submissionData: Partial<GraphFixtureNode> = {
       title: (formData.title ?? '').trim(),
       bodyText: (formData.bodyText ?? '').trim(),
-      priorOdds: probabilityToLogOdds(probability)
+      // Evidence likelihood is an authored posterior relative to neutral
+      // prior log odds. Claims instead treat this field as their prior.
+      priorOdds: isEvidenceLike ? 0 : likelihoodLogOdds,
     }
 
     if (mode === 'add') {
       onAddSupporting?.(node.id, {
         ...submissionData,
         kind: formData.kind,
+        posteriorOdds: likelihoodLogOdds,
         tags: ['dynamic']
       }, {
         kind: derivedEdgeKind,
-        importanceToParent: parentImportanceValue
+        ...parentEdgeWeights,
       })
     } else if (mode === 'edit') {
+      if (isEvidenceLike) {
+        submissionData.posteriorOdds = likelihoodLogOdds
+      }
       onUpdate?.(node.id, submissionData)
       parentRelations.forEach((relation) => {
-        const nextImportance = Number(edgeImportanceData[relation.edge.id] ?? relation.edge.importanceToParent)
-        if (nextImportance !== relation.edge.importanceToParent) {
-          onUpdateEdge?.(relation.edge.id, { importanceToParent: nextImportance })
+        const nextWeights = parseEdgeWeightFormData(
+          edgeWeightData[relation.edge.id] ?? getEdgeWeightFormData(relation.edge),
+        )
+        const update: Partial<EditableEdgeWeights> = {}
+
+        if (nextWeights.probabilityGivenParent !== relation.edge.probabilityGivenParent) {
+          update.probabilityGivenParent = nextWeights.probabilityGivenParent
+        }
+        if (nextWeights.probabilityGivenNotParent !== relation.edge.probabilityGivenNotParent) {
+          update.probabilityGivenNotParent = nextWeights.probabilityGivenNotParent
+        }
+
+        if (Object.keys(update).length > 0) {
+          onUpdateEdge?.(relation.edge.id, update)
         }
       })
       if (newParentEdge.parentId.length > 0) {
@@ -165,40 +239,53 @@ export function GraphDetailsPanel({
           from: node.id,
           to: newParentEdge.parentId,
           kind: derivedEdgeKind,
-          importanceToParent: newParentImportanceValue,
+          ...newParentEdgeWeights,
         })
       }
     }
     setModeState({ nodeId: node.id, mode: 'view' })
     setFormData(emptyFormData)
-    setEdgeImportanceData({})
-    setNewParentEdge({ parentId: '', importanceToParent: '1' })
+    setEdgeWeightData({})
+    setNewParentEdge(createEmptyParentEdgeFormData())
   }
 
   const enterAddMode = () => {
     setFormData(emptyFormData)
-    setEdgeImportanceData({})
-    setNewParentEdge({ parentId: '', importanceToParent: '1' })
+    setEdgeWeightData({})
+    setNewParentEdge(createEmptyParentEdgeFormData())
     setModeState({ nodeId: node.id, mode: 'add' })
   }
 
   const enterEditMode = () => {
-    const parentImportanceEntries = Object.fromEntries(
-      parentRelations.map((relation) => [relation.edge.id, String(relation.edge.importanceToParent)]),
+    const parentEdgeWeightEntries = Object.fromEntries(
+      parentRelations.map((relation) => [relation.edge.id, getEdgeWeightFormData(relation.edge)]),
     )
     setFormData({
       title: node.title ?? '',
       bodyText: node.bodyText ?? '',
       kind: node.kind,
-      likelihoodPercent: formatLogOddsAsPercent(node.priorOdds) ?? '',
-      parentImportance: '1'
+      likelihoodPercent: formatLogOddsAsPercent(
+        isEvidenceLikeNode(node.kind) ? node.posteriorOdds : node.priorOdds,
+      ) ?? '',
+      parentEdgeWeights: neutralEdgeWeightFormData,
     })
-    setEdgeImportanceData(parentImportanceEntries)
-    setNewParentEdge({
-      parentId: '',
-      importanceToParent: '1'
-    })
+    setEdgeWeightData(parentEdgeWeightEntries)
+    setNewParentEdge(createEmptyParentEdgeFormData())
     setModeState({ nodeId: node.id, mode: 'edit' })
+  }
+
+  const setExistingEdgeWeight = (
+    edge: GraphFixtureEdge,
+    field: keyof EditableEdgeWeights,
+    value: string,
+  ) => {
+    setEdgeWeightData((currentEdgeWeightData) => ({
+      ...currentEdgeWeightData,
+      [edge.id]: {
+        ...(currentEdgeWeightData[edge.id] ?? getEdgeWeightFormData(edge)),
+        [field]: value,
+      },
+    }))
   }
 
   if (mode !== 'view') {
@@ -294,27 +381,52 @@ export function GraphDetailsPanel({
               <h4>Parent Relations</h4>
               {parentRelations.length ? (
                 <div className="node-edge-form__list">
-                  {parentRelations.map((relation) => (
-                    <div className="node-edge-form__row" key={relation.edge.id}>
-                      <p>
-                        This node {formatEdgeVerb(relation.edge.kind)} <strong>{relation.parent.title}</strong>
-                      </p>
-                      <label htmlFor={`edge-importance-${relation.edge.id}`}>Importance to that claim</label>
-                      <input
-                        id={`edge-importance-${relation.edge.id}`}
-                        className="form-input"
-                        max="10"
-                        min="0.001"
-                        onChange={(event) => setEdgeImportanceData({
-                          ...edgeImportanceData,
-                          [relation.edge.id]: event.target.value,
-                        })}
-                        step="0.001"
-                        type="number"
-                        value={edgeImportanceData[relation.edge.id] ?? String(relation.edge.importanceToParent)}
-                      />
-                    </div>
-                  ))}
+                  {parentRelations.map((relation) => {
+                    const weights = edgeWeightData[relation.edge.id]
+                      ?? getEdgeWeightFormData(relation.edge)
+
+                    return (
+                      <div className="node-edge-form__row" key={relation.edge.id}>
+                        <p>
+                          This node {formatEdgeVerb(relation.edge.kind)} <strong>{relation.parent.title}</strong>
+                        </p>
+                        <label htmlFor={`edge-probability-given-parent-${relation.edge.id}`}>
+                          P(this node | parent claim)
+                        </label>
+                        <input
+                          id={`edge-probability-given-parent-${relation.edge.id}`}
+                          className="form-input"
+                          max="1"
+                          min="0.000000001"
+                          onChange={(event) => setExistingEdgeWeight(
+                            relation.edge,
+                            'probabilityGivenParent',
+                            event.target.value,
+                          )}
+                          step="0.001"
+                          type="number"
+                          value={weights.probabilityGivenParent}
+                        />
+                        <label htmlFor={`edge-probability-given-not-parent-${relation.edge.id}`}>
+                          P(this node | not parent claim)
+                        </label>
+                        <input
+                          id={`edge-probability-given-not-parent-${relation.edge.id}`}
+                          className="form-input"
+                          max="1"
+                          min="0.000000001"
+                          onChange={(event) => setExistingEdgeWeight(
+                            relation.edge,
+                            'probabilityGivenNotParent',
+                            event.target.value,
+                          )}
+                          step="0.001"
+                          type="number"
+                          value={weights.probabilityGivenNotParent}
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="node-edge-form__empty">No parent relations.</p>
@@ -339,19 +451,39 @@ export function GraphDetailsPanel({
                     </select>
                   </div>
                   <div className="form-group">
-                    <label htmlFor="new-parent-importance">Importance to that claim</label>
+                    <label htmlFor="new-parent-probability-given-parent">
+                      P(this node | parent claim)
+                    </label>
                     <input
-                      id="new-parent-importance"
+                      id="new-parent-probability-given-parent"
                       className="form-input"
-                      max="10"
-                      min="0.001"
+                      max="1"
+                      min="0.000000001"
                       onChange={(event) => setNewParentEdge({
                         ...newParentEdge,
-                        importanceToParent: event.target.value,
+                        probabilityGivenParent: event.target.value,
                       })}
                       step="0.001"
                       type="number"
-                      value={newParentEdge.importanceToParent}
+                      value={newParentEdge.probabilityGivenParent}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="new-parent-probability-given-not-parent">
+                      P(this node | not parent claim)
+                    </label>
+                    <input
+                      id="new-parent-probability-given-not-parent"
+                      className="form-input"
+                      max="1"
+                      min="0.000000001"
+                      onChange={(event) => setNewParentEdge({
+                        ...newParentEdge,
+                        probabilityGivenNotParent: event.target.value,
+                      })}
+                      step="0.001"
+                      type="number"
+                      value={newParentEdge.probabilityGivenNotParent}
                     />
                   </div>
                 </div>
@@ -361,16 +493,45 @@ export function GraphDetailsPanel({
             <section className="node-section node-edge-form">
               <h4>Relation to selected node: {derivedEdgeKindLabel}</h4>
               <div className="form-group">
-                <label htmlFor="parent-edge-importance">Importance to that claim</label>
+                <label htmlFor="parent-edge-probability-given-parent">
+                  P(new node | selected node)
+                </label>
                 <input
-                  id="parent-edge-importance"
+                  id="parent-edge-probability-given-parent"
                   className="form-input"
-                  max="10"
-                  min="0.001"
-                  onChange={(event) => setFormData({ ...formData, parentImportance: event.target.value })}
+                  max="1"
+                  min="0"
+                  onChange={(event) => setFormData({
+                    ...formData,
+                    parentEdgeWeights: {
+                      ...formData.parentEdgeWeights,
+                      probabilityGivenParent: event.target.value,
+                    },
+                  })}
                   step="0.001"
                   type="number"
-                  value={formData.parentImportance}
+                  value={formData.parentEdgeWeights.probabilityGivenParent}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="parent-edge-probability-given-not-parent">
+                  P(new node | selected node is false)
+                </label>
+                <input
+                  id="parent-edge-probability-given-not-parent"
+                  className="form-input"
+                  max="1"
+                  min="0"
+                  onChange={(event) => setFormData({
+                    ...formData,
+                    parentEdgeWeights: {
+                      ...formData.parentEdgeWeights,
+                      probabilityGivenNotParent: event.target.value,
+                    },
+                  })}
+                  step="0.001"
+                  type="number"
+                  value={formData.parentEdgeWeights.probabilityGivenNotParent}
                 />
               </div>
             </section>
@@ -426,16 +587,26 @@ export function GraphDetailsPanel({
             </dd>
           </>
         ) : null}
-        {formatMetric(node.priorOdds) ? (
+        {isEvidenceLikeNode(node.kind) && formatMetric(node.posteriorOdds) ? (
           <>
-            <dt>Prior likelihood</dt>
-            <dd>{formatLogOddsAsPercent(node.priorOdds)}%</dd>
+            <dt>Evidence likelihood</dt>
+            <dd>{formatLogOddsAsPercent(node.posteriorOdds)}%</dd>
           </>
         ) : null}
-        {formatMetric(node.posteriorOdds) ? (
+        {!isEvidenceLikeNode(node.kind) ? (
           <>
-            <dt>Posterior likelihood</dt>
-            <dd>{formatLogOddsAsPercent(node.posteriorOdds)}%</dd>
+            {formatMetric(node.priorOdds) ? (
+              <>
+                <dt>Prior likelihood</dt>
+                <dd>{formatLogOddsAsPercent(node.priorOdds)}%</dd>
+              </>
+            ) : null}
+            {formatMetric(node.posteriorOdds) ? (
+              <>
+                <dt>Posterior likelihood</dt>
+                <dd>{formatLogOddsAsPercent(node.posteriorOdds)}%</dd>
+              </>
+            ) : null}
           </>
         ) : null}
         {node.kind == 'evidence' && node.evidence ? (
@@ -458,7 +629,9 @@ export function GraphDetailsPanel({
                 <p>
                   This node {formatEdgeVerb(relation.edge.kind)} <strong>{relation.parent.title}</strong>
                 </p>
-                <span>Importance to that claim: {relation.edge.importanceToParent}/10</span>
+                <span>Derived likelihood ratio: {getDerivedLikelihoodRatio(relation.edge).toFixed(3)}</span>
+                <span>P(this node | parent claim): {relation.edge.probabilityGivenParent}</span>
+                <span>P(this node | not parent claim): {relation.edge.probabilityGivenNotParent}</span>
               </article>
             ))}
           </div>

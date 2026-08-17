@@ -10,5 +10,7 @@ public class GraphEdge
 
     public string Kind { get; set; } = string.Empty;
 
-    public decimal ImportanceToParent { get; set; } = 1m;
+    public decimal ProbabilityGivenParent { get; set; } = 0.5m;
+
+    public decimal ProbabilityGivenNotParent { get; set; } = 0.5m;
 }

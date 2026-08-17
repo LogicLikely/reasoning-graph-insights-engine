@@ -56,7 +56,7 @@ export const getInsightsEdgePresentation: GraphMapEdgePresenter<GraphFixtureEdge
   semanticDirectionMatchesHierarchy,
 }) => ({
   className: `insights-graphmap-edge insights-graphmap-edge--${edge.kind}`,
-  label: `${edge.kind === 'support' ? 'Support' : 'Rebut'} · ${edge.importanceToParent}`,
+  label: `${edge.kind === 'support' ? 'Support' : 'Rebut'} · LR ${(edge.probabilityGivenParent / edge.probabilityGivenNotParent).toFixed(3)}`,
   labelStyle: {
     fontSize: 11,
     fontWeight: 700,

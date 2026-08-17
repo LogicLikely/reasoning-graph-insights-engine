@@ -171,7 +171,9 @@ public class GraphServiceTests
                     Id = "E-R-C1",
                     From = "C1",
                     To = "R1",
-                    Kind = "support"
+                    Kind = "support",
+                    ProbabilityGivenParent = 0.82m,
+                    ProbabilityGivenNotParent = 0.18m
                 }
             ]
         };
@@ -198,6 +200,18 @@ public class GraphServiceTests
         Assert.AreEqual("C1", result.Edges[0].From);
         Assert.AreEqual("R1", result.Edges[0].To);
         Assert.AreEqual("support", result.Edges[0].Kind);
+        Assert.AreEqual(0.82m, result.Edges[0].ProbabilityGivenParent);
+        Assert.AreEqual(0.18m, result.Edges[0].ProbabilityGivenNotParent);
+
+        var toDomainGraph = typeof(GraphService).GetMethod(
+            "ToDomainGraph",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(toDomainGraph);
+
+        var roundTrippedGraph = toDomainGraph.Invoke(null, new object?[] { result }) as Graph;
+        Assert.IsNotNull(roundTrippedGraph);
+        Assert.AreEqual(0.82m, roundTrippedGraph.Edges[0].ProbabilityGivenParent);
+        Assert.AreEqual(0.18m, roundTrippedGraph.Edges[0].ProbabilityGivenNotParent);
     }
 
     [TestMethod]
@@ -237,6 +251,164 @@ public class GraphServiceTests
     }
 
     [TestMethod]
+    public async Task AddNodeAsync_RootClaimResetsStalePosteriorToPrior()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var node = new GraphNodeDto
+        {
+            Id = "A",
+            Kind = "claim",
+            Title = "A",
+            BodyText = "A",
+            PriorOdds = 0.7m,
+            PosteriorOdds = 9m
+        };
+        var graph = GraphWith(
+            [Node("A", 0.7m, "claim", 9m)],
+            []);
+
+        repositoryMock
+            .Setup(repository => repository.AddNodeAsync(
+                "sample-medium",
+                node,
+                null,
+                "support",
+                0.5m,
+                0.5m,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).AddNodeAsync(
+            "sample-medium",
+            node,
+            cancellationToken: CancellationToken.None);
+
+        Assert.IsTrue(result);
+        repositoryMock.Verify(
+            repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 1 && expected["A"] == 0.7m);
+    }
+
+    [TestMethod]
+    public async Task AddNodeAsync_ClaimWithParentResetsStalePosteriorAndRecalculatesParent()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var node = new GraphNodeDto
+        {
+            Id = "B",
+            Kind = "claim",
+            Title = "B",
+            BodyText = "B",
+            PriorOdds = 0.6m,
+            PosteriorOdds = 9m
+        };
+        var graph = GraphWith(
+            [
+                Node("A", 0.4m, "claim", 8m),
+                Node("B", 0.6m, "claim", 9m)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 1m, 0.8m, 0.2m)]);
+
+        repositoryMock
+            .Setup(repository => repository.AddNodeAsync(
+                "sample-medium",
+                node,
+                "A",
+                "support",
+                0.8m,
+                0.2m,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).AddNodeAsync(
+            "sample-medium",
+            node,
+            "A",
+            "support",
+            0.8m,
+            0.2m,
+            CancellationToken.None);
+
+        Assert.IsTrue(result);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 2 &&
+            expected["B"] == 0.6m &&
+            expected["A"] == 0.4m);
+    }
+
+    [TestMethod]
+    public async Task AddNodeAsync_EvidenceWithParentPreservesAuthoredPosteriorAndRecalculatesParent()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
+        var node = new GraphNodeDto
+        {
+            Id = "B",
+            Kind = "evidence",
+            Title = "B",
+            BodyText = "B",
+            PriorOdds = 5m,
+            PosteriorOdds = leafLogBayesFactor
+        };
+        var graph = GraphWith(
+            [
+                Node("A", 0.4m),
+                Node("B", 0m, "evidence", leafLogBayesFactor)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 1m, 0.8m, 0.2m)]);
+
+        repositoryMock
+            .Setup(repository => repository.AddNodeAsync(
+                "sample-medium",
+                node,
+                "A",
+                "support",
+                0.8m,
+                0.2m,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object).AddNodeAsync(
+            "sample-medium",
+            node,
+            "A",
+            "support",
+            0.8m,
+            0.2m,
+            CancellationToken.None);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(0m, node.PriorOdds);
+        decimal expectedParentPosterior = 0.4m + TransformLogBayesFactor(
+            leafLogBayesFactor,
+            0.8m,
+            0.2m);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 2 &&
+            Approximately(expected["B"], leafLogBayesFactor) &&
+            Approximately(expected["A"], expectedParentPosterior));
+    }
+
+    [TestMethod]
     public async Task UpdateNodeAsync_PassesUpdateThroughToRepository()
     {
         var repositoryMock = new Mock<IGraphRepository>();
@@ -267,16 +439,68 @@ public class GraphServiceTests
     }
 
     [TestMethod]
-    public async Task UpdateNodeAsync_RecalculatesParentLogOdds()
+    public async Task UpdateNodeAsync_KindOnlyChangeRecalculatesNodeAndAncestors()
     {
         var repositoryMock = new Mock<IGraphRepository>();
+        var update = new GraphNodeUpdateDto { Kind = "claim" };
         var graph = GraphWith(
             [
-                Node("A"),
-                Node("B", 1m, "evidence")
+                Node("A", 0.4m, "claim", 8m),
+                Node("B", 0.6m, "claim", 9m)
             ],
-            [Edge("E-B-A", "B", "A", "support", 10)]);
-        var update = new GraphNodeUpdateDto { PriorOdds = 1m };
+            [Edge("E-B-A", "B", "A", "support", 1m, 0.8m, 0.2m)]);
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync(
+                "sample-medium",
+                "B",
+                update,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .UpdateNodeAsync("sample-medium", "B", update);
+
+        Assert.IsTrue(result);
+        repositoryMock.Verify(
+            repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 2 &&
+            expected["B"] == 0.6m &&
+            expected["A"] == 0.4m);
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_RecalculatesParentAsPriorPlusLogBayesFactor()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
+        const decimal probabilityGivenParent = 0.8m;
+        const decimal probabilityGivenNotParent = 0.2m;
+        var graph = GraphWith(
+            [
+                Node("A", 0.4m),
+                Node("B", 0m, "evidence", leafLogBayesFactor)
+            ],
+            [
+                Edge(
+                    "E-B-A",
+                    "B",
+                    "A",
+                    "support",
+                    10m,
+                    probabilityGivenParent,
+                    probabilityGivenNotParent)
+            ]);
+        var update = new GraphNodeUpdateDto { PriorOdds = 0m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "B", update, It.IsAny<CancellationToken>()))
@@ -288,25 +512,33 @@ public class GraphServiceTests
         var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "B", update);
 
         Assert.IsTrue(result);
+        decimal expectedPosterior = 0.4m + TransformLogBayesFactor(
+            leafLogBayesFactor,
+            probabilityGivenParent,
+            probabilityGivenNotParent);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
+            expected.Count == 2 &&
+            Approximately(expected["B"], leafLogBayesFactor) &&
+            Approximately(expected["A"], expectedPosterior));
     }
 
     [TestMethod]
     public async Task UpdateNodeAsync_RecalculatesParentUsingSiblings()
     {
         var repositoryMock = new Mock<IGraphRepository>();
+        decimal firstLeafLogBayesFactor = (decimal)Math.Log(4d);
+        decimal secondLeafLogBayesFactor = (decimal)Math.Log(2d);
         var graph = GraphWith(
             [
-                Node("B"),
-                Node("E", 1m, "evidence"),
-                Node("F", -0.5m, "evidence")
+                Node("B", 0.3m),
+                Node("E", 0m, "evidence", firstLeafLogBayesFactor),
+                Node("F", 0m, "evidence", secondLeafLogBayesFactor)
             ],
             [
-                Edge("E-E-B", "E", "B", "support", 10),
-                Edge("E-F-B", "F", "B", "support", 10)
+                Edge("E-E-B", "E", "B", "support", 10m, 0.8m, 0.2m),
+                Edge("E-F-B", "F", "B", "support", 10m, 0.7m, 0.4m)
             ]);
-        var update = new GraphNodeUpdateDto { PriorOdds = -0.5m };
+        var update = new GraphNodeUpdateDto { PriorOdds = 0m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "F", update, It.IsAny<CancellationToken>()))
@@ -318,25 +550,31 @@ public class GraphServiceTests
         var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "F", update);
 
         Assert.IsTrue(result);
+        decimal expectedPosterior = 0.3m +
+            TransformLogBayesFactor(firstLeafLogBayesFactor, 0.8m, 0.2m) +
+            TransformLogBayesFactor(secondLeafLogBayesFactor, 0.7m, 0.4m);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && Approximately(expected["B"], (decimal)Math.Log(100d)));
+            expected.Count == 2 &&
+            Approximately(expected["F"], secondLeafLogBayesFactor) &&
+            Approximately(expected["B"], expectedPosterior));
     }
 
     [TestMethod]
     public async Task UpdateNodeAsync_RecalculatesAncestors()
     {
         var repositoryMock = new Mock<IGraphRepository>();
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
         var graph = GraphWith(
             [
-                Node("A"),
-                Node("B"),
-                Node("F", 1m, "evidence")
+                Node("A", 0.4m),
+                Node("B", 0.3m),
+                Node("F", 0m, "evidence", leafLogBayesFactor)
             ],
             [
-                Edge("E-F-B", "F", "B", "support", 10),
-                Edge("E-B-A", "B", "A", "support", 10)
+                Edge("E-F-B", "F", "B", "support", 10m, 0.8m, 0.2m),
+                Edge("E-B-A", "B", "A", "support", 10m, 0.7m, 0.3m)
             ]);
-        var update = new GraphNodeUpdateDto { PriorOdds = 1m };
+        var update = new GraphNodeUpdateDto { PriorOdds = 0m };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "F", update, It.IsAny<CancellationToken>()))
@@ -348,23 +586,83 @@ public class GraphServiceTests
         var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "F", update);
 
         Assert.IsTrue(result);
+        decimal intermediateLogBayesFactor = TransformLogBayesFactor(
+            leafLogBayesFactor,
+            0.8m,
+            0.2m);
+        decimal expectedIntermediatePosterior = 0.3m + intermediateLogBayesFactor;
+        decimal expectedRootPosterior = 0.4m + TransformLogBayesFactor(
+            intermediateLogBayesFactor,
+            0.7m,
+            0.3m);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 2 &&
-            Approximately(expected["B"], (decimal)Math.Log(10d)) &&
-            Approximately(expected["A"], (decimal)Math.Log(100d)));
+            expected.Count == 3 &&
+            Approximately(expected["F"], leafLogBayesFactor) &&
+            Approximately(expected["B"], expectedIntermediatePosterior) &&
+            Approximately(expected["A"], expectedRootPosterior));
     }
 
     [TestMethod]
-    public async Task UpdateEdgeAsync_RecalculatesParentAfterImportanceUpdate()
+    public async Task UpdateNodeAsync_InternalClaimPriorUpdatePersistsClaimAndAncestors()
     {
         var repositoryMock = new Mock<IGraphRepository>();
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
         var graph = GraphWith(
             [
-                Node("A"),
-                Node("B", 1m, "evidence")
+                Node("A", 0.4m),
+                Node("B", 0.6m),
+                Node("F", 0m, "evidence", leafLogBayesFactor)
             ],
-            [Edge("E-B-A", "B", "A", "support", 10)]);
-        var update = new GraphEdgeUpdateDto { ImportanceToParent = 10 };
+            [
+                Edge("E-F-B", "F", "B", "support", 10m, 0.8m, 0.2m),
+                Edge("E-B-A", "B", "A", "support", 10m, 0.7m, 0.3m)
+            ]);
+        var update = new GraphNodeUpdateDto { PriorOdds = 0.6m };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync(
+                "sample-medium",
+                "B",
+                update,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .UpdateNodeAsync("sample-medium", "B", update);
+
+        Assert.IsTrue(result);
+        decimal intermediateLogBayesFactor = TransformLogBayesFactor(
+            leafLogBayesFactor,
+            0.8m,
+            0.2m);
+        decimal expectedIntermediatePosterior = 0.6m + intermediateLogBayesFactor;
+        decimal expectedRootPosterior = 0.4m + TransformLogBayesFactor(
+            intermediateLogBayesFactor,
+            0.7m,
+            0.3m);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 2 &&
+            Approximately(expected["B"], expectedIntermediatePosterior) &&
+            Approximately(expected["A"], expectedRootPosterior));
+    }
+
+    [TestMethod]
+    public async Task UpdateEdgeAsync_RecalculatesParentAfterConditionalProbabilityUpdate()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = GraphWith(
+            [
+                Node("A", 0.4m),
+                Node("B", 0m, "evidence", leafLogBayesFactor)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 10m, 0.8m, 0.2m)]);
+        var update = new GraphEdgeUpdateDto { ProbabilityGivenParent = 0.8m };
 
         repositoryMock
             .Setup(repository => repository.UpdateEdgeAsync("sample-medium", "E-B-A", update, It.IsAny<CancellationToken>()))
@@ -376,15 +674,109 @@ public class GraphServiceTests
         var result = await CreateService(repositoryMock.Object).UpdateEdgeAsync("sample-medium", "E-B-A", update);
 
         Assert.IsTrue(result);
+        decimal expectedPosterior = 0.4m + TransformLogBayesFactor(
+            leafLogBayesFactor,
+            0.8m,
+            0.2m);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
+            expected.Count == 1 && Approximately(expected["A"], expectedPosterior));
     }
 
     [TestMethod]
-    public async Task UpdateNodeAsync_RootUpdateSucceedsWithoutAncestorBatch()
+    public async Task UpdateEdgeAsync_ProbabilityOnlyUpdateRecalculatesAndPersistsPosteriorOdds()
     {
         var repositoryMock = new Mock<IGraphRepository>();
-        var graph = GraphWith([Node("A", 1m)], []);
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = GraphWith(
+            [
+                Node("A", 0.4m),
+                Node("B", 0m, "evidence", leafLogBayesFactor)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 1m, 0.8m, 0.2m)]);
+        var update = new GraphEdgeUpdateDto
+        {
+            ProbabilityGivenParent = 0.8m,
+            ProbabilityGivenNotParent = 0.2m
+        };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateEdgeAsync(
+                "sample-medium",
+                "E-B-A",
+                update,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .UpdateEdgeAsync("sample-medium", "E-B-A", update);
+
+        Assert.IsTrue(result);
+        repositoryMock.Verify(
+            repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        decimal expectedPosterior = 0.4m + TransformLogBayesFactor(
+            leafLogBayesFactor,
+            0.8m,
+            0.2m);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 1 && Approximately(expected["A"], expectedPosterior));
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_PosteriorOnlyUpdateRecalculatesParent()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = GraphWith(
+            [
+                Node("A", 0.4m),
+                Node("B", 0m, "evidence", leafLogBayesFactor)
+            ],
+            [Edge("E-B-A", "B", "A", "support", 1m, 0.8m, 0.2m)]);
+        var update = new GraphNodeUpdateDto
+        {
+            PosteriorOdds = leafLogBayesFactor
+        };
+
+        repositoryMock
+            .Setup(repository => repository.UpdateNodeAsync(
+                "sample-medium",
+                "B",
+                update,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .UpdateNodeAsync("sample-medium", "B", update);
+
+        Assert.IsTrue(result);
+        decimal expectedPosterior = 0.4m + TransformLogBayesFactor(
+            leafLogBayesFactor,
+            0.8m,
+            0.2m);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 2 &&
+            Approximately(expected["B"], leafLogBayesFactor) &&
+            Approximately(expected["A"], expectedPosterior));
+    }
+
+    [TestMethod]
+    public async Task UpdateNodeAsync_RootWithoutEvidencePersistsPriorAsPosterior()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith([Node("A", 1m, "claim", 9m)], []);
         var update = new GraphNodeUpdateDto { PriorOdds = 1m };
 
         repositoryMock
@@ -397,25 +789,22 @@ public class GraphServiceTests
         var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "A", update);
 
         Assert.IsTrue(result);
-        repositoryMock.Verify(
-            repository => repository.UpdateNodePosteriorOddsBatchAsync(
-                It.IsAny<int>(),
-                It.IsAny<IReadOnlyDictionary<string, decimal>>(),
-                It.IsAny<CancellationToken>()),
-            Times.Never);
+        VerifyBatch(repositoryMock, graph.Id, expected =>
+            expected.Count == 1 && expected["A"] == 1m);
     }
 
     [TestMethod]
-    public async Task UpdateNodeAsync_UsesLrBelowOneForCounterImpact()
+    public async Task UpdateNodeAsync_UsesBayesFactorBelowOneForCounterImpact()
     {
         var repositoryMock = new Mock<IGraphRepository>();
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
         var graph = GraphWith(
             [
-                Node("A"),
-                Node("B", -1m, "evidence")
+                Node("A", 0.25m),
+                Node("B", 0m, "objection", leafLogBayesFactor)
             ],
-            [Edge("E-B-A", "B", "A", "rebut", 0.1m)]);
-        var update = new GraphNodeUpdateDto { PriorOdds = -1m };
+            [Edge("E-B-A", "B", "A", "rebut", 0.1m, 0.2m, 0.8m)]);
+        var update = new GraphNodeUpdateDto { PosteriorOdds = leafLogBayesFactor };
 
         repositoryMock
             .Setup(repository => repository.UpdateNodeAsync("sample-medium", "B", update, It.IsAny<CancellationToken>()))
@@ -427,30 +816,37 @@ public class GraphServiceTests
         var result = await CreateService(repositoryMock.Object).UpdateNodeAsync("sample-medium", "B", update);
 
         Assert.IsTrue(result);
+        decimal expectedPosterior = 0.25m + TransformLogBayesFactor(
+            leafLogBayesFactor,
+            0.2m,
+            0.8m);
         VerifyBatch(repositoryMock, graph.Id, expected =>
-            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(0.1d)));
+            expected.Count == 2 &&
+            Approximately(expected["B"], leafLogBayesFactor) &&
+            Approximately(expected["A"], expectedPosterior));
     }
 
     [TestMethod]
     public async Task DeleteNodeAsync_RecalculatesParentFromRemainingChildren()
     {
         var repositoryMock = new Mock<IGraphRepository>();
+        decimal remainingLeafLogBayesFactor = (decimal)Math.Log(2d);
         var graphBeforeDelete = GraphWith(
             [
-                Node("A"),
-                Node("B", 1m, "evidence"),
-                Node("C", 0.5m, "evidence")
+                Node("A", 0.4m),
+                Node("B", 0m, "evidence", (decimal)Math.Log(4d)),
+                Node("C", 0m, "evidence", remainingLeafLogBayesFactor)
             ],
             [
-                Edge("E-B-A", "B", "A", "support", 10),
-                Edge("E-C-A", "C", "A", "support", 10)
+                Edge("E-B-A", "B", "A", "support", 10m, 0.8m, 0.2m),
+                Edge("E-C-A", "C", "A", "support", 10m, 0.7m, 0.4m)
             ]);
         var graphAfterDelete = GraphWith(
             [
-                Node("A"),
-                Node("C", 0.5m, "evidence")
+                Node("A", 0.4m),
+                Node("C", 0m, "evidence", remainingLeafLogBayesFactor)
             ],
-            [Edge("E-C-A", "C", "A", "support", 10)]);
+            [Edge("E-C-A", "C", "A", "support", 10m, 0.7m, 0.4m)]);
 
         repositoryMock
             .SetupSequence(repository => repository.GetBySlugAsync("sample-medium", It.IsAny<CancellationToken>()))
@@ -463,12 +859,16 @@ public class GraphServiceTests
         var result = await CreateService(repositoryMock.Object).DeleteNodeAsync("sample-medium", "B");
 
         Assert.IsTrue(result);
+        decimal expectedPosterior = 0.4m + TransformLogBayesFactor(
+            remainingLeafLogBayesFactor,
+            0.7m,
+            0.4m);
         VerifyBatch(repositoryMock, graphAfterDelete.Id, expected =>
-            expected.Count == 1 && Approximately(expected["A"], (decimal)Math.Log(10d)));
+            expected.Count == 1 && Approximately(expected["A"], expectedPosterior));
     }
 
     [TestMethod]
-    public async Task DeleteNodeAsync_RecalculatesParentToZeroWhenNoChildrenRemain()
+    public async Task DeleteNodeAsync_ResetsParentPosteriorToPriorWhenNoChildrenRemain()
     {
         var repositoryMock = new Mock<IGraphRepository>();
         var graphBeforeDelete = GraphWith(
@@ -549,7 +949,11 @@ public class GraphServiceTests
         };
     }
 
-    private static GraphNode Node(string id, decimal logOdds = 0m, string kind = "claim")
+    private static GraphNode Node(
+        string id,
+        decimal priorOdds = 0m,
+        string kind = "claim",
+        decimal? posteriorOdds = null)
     {
         return new GraphNode
         {
@@ -557,8 +961,8 @@ public class GraphServiceTests
             Kind = kind,
             Title = id,
             BodyText = id,
-            PriorOdds = logOdds,
-            PosteriorOdds = logOdds
+            PriorOdds = priorOdds,
+            PosteriorOdds = posteriorOdds ?? priorOdds
         };
     }
 
@@ -567,15 +971,26 @@ public class GraphServiceTests
         string from,
         string to,
         string kind,
-        decimal importanceToParent)
+        decimal likelihoodRatio,
+        decimal probabilityGivenParent = 0.5m,
+        decimal probabilityGivenNotParent = 0.5m)
     {
+        bool hasExplicitProbabilities =
+            probabilityGivenParent != 0.5m ||
+            probabilityGivenNotParent != 0.5m;
+
         return new GraphEdge
         {
             Id = id,
             From = from,
             To = to,
             Kind = kind,
-            ImportanceToParent = importanceToParent
+            ProbabilityGivenParent = hasExplicitProbabilities
+                ? probabilityGivenParent
+                : likelihoodRatio >= 1m ? 1m : likelihoodRatio,
+            ProbabilityGivenNotParent = hasExplicitProbabilities
+                ? probabilityGivenNotParent
+                : likelihoodRatio >= 1m ? 1m / likelihoodRatio : 1m
         };
     }
 
@@ -689,6 +1104,22 @@ public class GraphServiceTests
     private static bool Approximately(decimal actual, decimal expected, decimal tolerance = 0.000001m)
     {
         return Math.Abs(actual - expected) <= tolerance;
+    }
+
+    private static decimal TransformLogBayesFactor(
+        decimal childLogBayesFactor,
+        decimal probabilityGivenParent,
+        decimal probabilityGivenNotParent)
+    {
+        double childBayesFactor = Math.Exp((double)childLogBayesFactor);
+        double numerator =
+            childBayesFactor * (double)probabilityGivenParent +
+            (1d - (double)probabilityGivenParent);
+        double denominator =
+            childBayesFactor * (double)probabilityGivenNotParent +
+            (1d - (double)probabilityGivenNotParent);
+
+        return (decimal)Math.Log(numerator / denominator);
     }
 
     private static void VerifyBatch(

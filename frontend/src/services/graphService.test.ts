@@ -111,6 +111,82 @@ describe('graphService', () => {
     expect(getDefaultGraphDataSource()).toBe('fixture')
   })
 
+  it('passes both edge probabilities when adding a node with a parent', async () => {
+    const postSpy = vi.fn().mockResolvedValue({})
+
+    vi.doMock('./httpClient', () => ({
+      httpClient: { post: postSpy },
+    }))
+
+    const { addNode } = await import('./graphService')
+    const node = {
+      id: 'E1',
+      kind: 'evidence' as const,
+      title: 'Evidence',
+      bodyText: 'Evidence body',
+      priorOdds: 0,
+      posteriorOdds: 0,
+    }
+    const edge = {
+      kind: 'support' as const,
+      probabilityGivenParent: 0.8,
+      probabilityGivenNotParent: 0.2,
+    }
+
+    await addNode('sample-medium', node, 'C1', edge)
+
+    expect(postSpy).toHaveBeenCalledWith('/api/graphs/sample-medium/nodes', node, {
+      params: {
+        parentID: 'C1',
+        edgeKind: 'support',
+        probabilityGivenParent: 0.8,
+        probabilityGivenNotParent: 0.2,
+      },
+    })
+  })
+
+  it('posts both conditional probabilities when adding an edge', async () => {
+    const postSpy = vi.fn().mockResolvedValue({})
+
+    vi.doMock('./httpClient', () => ({
+      httpClient: { post: postSpy },
+    }))
+
+    const { addEdge } = await import('./graphService')
+    const edge = {
+      from: 'E1',
+      to: 'C1',
+      kind: 'support' as const,
+      probabilityGivenParent: 0.8,
+      probabilityGivenNotParent: 0.2,
+    }
+
+    await addEdge('sample-medium', edge)
+
+    expect(postSpy).toHaveBeenCalledWith('/api/graphs/sample-medium/edges', edge)
+  })
+
+  it('patches both conditional probabilities together', async () => {
+    const patchSpy = vi.fn().mockResolvedValue({})
+
+    vi.doMock('./httpClient', () => ({
+      httpClient: { patch: patchSpy },
+    }))
+
+    const { updateEdge } = await import('./graphService')
+    const update = {
+      probabilityGivenParent: 0.7,
+      probabilityGivenNotParent: 0.3,
+    }
+
+    await updateEdge('sample-medium', 'E-C1-E1', update)
+
+    expect(patchSpy).toHaveBeenCalledWith(
+      '/api/graphs/sample-medium/edges/E-C1-E1',
+      update,
+    )
+  })
+
   it('sends the fixture graph to the counter-set API in fixture mode', async () => {
     const fixtureGraph = {
       slug: 'sample-medium',
@@ -118,7 +194,14 @@ describe('graphService', () => {
         { id: 'R1', kind: 'root', priorOdds: 0, posteriorOdds: 0 },
         { id: 'O1', kind: 'objection', priorOdds: 2, posteriorOdds: 2 },
       ],
-      edges: [{ id: 'O1-R1', from: 'O1', to: 'R1', kind: 'rebut', importanceToParent: 10 }],
+      edges: [{
+        id: 'O1-R1',
+        from: 'O1',
+        to: 'R1',
+        kind: 'rebut',
+        probabilityGivenParent: 0.5,
+        probabilityGivenNotParent: 0.5,
+      }],
     }
     const fixtureSpy = vi.fn().mockResolvedValue(fixtureGraph)
     const postSpy = vi.fn().mockResolvedValue({ data: { counterNodeIds: ['O1'] } })

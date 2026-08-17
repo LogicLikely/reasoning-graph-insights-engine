@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Backend.Models.Dto;
 using Backend.Services;
 using Backend.Seeding;
@@ -149,10 +150,18 @@ public class GraphsController : ControllerBase
         CancellationToken cancellationToken,
         [FromQuery] string? parentID = null,
         [FromQuery] string edgeKind = "support",
-        [FromQuery] decimal importanceToParent = 1m)
+        [FromQuery, Range(typeof(decimal), "0.000000001", "1")] decimal probabilityGivenParent = 0.5m,
+        [FromQuery, Range(typeof(decimal), "0.000000001", "1")] decimal probabilityGivenNotParent = 0.5m)
     {
         Console.WriteLine($"Adding node to graph {slug}");
-        var success = await _graphService.AddNodeAsync(slug, nodeDto, parentID, edgeKind, importanceToParent, cancellationToken);
+        var success = await _graphService.AddNodeAsync(
+            slug,
+            nodeDto,
+            parentID,
+            edgeKind,
+            probabilityGivenParent,
+            probabilityGivenNotParent,
+            cancellationToken);
 
         if (!success)
         {

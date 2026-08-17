@@ -41,14 +41,16 @@ const moreNodesGraph: GraphFixture = {
       from: 'E3',
       to: 'R1',
       kind: 'support',
-      importanceToParent: 4,
+      probabilityGivenParent: 0.4,
+      probabilityGivenNotParent: 0.1,
     },
     {
       id: 'E-R-O3',
       from: 'O3',
       to: 'R1',
       kind: 'rebut',
-      importanceToParent: 3,
+      probabilityGivenParent: 0.3,
+      probabilityGivenNotParent: 0.1,
     },
   ],
 }
