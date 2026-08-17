@@ -32,11 +32,13 @@ public sealed class GraphServicePerformanceReportingTests
         var result = await service.GetMinimalCounterSetAsync(
             graph.Slug,
             "R",
+            "  benchmark-set-success  ",
             CancellationToken.None);
 
         Assert.IsNotNull(result);
         CollectionAssert.AreEqual(new[] { "O1" }, result);
         var run = AssertSingleRun(store);
+        Assert.AreEqual("benchmark-set-success", run.BenchmarkSetId);
         Assert.AreEqual(1L, run.RunNumber);
         Assert.AreEqual(PerformanceAlgorithmNames.MinimalCounterSet, run.Algorithm.Name);
         Assert.AreEqual(PerformanceAlgorithmImplementations.Greedy, run.Algorithm.Implementation);
@@ -317,6 +319,7 @@ public sealed class GraphServicePerformanceReportingTests
             graphBeforeUpdate.Slug,
             "F",
             update,
+            "benchmark-set-leaf",
             CancellationToken.None);
 
         Assert.IsTrue(updated);
@@ -324,6 +327,7 @@ public sealed class GraphServicePerformanceReportingTests
             1m,
             graphBeforeUpdate.Nodes.Single(candidate => candidate.Id == "F").PriorOdds);
         var run = AssertSingleRun(store);
+        Assert.AreEqual("benchmark-set-leaf", run.BenchmarkSetId);
         Assert.AreEqual(PerformanceAlgorithmNames.LeafUpdate, run.Algorithm.Name);
         Assert.AreEqual(PerformanceAlgorithmImplementations.Current, run.Algorithm.Implementation);
         Assert.AreEqual("database", run.Invocation.DataSource);
@@ -401,10 +405,12 @@ public sealed class GraphServicePerformanceReportingTests
                 graph.Slug,
                 "F",
                 update,
+                "benchmark-set-leaf-failed",
                 CancellationToken.None));
 
         Assert.AreSame(persistenceFailure, thrown);
         var run = AssertSingleRun(store);
+        Assert.AreEqual("benchmark-set-leaf-failed", run.BenchmarkSetId);
         Assert.AreEqual(PerformanceAlgorithmNames.LeafUpdate, run.Algorithm.Name);
         Assert.AreEqual(PerformanceRunStatuses.Failed, run.Outcome.Status);
         Assert.AreEqual(typeof(InvalidOperationException).FullName, run.Outcome.ErrorType);
@@ -445,10 +451,12 @@ public sealed class GraphServicePerformanceReportingTests
             service.GetEvidenceImpactRankingAsync(
                 graph.Slug,
                 "missing",
+                "benchmark-set-failed",
                 CancellationToken.None));
 
         StringAssert.Contains(exception.Message, "missing");
         var run = AssertSingleRun(store);
+        Assert.AreEqual("benchmark-set-failed", run.BenchmarkSetId);
         Assert.AreEqual(PerformanceAlgorithmNames.EvidenceImpactRanking, run.Algorithm.Name);
         Assert.AreEqual(PerformanceRunStatuses.Failed, run.Outcome.Status);
         Assert.AreEqual(typeof(InvalidOperationException).FullName, run.Outcome.ErrorType);
@@ -471,9 +479,11 @@ public sealed class GraphServicePerformanceReportingTests
         await Assert.ThrowsExceptionAsync<OperationCanceledException>(() =>
             service.GetNodeRobustnessRankingAsync(
                 graph.Slug,
+                "benchmark-set-cancelled",
                 cancellation.Token));
 
         var run = AssertSingleRun(store);
+        Assert.AreEqual("benchmark-set-cancelled", run.BenchmarkSetId);
         Assert.AreEqual(PerformanceAlgorithmNames.RobustnessRanking, run.Algorithm.Name);
         Assert.AreEqual(PerformanceRunStatuses.Cancelled, run.Outcome.Status);
         Assert.AreEqual(typeof(OperationCanceledException).FullName, run.Outcome.ErrorType);
@@ -673,6 +683,19 @@ public sealed class GraphServicePerformanceReportingTests
             var stored = run with { RunNumber = Runs.Count + 1L };
             Runs.Add(stored);
             return Task.FromResult(stored);
+        }
+
+        public Task<PerformanceBenchmarkSet> CreateBenchmarkSetAsync(
+            string name,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new PerformanceBenchmarkSet
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = name,
+                CreatedAtUtc = DateTimeOffset.UtcNow
+            });
         }
     }
 

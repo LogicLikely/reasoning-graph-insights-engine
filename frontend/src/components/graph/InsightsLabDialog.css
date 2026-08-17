@@ -58,6 +58,7 @@
 .insights-lab-dialog__tabs button,
 .insights-lab-dialog__running button,
 .insights-lab-dialog__operation > button,
+.insights-lab-dialog__benchmark-create button,
 .insights-lab-dialog__history-table button,
 .insights-lab-dialog__history-detail-toolbar button {
   border: 1px solid var(--color-border-strong);
@@ -83,8 +84,9 @@
 
 .insights-lab-dialog__tabs {
   grid-area: tabs;
+  align-self: end;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 0.25rem;
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
@@ -173,6 +175,68 @@
 
 .insights-lab-dialog__panel {
   padding-top: 1rem;
+}
+
+.insights-lab-dialog__benchmark-sets {
+  display: grid;
+  gap: 0.75rem 1rem;
+  grid-template-columns: minmax(13rem, 0.75fr) minmax(18rem, 1.25fr);
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.85rem;
+  background: rgba(233, 240, 232, 0.58);
+}
+
+.insights-lab-dialog__benchmark-sets > div,
+.insights-lab-dialog__benchmark-create {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.insights-lab-dialog__benchmark-sets label {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.insights-lab-dialog__benchmark-sets select,
+.insights-lab-dialog__benchmark-sets input {
+  min-width: 0;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.55rem;
+  background: #fff;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.insights-lab-dialog__benchmark-sets small {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.insights-lab-dialog__benchmark-create > div {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.insights-lab-dialog__benchmark-create button {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.55rem;
+  color: var(--color-accent);
+}
+
+.insights-lab-dialog__benchmark-sets > p {
+  grid-column: 1 / -1;
+  color: #7e1d1d;
+  font-size: 0.8rem;
+  font-weight: 650;
 }
 
 .insights-lab-dialog__context {
@@ -409,6 +473,24 @@
   font-weight: 700;
 }
 
+.insights-lab-dialog__report > .insights-lab-dialog__report-benchmark {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.55rem;
+  color: var(--color-text);
+}
+
+.insights-lab-dialog__report-benchmark span {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.insights-lab-dialog__report-benchmark code {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
 .insights-lab-dialog__statuses {
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -545,6 +627,7 @@
   }
 
   .insights-lab-dialog__operations,
+  .insights-lab-dialog__benchmark-sets,
   .insights-lab-dialog__preview > div,
   .insights-lab-dialog__report-section > dl {
     grid-template-columns: 1fr;
@@ -552,6 +635,14 @@
 
   .insights-lab-dialog__operation {
     align-items: flex-start;
+  }
+
+  .insights-lab-dialog__benchmark-sets {
+    grid-template-columns: 1fr;
+  }
+
+  .insights-lab-dialog__benchmark-sets > p {
+    grid-column: 1;
   }
 }
 
@@ -577,6 +668,10 @@
 
   .insights-lab-dialog__operation {
     flex-direction: column;
+  }
+
+  .insights-lab-dialog__benchmark-create > div {
+    grid-template-columns: 1fr;
   }
 
   .insights-lab-dialog__operation > button {

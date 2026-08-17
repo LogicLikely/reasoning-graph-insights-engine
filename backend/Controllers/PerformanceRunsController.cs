@@ -20,4 +20,25 @@ public sealed class PerformanceRunsController : ControllerBase
         var report = await _performanceRunStore.ReadAsync(cancellationToken);
         return Ok(report);
     }
+
+    [HttpPost("benchmark-sets")]
+    public async Task<IActionResult> CreateBenchmarkSet(
+        [FromBody] CreatePerformanceBenchmarkSetRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Name))
+        {
+            return BadRequest(new { message = "A benchmark set name is required." });
+        }
+
+        var benchmarkSet = await _performanceRunStore.CreateBenchmarkSetAsync(
+            request.Name,
+            cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, benchmarkSet);
+    }
+}
+
+public sealed record CreatePerformanceBenchmarkSetRequest
+{
+    public string? Name { get; init; }
 }

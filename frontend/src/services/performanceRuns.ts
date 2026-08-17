@@ -1,5 +1,11 @@
 import { httpClient } from './httpClient'
 
+export type BenchmarkSet = {
+  id: string
+  name: string
+  createdAtUtc: string
+}
+
 export type PerformanceAlgorithmInfo = {
   name?: string
   implementation?: string
@@ -79,6 +85,7 @@ export type PerformanceOutcomeInfo = {
 export type PerformanceRunRecord = {
   runNumber: number
   startedAtUtc?: string
+  benchmarkSetId?: string | null
   algorithm?: PerformanceAlgorithmInfo
   build?: PerformanceBuildInfo
   graph?: PerformanceGraphInfo
@@ -91,13 +98,22 @@ export type PerformanceRunRecord = {
 }
 
 export type PerformanceReportDocument = {
-  schemaVersion?: number
+  schemaVersion: number
+  benchmarkSets: BenchmarkSet[]
   runs: PerformanceRunRecord[]
   [key: string]: unknown
 }
 
 export async function getPerformanceRuns(): Promise<PerformanceReportDocument> {
   const response = await httpClient.get<PerformanceReportDocument>('/api/performance-runs')
+
+  return response.data
+}
+
+export async function createBenchmarkSet(name: string): Promise<BenchmarkSet> {
+  const response = await httpClient.post<BenchmarkSet>('/api/performance-runs/benchmark-sets', {
+    name,
+  })
 
   return response.data
 }

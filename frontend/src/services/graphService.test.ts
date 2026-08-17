@@ -293,6 +293,76 @@ describe('graphService', () => {
     )
   })
 
+  it('tags every Lab insight request with the selected benchmark set', async () => {
+    const postSpy = vi.fn().mockResolvedValue({
+      data: {
+        counterNodeIds: [],
+        proofStatus: 'proven',
+        runNumber: 12,
+        supportingEvidence: [],
+        counterEvidence: [],
+      },
+    })
+    const patchSpy = vi.fn().mockResolvedValue({})
+    vi.doMock('./httpClient', () => ({
+      httpClient: { patch: patchSpy, post: postSpy },
+    }))
+
+    const {
+      getBoundedNodeCounterSet,
+      getEvidenceImpactRanking,
+      getLeastRobustNode,
+      getNodeCounterSet,
+      getNodeRobustnessRanking,
+      updateNode,
+    } = await import('./graphService')
+    const signal = new AbortController().signal
+    const headers = { 'X-Insights-Benchmark-Set-Id': 'benchmark-01' }
+
+    await getNodeCounterSet('sample-medium', 'R1', 'database', signal, 'benchmark-01')
+    await getBoundedNodeCounterSet('sample-medium', 'R1', 'database', signal, 'benchmark-01')
+    await getEvidenceImpactRanking('sample-medium', 'R1', 'database', undefined, 'benchmark-01')
+    await getLeastRobustNode('sample-medium', 'database', signal, 'benchmark-01')
+    await getNodeRobustnessRanking('sample-medium', 'database', signal, 'benchmark-01')
+    await updateNode('sample-medium', 'E1', { priorOdds: 2 }, 'benchmark-01')
+
+    expect(postSpy).toHaveBeenNthCalledWith(
+      1,
+      '/api/graphs/sample-medium/nodes/R1/minimal-counter-set',
+      undefined,
+      { signal, headers },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/graphs/sample-medium/nodes/R1/bounded-minimal-counter-set',
+      undefined,
+      { signal, headers },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      3,
+      '/api/graphs/sample-medium/nodes/R1/evidence-impact-ranking',
+      undefined,
+      { headers },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      4,
+      '/api/graphs/sample-medium/least-robust-node',
+      undefined,
+      { signal, headers },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      5,
+      '/api/graphs/sample-medium/node-robustness-ranking',
+      undefined,
+      { signal, headers },
+    )
+    expect(patchSpy).toHaveBeenCalledWith(
+      '/api/graphs/sample-medium/nodes/E1',
+      { priorOdds: 2 },
+      { headers },
+    )
+  })
+
   it('posts selected stress graph IDs to the reset endpoint', async () => {
     const postSpy = vi.fn().mockResolvedValue({})
 

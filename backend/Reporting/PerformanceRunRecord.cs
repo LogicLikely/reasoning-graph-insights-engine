@@ -6,6 +6,8 @@ public sealed record PerformanceRunRecord
 {
     public long RunNumber { get; init; }
 
+    public string? BenchmarkSetId { get; init; }
+
     public required DateTimeOffset StartedAtUtc { get; init; }
 
     public required PerformanceAlgorithmInfo Algorithm { get; init; }
@@ -23,6 +25,11 @@ public sealed record PerformanceRunRecord
     public required PerformanceOutcomeInfo Outcome { get; init; }
 
     public JsonObject Details { get; init; } = new();
+}
+
+public static class PerformanceReportingHeaders
+{
+    public const string BenchmarkSetId = "X-Insights-Benchmark-Set-Id";
 }
 
 public sealed record PerformanceAlgorithmInfo

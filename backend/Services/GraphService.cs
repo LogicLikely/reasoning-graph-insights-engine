@@ -146,9 +146,22 @@ public class GraphService : IGraphService
         };
     }
 
+    public Task<List<string>?> GetMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        return GetMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
     public async Task<List<string>?> GetMinimalCounterSetAsync(
         string slug,
         string targetNodeId,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         var operationStartedAtUtc = DateTimeOffset.UtcNow;
@@ -176,6 +189,7 @@ public class GraphService : IGraphService
             CreateMinimalCounterSetDetails,
             result => result.CounterNodeIds.Count,
             _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return reported.Result.ThresholdReached
@@ -183,10 +197,25 @@ public class GraphService : IGraphService
             : null;
     }
 
+    public Task<List<string>?> GetMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        return GetMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
     public async Task<List<string>?> GetMinimalCounterSetAsync(
         string slug,
         string targetNodeId,
         GraphDto graphContext,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
@@ -212,6 +241,7 @@ public class GraphService : IGraphService
             CreateMinimalCounterSetDetails,
             result => result.CounterNodeIds.Count,
             _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return reported.Result.ThresholdReached
@@ -219,9 +249,22 @@ public class GraphService : IGraphService
             : null;
     }
 
+    public Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        return GetBoundedMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
     public async Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(
         string slug,
         string targetNodeId,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         var operationStartedAtUtc = DateTimeOffset.UtcNow;
@@ -241,6 +284,21 @@ public class GraphService : IGraphService
             operationStartedAtUtc,
             operationStopwatch,
             loadStopwatch.Elapsed.TotalMilliseconds,
+            benchmarkSetId,
+            cancellationToken);
+    }
+
+    public Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        return GetBoundedMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            graphContext,
+            benchmarkSetId: null,
             cancellationToken);
     }
 
@@ -248,6 +306,7 @@ public class GraphService : IGraphService
         string slug,
         string targetNodeId,
         GraphDto graphContext,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
@@ -266,6 +325,7 @@ public class GraphService : IGraphService
             operationStartedAtUtc,
             operationStopwatch,
             loadElapsedMilliseconds: null,
+            benchmarkSetId,
             cancellationToken);
     }
 
@@ -309,8 +369,19 @@ public class GraphService : IGraphService
             .ToList();
     }
 
+    public Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
+        string slug,
+        CancellationToken cancellationToken = default)
+    {
+        return GetLeastRobustNodeAsync(
+            slug,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
     public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
         string slug,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         var operationStartedAtUtc = DateTimeOffset.UtcNow;
@@ -334,14 +405,28 @@ public class GraphService : IGraphService
             result => CreateRobustnessDetails(graph, result),
             result => result is null ? 0 : 1,
             _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return reported.Result;
     }
 
+    public Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
+        string slug,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        return GetLeastRobustNodeAsync(
+            slug,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
     public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
         string slug,
         GraphDto graphContext,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
@@ -363,13 +448,25 @@ public class GraphService : IGraphService
             result => CreateRobustnessDetails(graph, result),
             result => result is null ? 0 : 1,
             _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return reported.Result;
     }
 
+    public Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
+        string slug,
+        CancellationToken cancellationToken = default)
+    {
+        return GetNodeRobustnessRankingAsync(
+            slug,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
     public async Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
         string slug,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         var operationStartedAtUtc = DateTimeOffset.UtcNow;
@@ -393,14 +490,28 @@ public class GraphService : IGraphService
             result => CreateRobustnessRankingDetails(graph, result),
             result => result.Count,
             _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return reported.Result;
     }
 
+    public Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
+        string slug,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        return GetNodeRobustnessRankingAsync(
+            slug,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
     public async Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
         string slug,
         GraphDto graphContext,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
@@ -422,14 +533,28 @@ public class GraphService : IGraphService
             result => CreateRobustnessRankingDetails(graph, result),
             result => result.Count,
             _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return reported.Result;
+    }
+
+    public Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        return GetEvidenceImpactRankingAsync(
+            slug,
+            targetNodeId,
+            benchmarkSetId: null,
+            cancellationToken);
     }
 
     public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
         string slug,
         string targetNodeId,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         var operationStartedAtUtc = DateTimeOffset.UtcNow;
@@ -456,15 +581,31 @@ public class GraphService : IGraphService
             result => CreateEvidenceImpactDetails(graph, targetNodeId, result),
             result => result.SupportingEvidence.Count + result.CounterEvidence.Count,
             _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return reported.Result;
+    }
+
+    public Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        return GetEvidenceImpactRankingAsync(
+            slug,
+            targetNodeId,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
     }
 
     public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
         string slug,
         string targetNodeId,
         GraphDto graphContext,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
@@ -489,6 +630,7 @@ public class GraphService : IGraphService
             result => CreateEvidenceImpactDetails(graph, targetNodeId, result),
             result => result.SupportingEvidence.Count + result.CounterEvidence.Count,
             _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return reported.Result;
@@ -590,10 +732,25 @@ public class GraphService : IGraphService
         return true;
     }
 
+    public Task<bool> UpdateNodeAsync(
+        string slug,
+        string nodeId,
+        GraphNodeUpdateDto node,
+        CancellationToken cancellationToken = default)
+    {
+        return UpdateNodeAsync(
+            slug,
+            nodeId,
+            node,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
     public async Task<bool> UpdateNodeAsync(
         string slug,
         string nodeId,
         GraphNodeUpdateDto node,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
         if (!node.PriorOdds.HasValue)
@@ -681,6 +838,7 @@ public class GraphService : IGraphService
                     computeMeasurement,
                     persistElapsedMilliseconds: null,
                     recalculatedLogOdds,
+                    benchmarkSetId,
                     exception);
                 throw;
             }
@@ -713,6 +871,7 @@ public class GraphService : IGraphService
                     computeMeasurement,
                     persistStopwatch.Elapsed.TotalMilliseconds,
                     recalculatedLogOdds,
+                    benchmarkSetId,
                     exception);
                 throw;
             }
@@ -732,7 +891,8 @@ public class GraphService : IGraphService
                 persistElapsedMilliseconds,
                 recalculatedLogOdds,
                 persistedRowCount: recalculatedLogOdds.Count,
-                triggered: true);
+                triggered: true,
+                benchmarkSetId);
 
             return true;
         }
@@ -842,6 +1002,7 @@ public class GraphService : IGraphService
         DateTimeOffset operationStartedAtUtc,
         Stopwatch operationStopwatch,
         double? loadElapsedMilliseconds,
+        string? benchmarkSetId,
         CancellationToken cancellationToken)
     {
         var invocation = CreateTargetInvocation(dataSource, targetNodeId);
@@ -866,6 +1027,7 @@ public class GraphService : IGraphService
             result => result.ProofStatus == MinimalCounterSetProofStatus.NotProven
                 ? PerformanceRunStatuses.NotProven
                 : PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
 
         return new BoundedMinimalCounterSetDto
@@ -889,6 +1051,7 @@ public class GraphService : IGraphService
         Func<T, JsonObject> createDetails,
         Func<T, int?> getResultCount,
         Func<T, string> getStatus,
+        string? benchmarkSetId,
         CancellationToken cancellationToken)
     {
         _ = cancellationToken;
@@ -901,6 +1064,7 @@ public class GraphService : IGraphService
 
             var run = new PerformanceRunRecord
             {
+                BenchmarkSetId = NormalizeBenchmarkSetId(benchmarkSetId),
                 StartedAtUtc = operationStartedAtUtc,
                 Algorithm = algorithm,
                 Build = _buildInfo,
@@ -938,6 +1102,7 @@ public class GraphService : IGraphService
                 : PerformanceRunStatuses.Failed;
             var failedRun = new PerformanceRunRecord
             {
+                BenchmarkSetId = NormalizeBenchmarkSetId(benchmarkSetId),
                 StartedAtUtc = operationStartedAtUtc,
                 Algorithm = algorithm,
                 Build = _buildInfo,
@@ -987,6 +1152,7 @@ public class GraphService : IGraphService
         IReadOnlyDictionary<string, decimal> recalculatedLogOdds,
         int persistedRowCount,
         bool triggered,
+        string? benchmarkSetId,
         Exception? exception = null)
     {
         operationStopwatch.Stop();
@@ -1005,6 +1171,7 @@ public class GraphService : IGraphService
         };
         var run = new PerformanceRunRecord
         {
+            BenchmarkSetId = NormalizeBenchmarkSetId(benchmarkSetId),
             StartedAtUtc = operationStartedAtUtc,
             Algorithm = CreateLeafUpdateAlgorithm(),
             Build = _buildInfo,
@@ -1068,6 +1235,7 @@ public class GraphService : IGraphService
         PerformanceMeasurementResult computeMeasurement,
         double? persistElapsedMilliseconds,
         IReadOnlyDictionary<string, decimal> recalculatedLogOdds,
+        string? benchmarkSetId,
         Exception exception)
     {
         try
@@ -1085,6 +1253,7 @@ public class GraphService : IGraphService
                 recalculatedLogOdds,
                 persistedRowCount: 0,
                 triggered: true,
+                benchmarkSetId,
                 exception: exception);
         }
         catch
@@ -1109,6 +1278,13 @@ public class GraphService : IGraphService
         graphNode.BodyText = update.BodyText ?? graphNode.BodyText;
         graphNode.PriorOdds = update.PriorOdds ?? graphNode.PriorOdds;
         graphNode.PosteriorOdds = update.PosteriorOdds ?? graphNode.PosteriorOdds;
+    }
+
+    private static string? NormalizeBenchmarkSetId(string? benchmarkSetId)
+    {
+        return string.IsNullOrWhiteSpace(benchmarkSetId)
+            ? null
+            : benchmarkSetId.Trim();
     }
 
     private static PerformanceAlgorithmInfo CreateMinimalCounterSetAlgorithm(

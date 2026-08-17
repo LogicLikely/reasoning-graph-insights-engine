@@ -10,6 +10,7 @@ const serviceMocks = vi.hoisted(() => ({
   getNodeCounterSet: vi.fn(),
   getNodeRobustnessRanking: vi.fn(),
   updateNode: vi.fn(),
+  createBenchmarkSet: vi.fn(),
   getPerformanceRuns: vi.fn(),
 }))
 
@@ -23,8 +24,15 @@ vi.mock('../../services/graphService', () => ({
 }))
 
 vi.mock('../../services/performanceRuns', () => ({
+  createBenchmarkSet: serviceMocks.createBenchmarkSet,
   getPerformanceRuns: serviceMocks.getPerformanceRuns,
 }))
+
+const benchmarkSet = {
+  id: 'benchmark-01',
+  name: 'LL-699 baseline',
+  createdAtUtc: '2026-08-17T12:00:00Z',
+}
 
 const graph: GraphFixture = {
   slug: 'lab-graph',
@@ -59,8 +67,12 @@ const graph: GraphFixture = {
   edges: [],
 }
 
+function report(runs: unknown[] = [], benchmarkSets = [benchmarkSet]) {
+  return { schemaVersion: 2, benchmarkSets, runs }
+}
+
 function emptyReport() {
-  return { schemaVersion: 1, runs: [] }
+  return report()
 }
 
 function operationCard(name: RegExp) {
@@ -70,6 +82,7 @@ function operationCard(name: RegExp) {
 describe('InsightsLabDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
     serviceMocks.getPerformanceRuns.mockResolvedValue(emptyReport())
     serviceMocks.getNodeCounterSet.mockResolvedValue(['node-100'])
     serviceMocks.getBoundedNodeCounterSet.mockResolvedValue({ runNumber: 1 })
@@ -77,14 +90,114 @@ describe('InsightsLabDialog', () => {
     serviceMocks.getLeastRobustNode.mockResolvedValue({ nodeId: 'node-100', robustness: 0.2 })
     serviceMocks.getNodeRobustnessRanking.mockResolvedValue([])
     serviceMocks.updateNode.mockResolvedValue(undefined)
+    serviceMocks.createBenchmarkSet.mockResolvedValue(benchmarkSet)
+  })
+
+  it('requires a benchmark set and selects a newly created backend identity', async () => {
+    serviceMocks.getPerformanceRuns.mockResolvedValue(report([], []))
+    const created = {
+      id: 'backend-generated-id',
+      name: 'Bayesian rework',
+      createdAtUtc: '2026-08-17T15:00:00Z',
+    }
+    serviceMocks.createBenchmarkSet.mockResolvedValue(created)
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+        selectedNodeId="node-002"
+      />,
+    )
+
+    const runButton = within(operationCard(/Minimal counter set/)).getByRole('button', {
+      name: 'Run Minimal counter set',
+    })
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    expect(runButton).toBeDisabled()
+    expect(screen.getByText('Select or create a benchmark set before running an algorithm.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('New benchmark set'), {
+      target: { value: '  Bayesian rework  ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create and select' }))
+
+    await waitFor(() => expect(serviceMocks.createBenchmarkSet).toHaveBeenCalledWith('Bayesian rework'))
+    expect(screen.getByLabelText('Benchmark set')).toHaveValue(created.id)
+    await waitFor(() => {
+      expect(window.localStorage.getItem('insights-lab-benchmark-set-id')).toBe(created.id)
+    })
+    expect(runButton).toBeEnabled()
+  })
+
+  it('uses and explains the canonical root for target-based stress runs', async () => {
+    const stressGraph = {
+      ...graph,
+      slug: 'stress-balanced-1k',
+      nodes: [
+        ...graph.nodes,
+        {
+          id: 'n-00000',
+          kind: 'root' as const,
+          title: 'Stress root',
+          bodyText: '',
+          priorOdds: 1,
+          posteriorOdds: 1,
+        },
+      ],
+    }
+    const completedRun = {
+      runNumber: 1,
+      benchmarkSetId: benchmarkSet.id,
+      algorithm: { name: 'minimal-counter-set', implementation: 'greedy' },
+      graph: { slug: stressGraph.slug },
+      invocation: { dataSource: 'database', targetNodeId: 'n-00000' },
+      outcome: { status: 'completed' },
+      details: {},
+    }
+    serviceMocks.getPerformanceRuns
+      .mockResolvedValueOnce(emptyReport())
+      .mockResolvedValueOnce(emptyReport())
+      .mockResolvedValueOnce(report([completedRun]))
+
+    render(
+      <InsightsLabDialog
+        graph={stressGraph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+        selectedNodeId="node-100"
+      />,
+    )
+
+    expect(await screen.findByText('Root (n-00000)')).toBeInTheDocument()
+    expect(screen.getByText(/greedy counter-set search for the canonical root/i)).toBeInTheDocument()
+    const runButton = within(operationCard(/Minimal counter set/)).getByRole('button', {
+      name: 'Run Minimal counter set',
+    })
+    await waitFor(() => expect(runButton).toBeEnabled())
+    fireEvent.click(runButton)
+
+    await screen.findByRole('article', { name: 'Report for run 1' })
+    expect(serviceMocks.getNodeCounterSet).toHaveBeenCalledWith(
+      stressGraph.slug,
+      'n-00000',
+      'database',
+      expect.any(AbortSignal),
+      benchmarkSet.id,
+    )
   })
 
   it('loads newest-first history and presents notProven as a completed qualified result', async () => {
     serviceMocks.getPerformanceRuns.mockResolvedValue({
-      schemaVersion: 1,
+      schemaVersion: 2,
+      benchmarkSets: [benchmarkSet],
       runs: [
         {
           runNumber: 2,
+          benchmarkSetId: benchmarkSet.id,
           startedAtUtc: '2026-08-16T18:42:31.123Z',
           algorithm: {
             name: 'minimal-counter-set',
@@ -101,6 +214,7 @@ describe('InsightsLabDialog', () => {
         },
         {
           runNumber: 8,
+          benchmarkSetId: benchmarkSet.id,
           startedAtUtc: '2026-08-17T18:42:31.123Z',
           algorithm: { name: 'robustness-ranking', implementation: 'current' },
           graph: { slug: 'lab-graph' },
@@ -135,6 +249,8 @@ describe('InsightsLabDialog', () => {
     const report = screen.getByRole('article', { name: 'Report for run 2' })
     expect(within(report).getAllByText('Completed').length).toBeGreaterThan(0)
     expect(within(report).getAllByText('Not proven').length).toBeGreaterThan(0)
+    expect(within(report).getByText(benchmarkSet.name)).toBeInTheDocument()
+    expect(within(report).getByText(benchmarkSet.id)).toBeInTheDocument()
     expect(within(report).getByText('Returned node IDs')).toBeInTheDocument()
     expect(within(report).getAllByText('node-100').length).toBeGreaterThan(0)
 
@@ -147,6 +263,7 @@ describe('InsightsLabDialog', () => {
   it('uses a fresh watermark, runs against the selected node, and opens the matching report', async () => {
     const completedRun = {
       runNumber: 12,
+      benchmarkSetId: benchmarkSet.id,
       startedAtUtc: '2026-08-17T18:42:31.123Z',
       algorithm: { name: 'minimal-counter-set', implementation: 'greedy' },
       graph: { slug: 'lab-graph' },
@@ -157,9 +274,10 @@ describe('InsightsLabDialog', () => {
     }
     serviceMocks.getPerformanceRuns
       .mockResolvedValueOnce(emptyReport())
-      .mockResolvedValueOnce({ schemaVersion: 1, runs: [{ ...completedRun, runNumber: 11 }] })
+      .mockResolvedValueOnce(report([{ ...completedRun, runNumber: 11 }]))
       .mockResolvedValueOnce({
-        schemaVersion: 1,
+        schemaVersion: 2,
+        benchmarkSets: [benchmarkSet],
         runs: [
           {
             ...completedRun,
@@ -181,9 +299,11 @@ describe('InsightsLabDialog', () => {
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(1))
 
-    fireEvent.click(within(operationCard(/Minimal counter set/)).getByRole('button', {
+    const runButton = within(operationCard(/Minimal counter set/)).getByRole('button', {
       name: 'Run Minimal counter set',
-    }))
+    })
+    await waitFor(() => expect(runButton).toBeEnabled())
+    fireEvent.click(runButton)
 
     await screen.findByRole('article', { name: 'Report for run 12' })
     expect(serviceMocks.getNodeCounterSet).toHaveBeenCalledWith(
@@ -191,6 +311,7 @@ describe('InsightsLabDialog', () => {
       'node-002',
       'database',
       expect.any(AbortSignal),
+      benchmarkSet.id,
     )
     expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(3)
     expect(screen.getByRole('tab', { name: /History/ })).toHaveAttribute('aria-selected', 'true')
@@ -241,6 +362,7 @@ describe('InsightsLabDialog', () => {
     const onGraphUpdated = vi.fn()
     const leafRun = {
       runNumber: 1,
+      benchmarkSetId: benchmarkSet.id,
       algorithm: { name: 'leaf-update', implementation: 'current' },
       graph: { slug: 'lab-graph' },
       invocation: { dataSource: 'database', changedNodeId: 'node-100' },
@@ -251,7 +373,7 @@ describe('InsightsLabDialog', () => {
     serviceMocks.getPerformanceRuns
       .mockResolvedValueOnce(emptyReport())
       .mockResolvedValueOnce(emptyReport())
-      .mockResolvedValueOnce({ schemaVersion: 1, runs: [leafRun] })
+      .mockResolvedValueOnce(report([leafRun]))
 
     render(
       <InsightsLabDialog
@@ -263,15 +385,18 @@ describe('InsightsLabDialog', () => {
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(1))
-    fireEvent.click(within(operationCard(/^Leaf update$/)).getByRole('button', {
+    const runButton = within(operationCard(/^Leaf update$/)).getByRole('button', {
       name: 'Run Leaf update',
-    }))
+    })
+    await waitFor(() => expect(runButton).toBeEnabled())
+    fireEvent.click(runButton)
 
     await screen.findByRole('article', { name: 'Report for run 1' })
     expect(serviceMocks.updateNode).toHaveBeenCalledWith(
       'lab-graph',
       'node-100',
       { priorOdds: 3.25 },
+      benchmarkSet.id,
     )
     expect(onGraphUpdated).toHaveBeenCalledOnce()
   })
@@ -319,6 +444,7 @@ describe('InsightsLabDialog', () => {
   }) => {
     const storedRun = {
       runNumber: 1,
+      benchmarkSetId: benchmarkSet.id,
       algorithm: { name: algorithm, implementation },
       graph: { slug: 'lab-graph' },
       invocation: {
@@ -331,7 +457,7 @@ describe('InsightsLabDialog', () => {
     serviceMocks.getPerformanceRuns
       .mockResolvedValueOnce(emptyReport())
       .mockResolvedValueOnce(emptyReport())
-      .mockResolvedValueOnce({ schemaVersion: 1, runs: [storedRun] })
+      .mockResolvedValueOnce(report([storedRun]))
 
     render(
       <InsightsLabDialog
@@ -344,15 +470,18 @@ describe('InsightsLabDialog', () => {
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
 
-    fireEvent.click(within(operationCard(new RegExp(`^${title}$`))).getByRole('button', {
+    const runButton = within(operationCard(new RegExp(`^${title}$`))).getByRole('button', {
       name: `Run ${title}`,
-    }))
+    })
+    await waitFor(() => expect(runButton).toBeEnabled())
+    fireEvent.click(runButton)
 
     await screen.findByRole('article', { name: 'Report for run 1' })
     const call = serviceMocks[service].mock.calls[0]
     expect(call.slice(0, baseArguments.length)).toEqual(baseArguments)
     if (cancellable) expect(call[baseArguments.length]).toBeInstanceOf(AbortSignal)
-    else expect(call).toEqual(baseArguments)
+    else expect(call[baseArguments.length]).toBeUndefined()
+    expect(call[baseArguments.length + 1]).toBe(benchmarkSet.id)
   })
 
   it('offers best-effort cancellation only for cancellable operations and keeps the dialog open', async () => {
@@ -365,6 +494,7 @@ describe('InsightsLabDialog', () => {
     })
     const cancelledRun = {
       runNumber: 1,
+      benchmarkSetId: benchmarkSet.id,
       algorithm: { name: 'minimal-counter-set', implementation: 'greedy' },
       graph: { slug: 'lab-graph' },
       invocation: { dataSource: 'database', targetNodeId: 'node-002' },
@@ -375,7 +505,7 @@ describe('InsightsLabDialog', () => {
       .mockResolvedValueOnce(emptyReport())
       .mockResolvedValueOnce(emptyReport())
       .mockResolvedValueOnce(emptyReport())
-      .mockResolvedValueOnce({ schemaVersion: 1, runs: [cancelledRun] })
+      .mockResolvedValueOnce(report([cancelledRun]))
 
     const onClose = vi.fn()
     render(
@@ -388,9 +518,11 @@ describe('InsightsLabDialog', () => {
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(1))
-    fireEvent.click(within(operationCard(/Minimal counter set/)).getByRole('button', {
+    const runButton = within(operationCard(/Minimal counter set/)).getByRole('button', {
       name: 'Run Minimal counter set',
-    }))
+    })
+    await waitFor(() => expect(runButton).toBeEnabled())
+    fireEvent.click(runButton)
 
     const cancel = await screen.findByRole('button', { name: 'Cancel run' })
     expect(screen.getByText('Running…').closest('[role="status"]')).toHaveFocus()
@@ -470,6 +602,12 @@ describe('InsightsLabDialog', () => {
     expect(screen.getByRole('tab', { name: /History/ })).toHaveFocus()
     expect(screen.getByRole('tab', { name: /History/ })).toHaveAttribute('aria-selected', 'true')
 
+    fireEvent.keyDown(screen.getByRole('tab', { name: /History/ }), { key: 'End' })
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveFocus()
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel', { name: 'Trends' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Historical trends' })).toBeInTheDocument()
+
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     expect(onClose).toHaveBeenCalledOnce()
     view.rerender(
@@ -488,5 +626,29 @@ describe('InsightsLabDialog', () => {
     expect(opener).not.toHaveAttribute('inert')
     expect(opener).not.toHaveAttribute('aria-hidden')
     expect(opener).toHaveFocus()
+  })
+
+  it('keeps keyboard focus inside an empty History panel', async () => {
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+        selectedNodeId="node-002"
+      />,
+    )
+
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    const closeButton = screen.getByRole('button', { name: 'Close Insights Lab' })
+    const historyTab = screen.getByRole('tab', { name: /History/ })
+    fireEvent.click(historyTab)
+    historyTab.focus()
+
+    fireEvent.keyDown(historyTab, { key: 'Tab' })
+    expect(closeButton).toHaveFocus()
+
+    fireEvent.keyDown(closeButton, { key: 'Tab', shiftKey: true })
+    expect(historyTab).toHaveFocus()
   })
 })

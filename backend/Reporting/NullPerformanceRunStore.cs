@@ -27,4 +27,18 @@ public sealed class NullPerformanceRunStore : IPerformanceRunStore
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(run with { RunNumber = 0 });
     }
+
+    public Task<PerformanceBenchmarkSet> CreateBenchmarkSetAsync(
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new PerformanceBenchmarkSet
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = name.Trim(),
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        });
+    }
 }

@@ -60,6 +60,34 @@ public sealed class JsonPerformanceRunStore : IPerformanceRunStore, IDisposable
         }
     }
 
+    public async Task<PerformanceBenchmarkSet> CreateBenchmarkSetAsync(
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        await _accessLock.WaitAsync(cancellationToken);
+        try
+        {
+            var report = await ReadReportFileAsync(cancellationToken);
+            var benchmarkSet = new PerformanceBenchmarkSet
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = name.Trim(),
+                CreatedAtUtc = DateTimeOffset.UtcNow
+            };
+
+            report.BenchmarkSets.Add(benchmarkSet);
+            await WriteReportAtomicallyAsync(report, cancellationToken);
+
+            return benchmarkSet;
+        }
+        finally
+        {
+            _accessLock.Release();
+        }
+    }
+
     public void Dispose()
     {
         _accessLock.Dispose();
@@ -105,6 +133,12 @@ public sealed class JsonPerformanceRunStore : IPerformanceRunStore, IDisposable
             {
                 throw new InvalidDataException(
                     $"Performance report '{_filePath}' has a null runs collection.");
+            }
+
+            if (report.BenchmarkSets is null)
+            {
+                throw new InvalidDataException(
+                    $"Performance report '{_filePath}' has a null benchmarkSets collection.");
             }
 
             return report;

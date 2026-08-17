@@ -10,10 +10,14 @@ import {
   type GraphDataSource,
 } from '../../services/graphService'
 import {
+  createBenchmarkSet,
   getPerformanceRuns,
+  type BenchmarkSet,
   type PerformanceReportDocument,
   type PerformanceRunRecord,
 } from '../../services/performanceRuns'
+import { isStressGraphId } from '../../services/stressGraphs'
+import { InsightsLabTrends } from './InsightsLabTrends'
 import './InsightsLabDialog.css'
 
 export interface InsightsLabDialogProps {
@@ -25,7 +29,7 @@ export interface InsightsLabDialogProps {
   onGraphUpdated?: () => void
 }
 
-type LabTab = 'run' | 'history'
+type LabTab = 'run' | 'history' | 'trends'
 type OperationId = 'minimal' | 'bounded' | 'evidence' | 'least' | 'ranking' | 'leaf'
 
 type OperationDefinition = {
@@ -103,13 +107,18 @@ const OPERATIONS: readonly OperationDefinition[] = [
 ]
 
 const FOCUSABLE_SELECTOR = [
-  'button:not(:disabled)',
-  '[href]',
+  'button:not(:disabled):not([tabindex="-1"])',
+  'input:not(:disabled):not([tabindex="-1"])',
+  'select:not(:disabled):not([tabindex="-1"])',
+  'textarea:not(:disabled):not([tabindex="-1"])',
+  '[href]:not([tabindex="-1"])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
 const CANCEL_REPORT_POLL_ATTEMPTS = 8
 const CANCEL_REPORT_POLL_INTERVAL_MS = 250
+const CANONICAL_STRESS_TARGET_ID = 'n-00000'
+const BENCHMARK_SET_STORAGE_KEY = 'insights-lab-benchmark-set-id'
 
 function sortRuns(document: PerformanceReportDocument): PerformanceRunRecord[] {
   return [...(Array.isArray(document.runs) ? document.runs : [])]
@@ -159,6 +168,23 @@ function operationLabel(run: PerformanceRunRecord): string {
   } as Record<string, string>)[name ?? ''] ?? sentenceCase(name)
 }
 
+function benchmarkSetName(
+  benchmarkSetId: string | null | undefined,
+  benchmarkSets: readonly BenchmarkSet[],
+): string {
+  if (!benchmarkSetId) return 'Unassigned'
+  const benchmarkSet = benchmarkSets.find(({ id }) => id === benchmarkSetId)
+  if (!benchmarkSet) return 'Unknown benchmark set'
+  const normalizedName = benchmarkSet.name.trim().toLowerCase()
+  const hasDuplicateName = benchmarkSets.some((candidate) => (
+    candidate.id !== benchmarkSet.id
+    && candidate.name.trim().toLowerCase() === normalizedName
+  ))
+  return hasDuplicateName
+    ? `${benchmarkSet.name} · ${benchmarkSet.id.slice(-6)}`
+    : benchmarkSet.name
+}
+
 function proofStatus(run: PerformanceRunRecord): string | undefined {
   const detailsProof = run.details?.proofStatus
   const outcomeProof = run.outcome?.proofStatus
@@ -195,10 +221,12 @@ function runMatches(
   operation: OperationDefinition,
   graph: GraphFixture,
   graphDataSource: GraphDataSource,
+  benchmarkSetId: string,
   targetNodeId?: string,
 ): boolean {
   if (run.algorithm?.name !== operation.algorithmName || run.graph?.slug !== graph.slug) return false
   if (run.invocation?.dataSource !== graphDataSource) return false
+  if (run.benchmarkSetId !== benchmarkSetId) return false
   if (operation.implementation && run.algorithm?.implementation !== operation.implementation) return false
   if (operation.requiresTarget && run.invocation?.targetNodeId !== targetNodeId) return false
   if (operation.id === 'leaf' && run.invocation?.changedNodeId !== targetNodeId) return false
@@ -222,6 +250,7 @@ function OpenInsightsLabDialog({
   const closeRef = useRef<HTMLButtonElement>(null)
   const runTabRef = useRef<HTMLButtonElement>(null)
   const historyTabRef = useRef<HTMLButtonElement>(null)
+  const trendsTabRef = useRef<HTMLButtonElement>(null)
   const historyBackRef = useRef<HTMLButtonElement>(null)
   const runViewButtonRefs = useRef(new Map<number, HTMLButtonElement>())
   const runningStatusRef = useRef<HTMLDivElement>(null)
@@ -232,6 +261,11 @@ function OpenInsightsLabDialog({
   const [tab, setTab] = useState<LabTab>('run')
   const [expandedOperationId, setExpandedOperationId] = useState<OperationId>()
   const [runs, setRuns] = useState<PerformanceRunRecord[]>([])
+  const [benchmarkSets, setBenchmarkSets] = useState<BenchmarkSet[]>([])
+  const [selectedBenchmarkSetId, setSelectedBenchmarkSetId] = useState('')
+  const [newBenchmarkSetName, setNewBenchmarkSetName] = useState('')
+  const [isCreatingBenchmarkSet, setIsCreatingBenchmarkSet] = useState(false)
+  const [benchmarkSetError, setBenchmarkSetError] = useState<string | null>(null)
   const [selectedRunNumber, setSelectedRunNumber] = useState<number>()
   const [isHistoryLoading, setIsHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
@@ -249,7 +283,27 @@ function OpenInsightsLabDialog({
     () => graph ? getHighestOrdinalNode(graph.nodes) : undefined,
     [graph],
   )
+  const usesCanonicalStressTarget = graph ? isStressGraphId(graph.slug) : false
+  const algorithmTargetNodeId = usesCanonicalStressTarget
+    ? CANONICAL_STRESS_TARGET_ID
+    : selectedNode?.id
   const selectedRun = runs.find(({ runNumber }) => runNumber === selectedRunNumber)
+
+  const receiveBenchmarkSets = (nextSets: BenchmarkSet[]) => {
+    setBenchmarkSets(nextSets)
+    setSelectedBenchmarkSetId((current) => {
+      if (nextSets.some(({ id }) => id === current)) return current
+      const stored = window.localStorage.getItem(BENCHMARK_SET_STORAGE_KEY)
+      if (stored && nextSets.some(({ id }) => id === stored)) return stored
+      return nextSets.length === 1 ? nextSets[0].id : ''
+    })
+  }
+
+  useEffect(() => {
+    if (selectedBenchmarkSetId) {
+      window.localStorage.setItem(BENCHMARK_SET_STORAGE_KEY, selectedBenchmarkSetId)
+    }
+  }, [selectedBenchmarkSetId])
 
   useEffect(() => {
     let isActive = true
@@ -286,6 +340,7 @@ function OpenInsightsLabDialog({
         if (!isActive) return
         const nextRuns = sortRuns(document)
         setRuns(nextRuns)
+        receiveBenchmarkSets(Array.isArray(document.benchmarkSets) ? document.benchmarkSets : [])
         setSelectedRunNumber((current) => (
           nextRuns.some(({ runNumber }) => runNumber === current)
             ? current
@@ -359,27 +414,58 @@ function OpenInsightsLabDialog({
   }
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const tabs: readonly LabTab[] = ['run', 'history', 'trends']
+    const currentIndex = tabs.indexOf(tab)
     let nextTab: LabTab | undefined
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      nextTab = tab === 'run' ? 'history' : 'run'
+    if (event.key === 'ArrowLeft') {
+      nextTab = tabs[(currentIndex - 1 + tabs.length) % tabs.length]
+    } else if (event.key === 'ArrowRight') {
+      nextTab = tabs[(currentIndex + 1) % tabs.length]
     } else if (event.key === 'Home') {
-      nextTab = 'run'
+      nextTab = tabs[0]
     } else if (event.key === 'End') {
-      nextTab = 'history'
+      nextTab = tabs[tabs.length - 1]
     }
     if (!nextTab) return
     event.preventDefault()
     setTab(nextTab)
-    if (nextTab === 'history') setExpandedOperationId(undefined)
-    const nextTabRef = nextTab === 'run' ? runTabRef : historyTabRef
+    if (nextTab !== 'run') setExpandedOperationId(undefined)
+    const nextTabRef = {
+      run: runTabRef,
+      history: historyTabRef,
+      trends: trendsTabRef,
+    }[nextTab]
     nextTabRef.current?.focus()
   }
 
+  const handleCreateBenchmarkSet = async () => {
+    const name = newBenchmarkSetName.trim()
+    if (!name || isCreatingBenchmarkSet || activeOperation) return
+    setIsCreatingBenchmarkSet(true)
+    setBenchmarkSetError(null)
+    try {
+      const created = await createBenchmarkSet(name)
+      setBenchmarkSets((current) => (
+        current.some(({ id }) => id === created.id)
+          ? current.map((benchmarkSet) => benchmarkSet.id === created.id ? created : benchmarkSet)
+          : [...current, created]
+      ))
+      setSelectedBenchmarkSetId(created.id)
+      setNewBenchmarkSetName('')
+    } catch {
+      setBenchmarkSetError('Unable to create the benchmark set.')
+    } finally {
+      setIsCreatingBenchmarkSet(false)
+    }
+  }
+
   const launch = async (operation: OperationDefinition) => {
-    if (runGuardRef.current || !graph) return
-    const targetNode = operation.id === 'leaf' ? highestNode : selectedNode
-    if (operation.requiresTarget && !targetNode) return
-    if (operation.id === 'leaf' && !targetNode) return
+    if (runGuardRef.current || !graph || !selectedBenchmarkSetId) return
+    const benchmarkSetId = selectedBenchmarkSetId
+    const leafTargetNode = operation.id === 'leaf' ? highestNode : undefined
+    const targetNodeId = operation.id === 'leaf' ? leafTargetNode?.id : algorithmTargetNodeId
+    if (operation.requiresTarget && !targetNodeId) return
+    if (operation.id === 'leaf' && !leafTargetNode) return
     if (operation.databaseOnly && graphDataSource !== 'database') return
 
     runGuardRef.current = true
@@ -398,8 +484,10 @@ function OpenInsightsLabDialog({
     let requestCompleted = false
 
     try {
-      const before = sortRuns(await getPerformanceRuns())
+      const beforeDocument = await getPerformanceRuns()
+      const before = sortRuns(beforeDocument)
       setRuns(before)
+      receiveBenchmarkSets(Array.isArray(beforeDocument.benchmarkSets) ? beforeDocument.benchmarkSets : [])
       watermark = before.reduce((maximum, run) => Math.max(maximum, run.runNumber), -1)
       if (controller?.signal.aborted) throw new DOMException('Aborted', 'AbortError')
 
@@ -407,29 +495,57 @@ function OpenInsightsLabDialog({
         requestStarted = true
         switch (operation.id) {
           case 'minimal':
-            await getNodeCounterSet(graph.slug, targetNode!.id, graphDataSource, controller?.signal)
+            await getNodeCounterSet(
+              graph.slug,
+              targetNodeId!,
+              graphDataSource,
+              controller?.signal,
+              benchmarkSetId,
+            )
             break
           case 'bounded': {
             const result = await getBoundedNodeCounterSet(
               graph.slug,
-              targetNode!.id,
+              targetNodeId!,
               graphDataSource,
               controller?.signal,
+              benchmarkSetId,
             )
             exactRunNumber = result.runNumber
             break
           }
           case 'evidence':
-            await getEvidenceImpactRanking(graph.slug, targetNode!.id, graphDataSource)
+            await getEvidenceImpactRanking(
+              graph.slug,
+              targetNodeId!,
+              graphDataSource,
+              undefined,
+              benchmarkSetId,
+            )
             break
           case 'least':
-            await getLeastRobustNode(graph.slug, graphDataSource, controller?.signal)
+            await getLeastRobustNode(
+              graph.slug,
+              graphDataSource,
+              controller?.signal,
+              benchmarkSetId,
+            )
             break
           case 'ranking':
-            await getNodeRobustnessRanking(graph.slug, graphDataSource, controller?.signal)
+            await getNodeRobustnessRanking(
+              graph.slug,
+              graphDataSource,
+              controller?.signal,
+              benchmarkSetId,
+            )
             break
           case 'leaf':
-            await updateNode(graph.slug, targetNode!.id, { priorOdds: targetNode!.priorOdds })
+            await updateNode(
+              graph.slug,
+              leafTargetNode!.id,
+              { priorOdds: leafTargetNode!.priorOdds },
+              benchmarkSetId,
+            )
             onGraphUpdated?.()
             break
         }
@@ -444,15 +560,26 @@ function OpenInsightsLabDialog({
       let after: PerformanceRunRecord[] = []
       let matchingRun: PerformanceRunRecord | undefined
       for (let attempt = 0; attempt < attempts; attempt += 1) {
-        after = sortRuns(await getPerformanceRuns())
+        const afterDocument = await getPerformanceRuns()
+        after = sortRuns(afterDocument)
         setRuns(after)
+        receiveBenchmarkSets(Array.isArray(afterDocument.benchmarkSets) ? afterDocument.benchmarkSets : [])
         setHistoryError(null)
         matchingRun = exactRunNumber === undefined
           ? after.find((run) => (
             run.runNumber > watermark
-            && runMatches(run, operation, graph, graphDataSource, targetNode?.id)
+            && runMatches(
+              run,
+              operation,
+              graph,
+              graphDataSource,
+              benchmarkSetId,
+              targetNodeId,
+            )
           ))
-          : after.find(({ runNumber }) => runNumber === exactRunNumber)
+          : after.find((run) => (
+            run.runNumber === exactRunNumber && run.benchmarkSetId === benchmarkSetId
+          ))
         if (matchingRun || attempt === attempts - 1) break
         await new Promise((resolve) => setTimeout(resolve, CANCEL_REPORT_POLL_INTERVAL_MS))
       }
@@ -557,6 +684,22 @@ function OpenInsightsLabDialog({
             >
               History <span>{runs.length}</span>
             </button>
+            <button
+              aria-controls="insights-lab-trends-panel"
+              aria-selected={tab === 'trends'}
+              id="insights-lab-trends-tab"
+              onClick={() => {
+                setExpandedOperationId(undefined)
+                setTab('trends')
+              }}
+              onKeyDown={handleTabKeyDown}
+              ref={trendsTabRef}
+              role="tab"
+              tabIndex={tab === 'trends' ? 0 : -1}
+              type="button"
+            >
+              Trends
+            </button>
           </div>
         </header>
 
@@ -599,27 +742,96 @@ function OpenInsightsLabDialog({
             id="insights-lab-run-panel"
             role="tabpanel"
           >
+            <form
+              className="insights-lab-dialog__benchmark-sets"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void handleCreateBenchmarkSet()
+              }}
+            >
+              <div>
+                <label htmlFor="insights-lab-benchmark-set">Benchmark set</label>
+                <select
+                  disabled={activeOperation !== null || isCreatingBenchmarkSet}
+                  id="insights-lab-benchmark-set"
+                  onChange={(event) => {
+                    setBenchmarkSetError(null)
+                    setSelectedBenchmarkSetId(event.target.value)
+                  }}
+                  value={selectedBenchmarkSetId}
+                >
+                  <option value="">
+                    {benchmarkSets.length === 0 ? 'Create a benchmark set to begin' : 'Select a benchmark set'}
+                  </option>
+                  {benchmarkSets.map((benchmarkSet) => (
+                    <option key={benchmarkSet.id} value={benchmarkSet.id}>
+                      {benchmarkSetName(benchmarkSet.id, benchmarkSets)}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  {selectedBenchmarkSetId
+                    ? 'Every Lab run is recorded in the selected comparison group.'
+                    : 'Select or create a benchmark set before running an algorithm.'}
+                </small>
+              </div>
+              <div className="insights-lab-dialog__benchmark-create">
+                <label htmlFor="insights-lab-new-benchmark-set">New benchmark set</label>
+                <div>
+                  <input
+                    disabled={activeOperation !== null || isCreatingBenchmarkSet}
+                    id="insights-lab-new-benchmark-set"
+                    onChange={(event) => {
+                      setBenchmarkSetError(null)
+                      setNewBenchmarkSetName(event.target.value)
+                    }}
+                    placeholder="Example: LL-699 baseline"
+                    type="text"
+                    value={newBenchmarkSetName}
+                  />
+                  <button
+                    disabled={!newBenchmarkSetName.trim() || activeOperation !== null || isCreatingBenchmarkSet}
+                    type="submit"
+                  >
+                    {isCreatingBenchmarkSet ? 'Creating…' : 'Create and select'}
+                  </button>
+                </div>
+              </div>
+              {benchmarkSetError ? <p role="alert">{benchmarkSetError}</p> : null}
+            </form>
             <div className="insights-lab-dialog__context">
-              <span>Selected node</span>
+              <span>{usesCanonicalStressTarget ? 'Canonical algorithm target' : 'Selected node'}</span>
               <strong>
-                {selectedNode
-                  ? `${selectedNode.title} (${selectedNode.id})`
-                  : 'Select a node for counter-set and evidence-impact operations'}
+                {usesCanonicalStressTarget
+                  ? `Root (${CANONICAL_STRESS_TARGET_ID})`
+                  : selectedNode
+                    ? `${selectedNode.title} (${selectedNode.id})`
+                    : 'Select a node for counter-set and evidence-impact operations'}
               </strong>
+              {usesCanonicalStressTarget ? (
+                <small>Counter-set and evidence-impact runs always use this root on stress graphs.</small>
+              ) : null}
             </div>
             <div className="insights-lab-dialog__operations">
               {OPERATIONS.map((operation) => {
                 const infoPanelId = `insights-lab-operation-${operation.id}-info`
                 const isInfoExpanded = expandedOperationId === operation.id
-                const missingTarget = operation.requiresTarget && !selectedNode
+                const missingTarget = operation.requiresTarget && !algorithmTargetNodeId
                 const missingLeafTarget = operation.id === 'leaf' && !highestNode
                 const wrongSource = operation.databaseOnly && graphDataSource !== 'database'
                 const disabled = !graph
                   || isHistoryLoading
                   || activeOperation !== null
+                  || !selectedBenchmarkSetId
                   || missingTarget
                   || missingLeafTarget
                   || wrongSource
+                const description = usesCanonicalStressTarget && operation.requiresTarget
+                  ? operation.description.replace('the selected node', 'the canonical root')
+                  : operation.description
+                const explanation = usesCanonicalStressTarget && operation.requiresTarget
+                  ? operation.explanation.replaceAll('the selected node', 'the canonical root')
+                  : operation.explanation
                 return (
                   <article className="insights-lab-dialog__operation" key={operation.id}>
                     <div>
@@ -639,14 +851,14 @@ function OpenInsightsLabDialog({
                           <span aria-hidden="true">i</span>
                         </button>
                       </div>
-                      <p>{operation.description}</p>
+                      <p>{description}</p>
                       <section
                         aria-label={`About ${operation.title}`}
                         className="insights-lab-dialog__algorithm-info"
                         hidden={!isInfoExpanded}
                         id={infoPanelId}
                       >
-                        <p>{operation.explanation}</p>
+                        <p>{explanation}</p>
                         <div>
                           <strong>Keep in mind</strong>
                           <p>{operation.caveat}</p>
@@ -669,7 +881,7 @@ function OpenInsightsLabDialog({
               })}
             </div>
           </section>
-        ) : (
+        ) : tab === 'history' ? (
           <section
             aria-labelledby="insights-lab-history-tab"
             className="insights-lab-dialog__panel insights-lab-dialog__history"
@@ -690,7 +902,7 @@ function OpenInsightsLabDialog({
                     <span aria-hidden="true">←</span> Back to all runs
                   </button>
                 </div>
-                <RunReport run={selectedRun} />
+                <RunReport benchmarkSets={benchmarkSets} run={selectedRun} />
               </div>
             ) : (
               <>
@@ -705,7 +917,7 @@ function OpenInsightsLabDialog({
                     tabIndex={0}
                   >
                     <table className="insights-lab-dialog__history-table">
-                      <thead><tr><th>Run</th><th>Date/time</th><th>Operation</th><th>Graph</th><th>Operation time</th><th>Status</th></tr></thead>
+                      <thead><tr><th>Run</th><th>Date/time</th><th>Operation</th><th>Benchmark set</th><th>Graph</th><th>Operation time</th><th>Status</th></tr></thead>
                       <tbody>
                         {runs.map((run) => (
                           <tr key={run.runNumber}>
@@ -727,6 +939,7 @@ function OpenInsightsLabDialog({
                             </td>
                             <td>{formatDateTime(run.startedAtUtc)}</td>
                             <td>{operationLabel(run)}</td>
+                            <td>{benchmarkSetName(run.benchmarkSetId, benchmarkSets)}</td>
                             <td><code>{run.graph?.slug ?? '—'}</code></td>
                             <td>{formatMilliseconds(getOperationTime(run))}</td>
                             <td>{executionStatus(run)}{proofStatus(run) ? <small>{proofStatus(run)}</small> : null}</td>
@@ -739,13 +952,29 @@ function OpenInsightsLabDialog({
               </>
             )}
           </section>
+        ) : (
+          <section
+            aria-labelledby="insights-lab-trends-tab"
+            className="insights-lab-dialog__panel"
+            id="insights-lab-trends-panel"
+            role="tabpanel"
+          >
+            <InsightsLabTrends benchmarkSets={benchmarkSets} runs={runs} />
+          </section>
         )}
       </div>
     </div>
   )
 }
 
-function RunReport({ run }: { run: PerformanceRunRecord }) {
+function RunReport({
+  benchmarkSets,
+  run,
+}: {
+  benchmarkSets: readonly BenchmarkSet[]
+  run: PerformanceRunRecord
+}) {
+  const setName = benchmarkSetName(run.benchmarkSetId, benchmarkSets)
   return (
     <article aria-label={`Report for run ${run.runNumber}`} className="insights-lab-dialog__report">
       <header>
@@ -756,6 +985,11 @@ function RunReport({ run }: { run: PerformanceRunRecord }) {
         </div>
       </header>
       <p>{formatDateTime(run.startedAtUtc)}</p>
+      <p className="insights-lab-dialog__report-benchmark">
+        <span>Benchmark set</span>
+        <strong>{setName}</strong>
+        {run.benchmarkSetId ? <code>{run.benchmarkSetId}</code> : null}
+      </p>
       <ResultPreview run={run} />
       <ReportSection title="Algorithm" value={run.algorithm} />
       <ReportSection title="Graph" value={run.graph} />

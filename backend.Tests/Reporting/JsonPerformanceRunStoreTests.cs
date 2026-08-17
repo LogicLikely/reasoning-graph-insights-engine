@@ -29,15 +29,37 @@ public class JsonPerformanceRunStoreTests
     }
 
     [TestMethod]
-    public async Task ReadAsync_ReturnsEmptySchemaVersionOneDocument_WhenFileDoesNotExist()
+    public async Task ReadAsync_ReturnsEmptySchemaVersionTwoDocument_WhenFileDoesNotExist()
     {
         using var store = new JsonPerformanceRunStore(_reportPath);
 
         var report = await store.ReadAsync();
 
         Assert.AreEqual(PerformanceReportDocument.CurrentSchemaVersion, report.SchemaVersion);
+        Assert.AreEqual(0, report.BenchmarkSets.Count);
         Assert.AreEqual(0, report.Runs.Count);
         Assert.IsFalse(File.Exists(_reportPath));
+    }
+
+    [TestMethod]
+    public async Task CreateBenchmarkSetAsync_PersistsGeneratedIdentityAndPreservesRuns()
+    {
+        using var store = new JsonPerformanceRunStore(_reportPath);
+        await store.AppendAsync(CreateRun("minimal-counter-set"));
+
+        var created = await store.CreateBenchmarkSetAsync("  LL-699 baseline  ");
+
+        Assert.AreEqual("LL-699 baseline", created.Name);
+        Assert.IsTrue(Guid.TryParseExact(created.Id, "N", out _));
+        Assert.AreEqual(TimeSpan.Zero, created.CreatedAtUtc.Offset);
+
+        var report = await store.ReadAsync();
+        Assert.AreEqual(1, report.BenchmarkSets.Count);
+        Assert.AreEqual(created, report.BenchmarkSets[0]);
+        Assert.AreEqual(1, report.Runs.Count);
+
+        var files = Directory.GetFiles(Path.GetDirectoryName(_reportPath)!);
+        CollectionAssert.AreEqual(new[] { _reportPath }, files);
     }
 
     [TestMethod]
