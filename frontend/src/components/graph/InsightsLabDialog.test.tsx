@@ -194,6 +194,32 @@ describe('InsightsLabDialog', () => {
     )
   })
 
+  it('shows the active graph beside its target only on the Run tab', async () => {
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    const graphIdentity = screen.getByText('Lab graph · lab-graph')
+    const context = graphIdentity.closest('.insights-lab-dialog__context') as HTMLElement
+    expect(within(context).getByText('Active database graph')).toBeInTheDocument()
+    expect(within(context).getByText('Canonical algorithm target')).toBeInTheDocument()
+    expect(within(context).getByText('Root (node-002)')).toBeInTheDocument()
+    expect(within(screen.getByRole('heading', { name: 'Insights Lab' }).closest('header') as HTMLElement)
+      .queryByText('Lab graph · lab-graph')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: /History/ }))
+    expect(screen.queryByText('Lab graph · lab-graph')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Trends' }))
+    expect(screen.queryByText('Lab graph · lab-graph')).not.toBeInTheDocument()
+  })
+
   it('loads newest-first history and presents notProven as a completed qualified result', async () => {
     serviceMocks.getPerformanceRuns.mockResolvedValue({
       schemaVersion: 2,
@@ -535,7 +561,7 @@ describe('InsightsLabDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  it('runs every operation sequentially for each installed stress graph and refreshes history', async () => {
+  it('runs every operation sequentially for each installed standard stress graph and refreshes history', async () => {
     const sequence: string[] = []
     let releaseFirstRun!: () => void
     const firstRun = new Promise<void>((resolve) => {
@@ -587,7 +613,7 @@ describe('InsightsLabDialog', () => {
       <InsightsLabDialog
         graph={{ ...graph, slug: 'stress-balanced-1k' }}
         graphDataSource="database"
-        installedStressGraphIds={['stress-wide-1k', 'stress-balanced-1k']}
+        installedStressGraphIds={['stress-wide-1k', 'stress-deep-1k', 'stress-balanced-1k']}
         isOpen
         onClose={vi.fn()}
         onGraphUpdated={onGraphUpdated}
@@ -595,14 +621,15 @@ describe('InsightsLabDialog', () => {
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+    expect(screen.getByText(/2 installed standard database stress graphs \(12 planned runs\)/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Run standard stress suite' }))
     expect(await screen.findByText(/1 of 12 · Balanced tree \(1,000 nodes\) · Minimal counter set/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Stop suite' })).toBeInTheDocument()
     releaseFirstRun()
 
-    expect(await screen.findByText('Stress suite complete')).toBeInTheDocument()
+    expect(await screen.findByText('Standard stress suite complete')).toBeInTheDocument()
     expect(screen.getByText(/12 requests completed/)).toBeInTheDocument()
-    expect(screen.getByText('Stress suite complete').closest('[role="status"]')).toHaveFocus()
+    expect(screen.getByText('Standard stress suite complete').closest('[role="status"]')).toHaveFocus()
     expect(sequence).toEqual([
       'stress-balanced-1k:minimal',
       'stress-balanced-1k:bounded',
@@ -635,6 +662,7 @@ describe('InsightsLabDialog', () => {
       benchmarkSet.id,
     )
     expect(serviceMocks.getGraphCatalog).not.toHaveBeenCalled()
+    expect(sequence.some((entry) => entry.startsWith('stress-deep-'))).toBe(false)
     expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(2)
     expect(onGraphUpdated).toHaveBeenCalledOnce()
     expect(screen.getByRole('tab', { name: 'Run' })).toHaveAttribute('aria-selected', 'true')
@@ -671,15 +699,15 @@ describe('InsightsLabDialog', () => {
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run standard stress suite' }))
 
     const stopButton = await screen.findByRole('button', { name: 'Stop suite' })
     await waitFor(() => expect(serviceMocks.getNodeCounterSet).toHaveBeenCalledOnce())
     fireEvent.click(stopButton)
 
-    expect(await screen.findByText('Stress suite stopped')).toBeInTheDocument()
+    expect(await screen.findByText('Standard stress suite stopped')).toBeInTheDocument()
     expect(screen.getByText(/1 request interrupted/)).toBeInTheDocument()
-    expect(screen.getByText('Stress suite stopped').closest('[role="status"]')).toHaveFocus()
+    expect(screen.getByText('Standard stress suite stopped').closest('[role="status"]')).toHaveFocus()
     expect(receivedSignal?.aborted).toBe(true)
     expect(serviceMocks.getBoundedNodeCounterSet).not.toHaveBeenCalled()
     expect(serviceMocks.getGraphBySlug).not.toHaveBeenCalled()
@@ -722,21 +750,49 @@ describe('InsightsLabDialog', () => {
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run standard stress suite' }))
 
     expect(await screen.findByText(/3 of 6 · Balanced tree \(1,000 nodes\) · Evidence impact ranking/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Stop suite' }))
-    expect(screen.getByText('Stopping stress suite…')).toBeInTheDocument()
+    expect(screen.getByText('Stopping standard stress suite…')).toBeInTheDocument()
     expect(serviceMocks.getLeastRobustNode).not.toHaveBeenCalled()
 
     finishEvidenceRun()
 
-    expect(await screen.findByText('Stress suite stopped')).toBeInTheDocument()
+    expect(await screen.findByText('Standard stress suite stopped')).toBeInTheDocument()
     expect(screen.getByText(/3 requests completed/)).toBeInTheDocument()
     expect(screen.getByText(/3 of 6 attempted/)).toBeInTheDocument()
     expect(serviceMocks.getLeastRobustNode).not.toHaveBeenCalled()
     expect(serviceMocks.getGraphBySlug).not.toHaveBeenCalled()
     expect(serviceMocks.getGraphCatalog).toHaveBeenCalledOnce()
+  })
+
+  it('excludes deep-chain graphs discovered from the catalog', async () => {
+    serviceMocks.getGraphCatalog.mockResolvedValue([
+      {
+        slug: 'stress-deep-1k',
+        title: 'Deep chain',
+        description: null,
+        nodeCount: 1000,
+        edgeCount: 999,
+      },
+    ])
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Run standard stress suite' }))
+
+    expect(await screen.findByText('No standard stress graphs found')).toBeInTheDocument()
+    expect(screen.getByText(/Install at least one balanced, wide, or shared-diamond database stress graph/)).toBeInTheDocument()
+    expect(serviceMocks.getGraphCatalog).toHaveBeenCalledOnce()
+    expect(serviceMocks.getNodeCounterSet).not.toHaveBeenCalled()
   })
 
   it('continues after a suite request fails and identifies the graph and operation', async () => {
@@ -752,9 +808,9 @@ describe('InsightsLabDialog', () => {
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run standard stress suite' }))
 
-    expect(await screen.findByText('Stress suite complete')).toBeInTheDocument()
+    expect(await screen.findByText('Standard stress suite complete')).toBeInTheDocument()
     expect(screen.getByText(/5 requests completed · 1 request failed/)).toBeInTheDocument()
     expect(serviceMocks.getBoundedNodeCounterSet).toHaveBeenCalledOnce()
 
@@ -781,7 +837,7 @@ describe('InsightsLabDialog', () => {
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run standard stress suite' }))
     await waitFor(() => expect(serviceMocks.getNodeCounterSet).toHaveBeenCalledOnce())
 
     view.unmount()

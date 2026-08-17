@@ -1,6 +1,6 @@
 # Performance Reporting and Insights Lab
 
-The application records backend performance runs for the current graph algorithms and for recalculation after a node-likelihood edit. The Insights Lab launches individual operations or a sequential stress suite in the current browser session, exposes the persisted run history, and charts compute-time trends for named benchmark sets. It does not schedule repetitions or enforce non-overlap across clients.
+The application records backend performance runs for the current graph algorithms and for recalculation after a node-likelihood edit. The Insights Lab launches individual operations or a sequential standard stress suite in the current browser session, exposes the persisted run history, and charts compute-time trends for named benchmark sets. It does not schedule repetitions or enforce non-overlap across clients.
 
 Open **Insights Lab** from the Graph Overview panel. The **Run** tab creates or selects a benchmark set and launches an operation against the active graph; each information button expands a plain-language explanation of what that operation measures and its important limitations. The **History** tab shows every persisted run newest-first in a bounded, scrollable table. Selecting a run opens a dedicated detail view with its complete recorded metadata and bounded result preview; **Back to all runs** returns to the table. The **Trends** tab compares compute time across stress-graph sizes, shapes, and benchmark sets.
 
@@ -21,9 +21,9 @@ The Lab deliberately chooses the ordinal-highest node for the leaf-update worklo
 
 The Lab offers best-effort request cancellation for the greedy, bounded, and robustness operations. Evidence-impact and leaf-update runs do not expose Cancel because their current backend work cannot be stopped reliably and safely mid-operation.
 
-## Stress suite
+## Standard stress suite
 
-**Run stress suite** executes all six operations against every currently installed database stress graph. Graphs follow the canonical order shown by the database-reset UI, and operations run sequentially, graph by graph, with Leaf update last. Every request uses the benchmark set selected when the suite starts. The suite does not render each graph and never overlaps its own requests.
+**Run standard stress suite** executes all six operations against every currently installed balanced, wide, and shared-diamond database stress graph. Deep-chain graphs are intentionally excluded because their pathological depth can make operations extremely slow or terminate the backend; they remain available for deliberate individual runs. Included graphs follow the canonical order shown by the database-reset UI, and operations run sequentially, graph by graph, with Leaf update last. Every request uses the benchmark set selected when the suite starts. The suite does not render each graph and never overlaps its own requests.
 
 Each graph-and-operation combination is executed and recorded once. No hidden warm-up runs or repetitions are added. Consequently, fixed-order cold-start and cache effects can remain visible in the data; warm-up policy is intentionally deferred.
 
@@ -90,7 +90,7 @@ The JSON records total, searched, and excluded candidate counts, subset evaluati
 
 ## Optional manual benchmark protocol
 
-Each individual operation button in Insights Lab launches and records exactly one operation. **Run stress suite** is the explicit exception: it queues one recorded run for every installed stress-graph and operation combination. For a manual comparison, keep runs separate and hold inputs constant; do not start another client while a run or suite is active.
+Each individual operation button in Insights Lab launches and records exactly one operation. **Run standard stress suite** is the explicit exception: it queues one recorded run for every included standard stress-graph and operation combination. For a manual comparison, keep runs separate and hold inputs constant; do not start another client while a run or suite is active.
 
 For each algorithm and graph combination:
 
@@ -103,7 +103,7 @@ For each algorithm and graph combination:
    Release is recommended, not required. The report records the configuration that actually ran, so Debug results remain identifiable.
 
 2. Select or create the intended benchmark set in the Lab.
-3. Execute each measured operation one at a time, or use **Run stress suite** for the installed stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up.
+3. Execute each measured operation one at a time, or use **Run standard stress suite** for the installed balanced, wide, and shared-diamond stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up.
 4. If repetitions are useful, keep the graph, canonical target, and inputs unchanged. Trends retains the raw runs and plots their median compute time with the sample count.
 
 The Lab's same-value leaf update does not require restoration. If benchmarking an ordinary value-changing likelihood edit instead, restore the leaf to the same starting likelihood before every measured edit. A restoration performed through the application creates another recorded run and must be excluded from the comparison.

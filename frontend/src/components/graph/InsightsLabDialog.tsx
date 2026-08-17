@@ -145,6 +145,9 @@ const CANCEL_REPORT_POLL_ATTEMPTS = 8
 const CANCEL_REPORT_POLL_INTERVAL_MS = 250
 const CANONICAL_STRESS_TARGET_ID = 'n-00000'
 const BENCHMARK_SET_STORAGE_KEY = 'insights-lab-benchmark-set-id'
+const STANDARD_STRESS_GRAPH_OPTIONS = STRESS_GRAPH_OPTIONS.filter(
+  ({ id }) => !id.startsWith('stress-deep-'),
+)
 
 function sortRuns(document: PerformanceReportDocument): PerformanceRunRecord[] {
   return [...(Array.isArray(document.runs) ? document.runs : [])]
@@ -402,10 +405,10 @@ function OpenInsightsLabDialog({
   const algorithmTargetNodeId = algorithmTargetNode?.id
   const isBusy = activeOperation !== null || isSuiteRunning
   const selectedRun = runs.find(({ runNumber }) => runNumber === selectedRunNumber)
-  const knownInstalledStressGraphs = useMemo(() => {
+  const knownInstalledStandardStressGraphs = useMemo(() => {
     if (installedStressGraphIds === undefined) return undefined
     const installedIds = new Set<string>(installedStressGraphIds)
-    return STRESS_GRAPH_OPTIONS.filter(({ id }) => installedIds.has(id))
+    return STANDARD_STRESS_GRAPH_OPTIONS.filter(({ id }) => installedIds.has(id))
   }, [installedStressGraphIds])
 
   const receiveBenchmarkSets = (nextSets: BenchmarkSet[]) => {
@@ -737,11 +740,11 @@ function OpenInsightsLabDialog({
     } | undefined
 
     try {
-      let installedGraphs = knownInstalledStressGraphs
+      let installedGraphs = knownInstalledStandardStressGraphs
       if (installedGraphs === undefined) {
         const catalog = await getGraphCatalog()
         const installedIds = new Set(catalog.map(({ slug }) => slug))
-        installedGraphs = STRESS_GRAPH_OPTIONS.filter(({ id }) => installedIds.has(id))
+        installedGraphs = STANDARD_STRESS_GRAPH_OPTIONS.filter(({ id }) => installedIds.has(id))
       }
 
       graphCount = installedGraphs.length
@@ -913,7 +916,6 @@ function OpenInsightsLabDialog({
           <div className="insights-lab-dialog__header-copy">
             <span className="eyebrow">Performance workspace</span>
             <h2 id="insights-lab-title">Insights Lab</h2>
-            <p>{graph ? `${graph.title} · ${graph.slug}` : 'No active graph'}</p>
           </div>
           <button
             aria-label="Close Insights Lab"
@@ -987,12 +989,12 @@ function OpenInsightsLabDialog({
               <strong>
                 {isSuiteRunning
                   ? isFinalizingRun
-                    ? 'Finalizing stress suite…'
+                    ? 'Finalizing standard stress suite…'
                     : isCancellationRequested
-                      ? 'Stopping stress suite…'
+                      ? 'Stopping standard stress suite…'
                       : suiteProgress?.total
-                        ? 'Running stress suite…'
-                        : 'Preparing stress suite…'
+                        ? 'Running standard stress suite…'
+                        : 'Preparing standard stress suite…'
                   : isFinalizingRun
                     ? 'Finalizing…'
                     : isCancellationRequested
@@ -1105,39 +1107,45 @@ function OpenInsightsLabDialog({
               {benchmarkSetError ? <p role="alert">{benchmarkSetError}</p> : null}
             </form>
             <div className="insights-lab-dialog__context">
-              <span>Canonical algorithm target</span>
-              <strong>
-                {algorithmTargetNode
-                  ? `Root (${algorithmTargetNode.id})`
-                  : 'This graph does not contain a root node'}
-              </strong>
-              <small>Counter-set and evidence-impact runs always use the graph root.</small>
+              <div>
+                <span>Active {graphDataSource} graph</span>
+                <strong>{graph ? `${graph.title} · ${graph.slug}` : 'No active graph'}</strong>
+              </div>
+              <div>
+                <span>Canonical algorithm target</span>
+                <strong>
+                  {algorithmTargetNode
+                    ? `Root (${algorithmTargetNode.id})`
+                    : 'This graph does not contain a root node'}
+                </strong>
+                <small>Counter-set and evidence-impact runs always use the graph root.</small>
+              </div>
             </div>
             <section
               aria-labelledby="insights-lab-stress-suite-title"
               className="insights-lab-dialog__suite-action"
             >
               <div>
-                <h3 id="insights-lab-stress-suite-title">Run stress suite</h3>
+                <h3 id="insights-lab-stress-suite-title">Run standard stress suite</h3>
                 <p>
                   Run all six Lab operations, one at a time, on
                   {' '}
-                  {knownInstalledStressGraphs === undefined
-                    ? 'every installed database stress graph'
-                    : `${knownInstalledStressGraphs.length} installed database stress ${knownInstalledStressGraphs.length === 1 ? 'graph' : 'graphs'}`}.
+                  {knownInstalledStandardStressGraphs === undefined
+                    ? 'every installed balanced, wide, and shared-diamond database stress graph'
+                    : `${knownInstalledStandardStressGraphs.length} installed standard database stress ${knownInstalledStandardStressGraphs.length === 1 ? 'graph' : 'graphs'} (${knownInstalledStandardStressGraphs.length * OPERATIONS.length} planned ${knownInstalledStandardStressGraphs.length * OPERATIONS.length === 1 ? 'run' : 'runs'})`}.
                 </p>
-                <small>No warm-up runs are included.</small>
+                <small>Deep-chain graphs are excluded; manual deep-chain runs can be extremely slow or terminate the backend. No warm-up runs are included.</small>
               </div>
               <button
                 disabled={isBusy
                   || isHistoryLoading
                   || !selectedBenchmarkSetId
-                  || knownInstalledStressGraphs?.length === 0}
+                  || knownInstalledStandardStressGraphs?.length === 0}
                 onClick={() => void launchStressSuite()}
                 ref={suiteButtonRef}
                 type="button"
               >
-                Run stress suite
+                Run standard stress suite
               </button>
             </section>
             {suiteSummary ? (
@@ -1149,13 +1157,13 @@ function OpenInsightsLabDialog({
               >
                 <strong>
                   {suiteSummary.status === 'completed'
-                    ? 'Stress suite complete'
+                    ? 'Standard stress suite complete'
                     : suiteSummary.status === 'stopped'
-                      ? 'Stress suite stopped'
-                      : 'No stress graphs found'}
+                      ? 'Standard stress suite stopped'
+                      : 'No standard stress graphs found'}
                 </strong>
                 {suiteSummary.status === 'empty' ? (
-                  <span>Install at least one database stress graph to run the suite.</span>
+                  <span>Install at least one balanced, wide, or shared-diamond database stress graph to run the suite.</span>
                 ) : (
                   <span>
                     {suiteSummary.completed} {suiteSummary.completed === 1 ? 'request' : 'requests'} completed

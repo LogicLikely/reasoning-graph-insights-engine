@@ -242,12 +242,24 @@
 
 .insights-lab-dialog__context {
   display: grid;
-  gap: 0.2rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
   margin-bottom: 0.85rem;
   padding: 0.75rem 0.9rem;
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   background: rgba(253, 253, 248, 0.82);
+}
+
+.insights-lab-dialog__context > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.insights-lab-dialog__context > div + div {
+  padding-left: 1rem;
+  border-left: 1px solid var(--color-border);
 }
 
 .insights-lab-dialog__context span {
@@ -707,9 +719,17 @@
 
   .insights-lab-dialog__operations,
   .insights-lab-dialog__benchmark-sets,
+  .insights-lab-dialog__context,
   .insights-lab-dialog__preview > div,
   .insights-lab-dialog__report-section > dl {
     grid-template-columns: 1fr;
+  }
+
+  .insights-lab-dialog__context > div + div {
+    padding-top: 0.75rem;
+    padding-left: 0;
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
   }
 
   .insights-lab-dialog__operation {
