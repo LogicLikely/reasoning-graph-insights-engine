@@ -122,16 +122,26 @@ describe('InsightsLabDialog', () => {
     )
 
     fireEvent.click(screen.getByRole('tab', { name: /History/ }))
+    const historyRegion = await screen.findByRole('region', { name: 'Performance run history' })
+    expect(historyRegion).toHaveAttribute('tabindex', '0')
+    expect(screen.queryByRole('article', { name: /Report for run/ })).not.toBeInTheDocument()
     const rows = await screen.findAllByRole('row')
     expect(within(rows[1]).getByRole('button', { name: 'View run 8' })).toBeInTheDocument()
     expect(within(rows[2]).getByRole('button', { name: 'View run 2' })).toBeInTheDocument()
 
     fireEvent.click(within(rows[2]).getByRole('button', { name: 'View run 2' }))
+    expect(screen.queryByRole('region', { name: 'Performance run history' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back to all runs' })).toHaveFocus()
     const report = screen.getByRole('article', { name: 'Report for run 2' })
     expect(within(report).getAllByText('Completed').length).toBeGreaterThan(0)
     expect(within(report).getAllByText('Not proven').length).toBeGreaterThan(0)
     expect(within(report).getByText('Returned node IDs')).toBeInTheDocument()
     expect(within(report).getAllByText('node-100').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to all runs' }))
+    expect(await screen.findByRole('region', { name: 'Performance run history' })).toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Report for run 2' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View run 2' })).toHaveFocus()
   })
 
   it('uses a fresh watermark, runs against the selected node, and opens the matching report', async () => {
@@ -184,7 +194,47 @@ describe('InsightsLabDialog', () => {
     )
     expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(3)
     expect(screen.getByRole('tab', { name: /History/ })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /History/ })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Back to all runs' })).toHaveFocus()
+    expect(screen.queryByRole('region', { name: 'Performance run history' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Minimal counter set', /most promising counters first/i],
+    ['Bounded minimal counter set', /at most 20 candidates/i],
+    ['Evidence impact ranking', /not whether a piece of evidence is true/i],
+    ['Least robust node', /returns the node with the largest change/i],
+    ['Robustness ranking', /orders the results from least to most robust/i],
+    ['Leaf update', /highest-ID node is treated as a likely leaf/i],
+  ])('explains %s in a click-triggered information panel', async (title, expectedCopy) => {
+    const onClose = vi.fn()
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={onClose}
+        selectedNodeId="node-002"
+      />,
+    )
+
+    const card = operationCard(new RegExp(`^${title}$`))
+    await waitFor(() => expect(within(card).getByRole('button', {
+      name: `Run ${title}`,
+    })).toBeEnabled())
+    const infoButton = within(card).getByRole('button', { name: `About ${title}` })
+    expect(infoButton).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(infoButton)
+
+    const info = screen.getByRole('region', { name: `About ${title}` })
+    expect(infoButton).toHaveAttribute('aria-expanded', 'true')
+    expect(within(info).getByText(expectedCopy)).toBeInTheDocument()
+
+    infoButton.focus()
+    fireEvent.keyDown(infoButton, { key: 'Escape' })
+    expect(screen.queryByRole('region', { name: `About ${title}` })).not.toBeInTheDocument()
+    expect(infoButton).toHaveFocus()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('runs the database leaf update against the ordinal-highest node without changing prior odds', async () => {

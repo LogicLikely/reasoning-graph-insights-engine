@@ -32,6 +32,8 @@ type OperationDefinition = {
   id: OperationId
   title: string
   description: string
+  explanation: string
+  caveat: string
   algorithmName: string
   implementation?: string
   requiresTarget?: boolean
@@ -44,6 +46,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
     id: 'minimal',
     title: 'Minimal counter set',
     description: 'Run the greedy counter-set search for the selected node.',
+    explanation: 'Quickly looks for a small group of existing counterarguments that would lower the selected node below the Lab\'s confidence cutoff. It considers the most promising counters first.',
+    caveat: 'This is a fast search, not a proof: a smaller counter set may exist.',
     algorithmName: 'minimal-counter-set',
     implementation: 'greedy',
     requiresTarget: true,
@@ -53,6 +57,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
     id: 'bounded',
     title: 'Bounded minimal counter set',
     description: 'Run the exact bounded search for the selected node.',
+    explanation: 'Tries counterargument combinations from smallest to largest to find the fewest that would lower the selected node below the confidence cutoff.',
+    caveat: 'The search considers at most 20 candidates. If more eligible counters exist, the result may be useful without being proven globally minimal.',
     algorithmName: 'minimal-counter-set',
     implementation: 'bounded-brute-force',
     requiresTarget: true,
@@ -62,6 +68,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
     id: 'evidence',
     title: 'Evidence impact ranking',
     description: 'Rank evidence by its impact on the selected node.',
+    explanation: 'Estimates how much each supporting or opposing piece of evidence affects the selected node by calculating what its confidence would be without that evidence. It separates supporting and counter evidence, then ranks each group by the predicted change.',
+    caveat: 'This measures sensitivity within the model, not whether a piece of evidence is true or caused the outcome.',
     algorithmName: 'evidence-impact-ranking',
     requiresTarget: true,
   },
@@ -69,6 +77,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
     id: 'least',
     title: 'Least robust node',
     description: 'Find the least robust node in the active graph.',
+    explanation: 'Checks every node to estimate how much its confidence would change if the modeled contribution from its highest-weighted path disappeared, then returns the node with the largest change.',
+    caveat: 'A lower robustness score means the node is easier to disrupt under this specific path-removal test.',
     algorithmName: 'least-robust-node',
     cancellable: true,
   },
@@ -76,6 +86,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
     id: 'ranking',
     title: 'Robustness ranking',
     description: 'Rank every node in the active graph by robustness.',
+    explanation: 'Applies the same highest-weighted-path test to every node and orders the results from least to most robust.',
+    caveat: 'This measures sensitivity to removing one modeled path, not the overall quality or truth of a node.',
     algorithmName: 'robustness-ranking',
     cancellable: true,
   },
@@ -83,6 +95,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
     id: 'leaf',
     title: 'Leaf update',
     description: 'Reapply prior odds to the ordinal-highest node and measure the update path.',
+    explanation: 'Exercises the real database update and recalculation path without intentionally changing the graph. It writes the highest-ID node\'s existing prior odds back to that node, recalculates affected ancestors, and saves the results.',
+    caveat: 'The highest-ID node is treated as a likely leaf but is not guaranteed to be one. This operation is unavailable for fixture graphs.',
     algorithmName: 'leaf-update',
     databaseOnly: true,
   },
@@ -208,11 +222,15 @@ function OpenInsightsLabDialog({
   const closeRef = useRef<HTMLButtonElement>(null)
   const runTabRef = useRef<HTMLButtonElement>(null)
   const historyTabRef = useRef<HTMLButtonElement>(null)
+  const historyBackRef = useRef<HTMLButtonElement>(null)
+  const runViewButtonRefs = useRef(new Map<number, HTMLButtonElement>())
   const runningStatusRef = useRef<HTMLDivElement>(null)
-  const focusHistoryAfterRunRef = useRef(false)
+  const focusHistoryDetailRef = useRef(false)
+  const focusRunListItemRef = useRef<number | undefined>(undefined)
   const abortControllerRef = useRef<AbortController | null>(null)
   const runGuardRef = useRef(false)
   const [tab, setTab] = useState<LabTab>('run')
+  const [expandedOperationId, setExpandedOperationId] = useState<OperationId>()
   const [runs, setRuns] = useState<PerformanceRunRecord[]>([])
   const [selectedRunNumber, setSelectedRunNumber] = useState<number>()
   const [isHistoryLoading, setIsHistoryLoading] = useState(true)
@@ -271,7 +289,7 @@ function OpenInsightsLabDialog({
         setSelectedRunNumber((current) => (
           nextRuns.some(({ runNumber }) => runNumber === current)
             ? current
-            : nextRuns[0]?.runNumber
+            : undefined
         ))
         setHistoryError(null)
       })
@@ -298,15 +316,26 @@ function OpenInsightsLabDialog({
   }, [activeOperation, isCancellationRequested, isFinalizingRun])
 
   useEffect(() => {
-    if (tab !== 'history' || !focusHistoryAfterRunRef.current) return
-    focusHistoryAfterRunRef.current = false
-    historyTabRef.current?.focus()
+    if (tab !== 'history' || selectedRunNumber === undefined || !focusHistoryDetailRef.current) return
+    focusHistoryDetailRef.current = false
+    historyBackRef.current?.focus()
+  }, [selectedRunNumber, tab])
+
+  useEffect(() => {
+    if (tab !== 'history' || selectedRunNumber !== undefined || focusRunListItemRef.current === undefined) return
+    const runNumber = focusRunListItemRef.current
+    focusRunListItemRef.current = undefined
+    runViewButtonRefs.current.get(runNumber)?.focus()
   }, [selectedRunNumber, tab])
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
+      if (expandedOperationId) {
+        setExpandedOperationId(undefined)
+        return
+      }
       if (!runGuardRef.current) onClose()
       return
     }
@@ -341,6 +370,7 @@ function OpenInsightsLabDialog({
     if (!nextTab) return
     event.preventDefault()
     setTab(nextTab)
+    if (nextTab === 'history') setExpandedOperationId(undefined)
     const nextTabRef = nextTab === 'run' ? runTabRef : historyTabRef
     nextTabRef.current?.focus()
   }
@@ -353,6 +383,7 @@ function OpenInsightsLabDialog({
     if (operation.databaseOnly && graphDataSource !== 'database') return
 
     runGuardRef.current = true
+    setExpandedOperationId(undefined)
     setActiveOperation(operation)
     setRunError(null)
     setRunNotice(null)
@@ -428,7 +459,7 @@ function OpenInsightsLabDialog({
 
       if (matchingRun) {
         setSelectedRunNumber(matchingRun.runNumber)
-        focusHistoryAfterRunRef.current = true
+        focusHistoryDetailRef.current = true
         setTab('history')
       }
 
@@ -516,7 +547,10 @@ function OpenInsightsLabDialog({
             aria-controls="insights-lab-history-panel"
             aria-selected={tab === 'history'}
             id="insights-lab-history-tab"
-            onClick={() => setTab('history')}
+            onClick={() => {
+              setExpandedOperationId(undefined)
+              setTab('history')
+            }}
             onKeyDown={handleTabKeyDown}
             ref={historyTabRef}
             role="tab"
@@ -576,6 +610,8 @@ function OpenInsightsLabDialog({
             </div>
             <div className="insights-lab-dialog__operations">
               {OPERATIONS.map((operation) => {
+                const infoPanelId = `insights-lab-operation-${operation.id}-info`
+                const isInfoExpanded = expandedOperationId === operation.id
                 const missingTarget = operation.requiresTarget && !selectedNode
                 const missingLeafTarget = operation.id === 'leaf' && !highestNode
                 const wrongSource = operation.databaseOnly && graphDataSource !== 'database'
@@ -588,8 +624,35 @@ function OpenInsightsLabDialog({
                 return (
                   <article className="insights-lab-dialog__operation" key={operation.id}>
                     <div>
-                      <h3>{operation.title}</h3>
+                      <div className="insights-lab-dialog__operation-heading">
+                        <h3>{operation.title}</h3>
+                        <button
+                          aria-controls={infoPanelId}
+                          aria-expanded={isInfoExpanded}
+                          aria-label={`About ${operation.title}`}
+                          className="insights-lab-dialog__info-button"
+                          disabled={activeOperation !== null}
+                          onClick={() => setExpandedOperationId((current) => (
+                            current === operation.id ? undefined : operation.id
+                          ))}
+                          type="button"
+                        >
+                          <span aria-hidden="true">i</span>
+                        </button>
+                      </div>
                       <p>{operation.description}</p>
+                      <section
+                        aria-label={`About ${operation.title}`}
+                        className="insights-lab-dialog__algorithm-info"
+                        hidden={!isInfoExpanded}
+                        id={infoPanelId}
+                      >
+                        <p>{operation.explanation}</p>
+                        <div>
+                          <strong>Keep in mind</strong>
+                          <p>{operation.caveat}</p>
+                        </div>
+                      </section>
                       {wrongSource ? <small>Database graphs only; fixture updates are skipped.</small> : null}
                       {missingTarget ? <small>Select a node to enable this algorithm.</small> : null}
                       {missingLeafTarget ? <small>This graph has no node to update.</small> : null}
@@ -614,29 +677,68 @@ function OpenInsightsLabDialog({
             id="insights-lab-history-panel"
             role="tabpanel"
           >
-            {isHistoryLoading ? <p role="status">Loading run history…</p> : null}
-            {historyError ? <p className="insights-lab-dialog__error" role="alert">{historyError}</p> : null}
-            {!isHistoryLoading && runs.length === 0 ? <p>No performance runs have been recorded yet.</p> : null}
-            {runs.length > 0 ? (
-              <div className="insights-lab-dialog__history-table-wrap">
-                <table className="insights-lab-dialog__history-table">
-                  <thead><tr><th>Run</th><th>Date/time</th><th>Operation</th><th>Graph</th><th>Operation time</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {runs.map((run) => (
-                      <tr className={selectedRunNumber === run.runNumber ? 'is-selected' : undefined} key={run.runNumber}>
-                        <td><button aria-label={`View run ${run.runNumber}`} onClick={() => setSelectedRunNumber(run.runNumber)} type="button">#{run.runNumber}</button></td>
-                        <td>{formatDateTime(run.startedAtUtc)}</td>
-                        <td>{operationLabel(run)}</td>
-                        <td><code>{run.graph?.slug ?? '—'}</code></td>
-                        <td>{formatMilliseconds(getOperationTime(run))}</td>
-                        <td>{executionStatus(run)}{proofStatus(run) ? <small>{proofStatus(run)}</small> : null}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {selectedRun ? (
+              <div className="insights-lab-dialog__history-detail">
+                <div className="insights-lab-dialog__history-detail-toolbar">
+                  <button
+                    onClick={() => {
+                      focusRunListItemRef.current = selectedRun.runNumber
+                      setSelectedRunNumber(undefined)
+                    }}
+                    ref={historyBackRef}
+                    type="button"
+                  >
+                    <span aria-hidden="true">←</span> Back to all runs
+                  </button>
+                </div>
+                <RunReport run={selectedRun} />
               </div>
-            ) : null}
-            {selectedRun ? <RunReport run={selectedRun} /> : null}
+            ) : (
+              <>
+                {isHistoryLoading ? <p role="status">Loading run history…</p> : null}
+                {historyError ? <p className="insights-lab-dialog__error" role="alert">{historyError}</p> : null}
+                {!isHistoryLoading && runs.length === 0 ? <p>No performance runs have been recorded yet.</p> : null}
+                {runs.length > 0 ? (
+                  <div
+                    aria-label="Performance run history"
+                    className="insights-lab-dialog__history-table-wrap"
+                    role="region"
+                    tabIndex={0}
+                  >
+                    <table className="insights-lab-dialog__history-table">
+                      <thead><tr><th>Run</th><th>Date/time</th><th>Operation</th><th>Graph</th><th>Operation time</th><th>Status</th></tr></thead>
+                      <tbody>
+                        {runs.map((run) => (
+                          <tr key={run.runNumber}>
+                            <td>
+                              <button
+                                aria-label={`View run ${run.runNumber}`}
+                                onClick={() => {
+                                  focusHistoryDetailRef.current = true
+                                  setSelectedRunNumber(run.runNumber)
+                                }}
+                                ref={(button) => {
+                                  if (button) runViewButtonRefs.current.set(run.runNumber, button)
+                                  else runViewButtonRefs.current.delete(run.runNumber)
+                                }}
+                                type="button"
+                              >
+                                #{run.runNumber}
+                              </button>
+                            </td>
+                            <td>{formatDateTime(run.startedAtUtc)}</td>
+                            <td>{operationLabel(run)}</td>
+                            <td><code>{run.graph?.slug ?? '—'}</code></td>
+                            <td>{formatMilliseconds(getOperationTime(run))}</td>
+                            <td>{executionStatus(run)}{proofStatus(run) ? <small>{proofStatus(run)}</small> : null}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </>
+            )}
           </section>
         )}
       </div>

@@ -2,7 +2,7 @@
 
 The application records backend performance runs for the current graph algorithms and for recalculation after a node-likelihood edit. The Insights Lab launches one operation at a time in the current browser session and exposes the persisted run history. It does not schedule repetitions, enforce non-overlap across clients, or calculate summary statistics.
 
-Open **Insights Lab** from the Graph Overview panel. The **Run** tab launches an operation against the active graph, and the **History** tab lists every persisted run newest-first. Selecting a history row shows its complete recorded metadata and a bounded result preview.
+Open **Insights Lab** from the Graph Overview panel. The **Run** tab launches an operation against the active graph; each information button expands a plain-language explanation of what that operation measures and its important limitations. The **History** tab shows every persisted run newest-first in a bounded, scrollable table. Selecting a run opens a dedicated detail view with its complete recorded metadata and bounded result preview; **Back to all runs** returns to the table.
 
 ## Recorded operations
 
