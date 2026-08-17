@@ -563,10 +563,10 @@ export function DemoPage() {
       <InsightsLabDialog
         graph={graph}
         graphDataSource={graphDataSource}
+        installedStressGraphIds={installedStressGraphIds}
         isOpen={isInsightsLabOpen}
         onClose={() => setIsInsightsLabOpen(false)}
         onGraphUpdated={handleGraphUpdatedFromInsightsLab}
-        selectedNodeId={selectedNodeId}
       />
 
       <section className="demo-support-strip">

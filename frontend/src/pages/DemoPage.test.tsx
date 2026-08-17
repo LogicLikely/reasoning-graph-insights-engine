@@ -115,20 +115,24 @@ vi.mock('../components/graph/InsightsLabDialog', () => ({
     graph,
     graphDataSource,
     isOpen,
+    installedStressGraphIds,
     onClose,
     onGraphUpdated,
-    selectedNodeId,
   }: {
     graph: typeof sampleGraph | null
     graphDataSource: 'fixture' | 'database'
     isOpen: boolean
+    installedStressGraphIds?: readonly string[]
     onClose: () => void
     onGraphUpdated?: () => void
-    selectedNodeId?: string
   }) => isOpen ? (
     <div aria-label="Insights Lab" data-testid="insights-lab-dialog" role="dialog">
       <span data-testid="insights-lab-context">
-        {[graph?.slug ?? 'no-graph', graphDataSource, selectedNodeId ?? 'no-selection'].join('|')}
+        {[
+          graph?.slug ?? 'no-graph',
+          graphDataSource,
+          installedStressGraphIds?.join(',') || 'no-stress-graphs',
+        ].join('|')}
       </span>
       <button onClick={onGraphUpdated} type="button">Simulate graph update</button>
       <button onClick={onClose} type="button">Close Insights Lab</button>
@@ -182,6 +186,7 @@ describe('DemoPage', () => {
   })
 
   it('opens and closes the Insights Lab with the active graph context', async () => {
+    getGraphCatalogMock.mockResolvedValue(graphCatalogWithStressGraph)
     getGraphBySlugMock.mockResolvedValue(sampleGraph)
 
     render(<DemoPage />)
@@ -191,7 +196,7 @@ describe('DemoPage', () => {
 
     expect(screen.getByRole('dialog', { name: 'Insights Lab' })).toBeInTheDocument()
     expect(screen.getByTestId('insights-lab-context')).toHaveTextContent(
-      'sample-medium|database|E1',
+      'sample-medium|database|stress-balanced-1k',
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Close Insights Lab' }))

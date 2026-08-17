@@ -6,6 +6,8 @@ import { InsightsLabDialog } from './InsightsLabDialog'
 const serviceMocks = vi.hoisted(() => ({
   getBoundedNodeCounterSet: vi.fn(),
   getEvidenceImpactRanking: vi.fn(),
+  getGraphBySlug: vi.fn(),
+  getGraphCatalog: vi.fn(),
   getLeastRobustNode: vi.fn(),
   getNodeCounterSet: vi.fn(),
   getNodeRobustnessRanking: vi.fn(),
@@ -17,6 +19,8 @@ const serviceMocks = vi.hoisted(() => ({
 vi.mock('../../services/graphService', () => ({
   getBoundedNodeCounterSet: serviceMocks.getBoundedNodeCounterSet,
   getEvidenceImpactRanking: serviceMocks.getEvidenceImpactRanking,
+  getGraphBySlug: serviceMocks.getGraphBySlug,
+  getGraphCatalog: serviceMocks.getGraphCatalog,
   getLeastRobustNode: serviceMocks.getLeastRobustNode,
   getNodeCounterSet: serviceMocks.getNodeCounterSet,
   getNodeRobustnessRanking: serviceMocks.getNodeRobustnessRanking,
@@ -87,6 +91,8 @@ describe('InsightsLabDialog', () => {
     serviceMocks.getNodeCounterSet.mockResolvedValue(['node-100'])
     serviceMocks.getBoundedNodeCounterSet.mockResolvedValue({ runNumber: 1 })
     serviceMocks.getEvidenceImpactRanking.mockResolvedValue({ supporting: [], counter: [] })
+    serviceMocks.getGraphBySlug.mockResolvedValue(graph)
+    serviceMocks.getGraphCatalog.mockResolvedValue([])
     serviceMocks.getLeastRobustNode.mockResolvedValue({ nodeId: 'node-100', robustness: 0.2 })
     serviceMocks.getNodeRobustnessRanking.mockResolvedValue([])
     serviceMocks.updateNode.mockResolvedValue(undefined)
@@ -108,7 +114,6 @@ describe('InsightsLabDialog', () => {
         graphDataSource="database"
         isOpen
         onClose={vi.fn()}
-        selectedNodeId="node-002"
       />,
     )
 
@@ -168,12 +173,11 @@ describe('InsightsLabDialog', () => {
         graphDataSource="database"
         isOpen
         onClose={vi.fn()}
-        selectedNodeId="node-100"
       />,
     )
 
     expect(await screen.findByText('Root (n-00000)')).toBeInTheDocument()
-    expect(screen.getByText(/greedy counter-set search for the canonical root/i)).toBeInTheDocument()
+    expect(screen.getByText(/greedy counter-set search for the graph root/i)).toBeInTheDocument()
     const runButton = within(operationCard(/Minimal counter set/)).getByRole('button', {
       name: 'Run Minimal counter set',
     })
@@ -231,7 +235,6 @@ describe('InsightsLabDialog', () => {
         graphDataSource="database"
         isOpen
         onClose={vi.fn()}
-        selectedNodeId="node-002"
       />,
     )
 
@@ -260,7 +263,7 @@ describe('InsightsLabDialog', () => {
     expect(screen.getByRole('button', { name: 'View run 2' })).toHaveFocus()
   })
 
-  it('uses a fresh watermark, runs against the selected node, and opens the matching report', async () => {
+  it('uses a fresh watermark, runs against the deterministic root, and opens the matching report', async () => {
     const completedRun = {
       runNumber: 12,
       benchmarkSetId: benchmarkSet.id,
@@ -294,7 +297,6 @@ describe('InsightsLabDialog', () => {
         graphDataSource="database"
         isOpen
         onClose={vi.fn()}
-        selectedNodeId="node-002"
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(1))
@@ -334,7 +336,6 @@ describe('InsightsLabDialog', () => {
         graphDataSource="database"
         isOpen
         onClose={onClose}
-        selectedNodeId="node-002"
       />,
     )
 
@@ -465,7 +466,6 @@ describe('InsightsLabDialog', () => {
         graphDataSource="database"
         isOpen
         onClose={vi.fn()}
-        selectedNodeId="node-002"
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
@@ -514,7 +514,6 @@ describe('InsightsLabDialog', () => {
         graphDataSource="database"
         isOpen
         onClose={onClose}
-        selectedNodeId="node-002"
       />,
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(1))
@@ -536,6 +535,262 @@ describe('InsightsLabDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it('runs every operation sequentially for each installed stress graph and refreshes history', async () => {
+    const sequence: string[] = []
+    let releaseFirstRun!: () => void
+    const firstRun = new Promise<void>((resolve) => {
+      releaseFirstRun = resolve
+    })
+    let isFirstRun = true
+
+    serviceMocks.getNodeCounterSet.mockImplementation(async (slug: string) => {
+      sequence.push(`${slug}:minimal`)
+      if (isFirstRun) {
+        isFirstRun = false
+        await firstRun
+      }
+      return []
+    })
+    serviceMocks.getBoundedNodeCounterSet.mockImplementation(async (slug: string) => {
+      sequence.push(`${slug}:bounded`)
+      return { runNumber: 1 }
+    })
+    serviceMocks.getEvidenceImpactRanking.mockImplementation(async (slug: string) => {
+      sequence.push(`${slug}:evidence`)
+      return { supportingEvidence: [], counterEvidence: [] }
+    })
+    serviceMocks.getLeastRobustNode.mockImplementation(async (slug: string) => {
+      sequence.push(`${slug}:least`)
+      return { nodeId: 'n-00000', robustness: 0.2 }
+    })
+    serviceMocks.getNodeRobustnessRanking.mockImplementation(async (slug: string) => {
+      sequence.push(`${slug}:ranking`)
+      return []
+    })
+    serviceMocks.getGraphBySlug.mockImplementation(async (slug: string) => {
+      sequence.push(`${slug}:load`)
+      return {
+        ...graph,
+        slug,
+        nodes: [
+          { ...graph.nodes[0], id: 'n-00000' },
+          { ...graph.nodes[1], id: 'n-00999', priorOdds: 4.5 },
+        ],
+      }
+    })
+    serviceMocks.updateNode.mockImplementation(async (slug: string) => {
+      sequence.push(`${slug}:leaf`)
+    })
+    const onGraphUpdated = vi.fn()
+
+    render(
+      <InsightsLabDialog
+        graph={{ ...graph, slug: 'stress-balanced-1k' }}
+        graphDataSource="database"
+        installedStressGraphIds={['stress-wide-1k', 'stress-balanced-1k']}
+        isOpen
+        onClose={vi.fn()}
+        onGraphUpdated={onGraphUpdated}
+      />,
+    )
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+    expect(await screen.findByText(/1 of 12 · Balanced tree \(1,000 nodes\) · Minimal counter set/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop suite' })).toBeInTheDocument()
+    releaseFirstRun()
+
+    expect(await screen.findByText('Stress suite complete')).toBeInTheDocument()
+    expect(screen.getByText(/12 requests completed/)).toBeInTheDocument()
+    expect(screen.getByText('Stress suite complete').closest('[role="status"]')).toHaveFocus()
+    expect(sequence).toEqual([
+      'stress-balanced-1k:minimal',
+      'stress-balanced-1k:bounded',
+      'stress-balanced-1k:evidence',
+      'stress-balanced-1k:least',
+      'stress-balanced-1k:ranking',
+      'stress-balanced-1k:load',
+      'stress-balanced-1k:leaf',
+      'stress-wide-1k:minimal',
+      'stress-wide-1k:bounded',
+      'stress-wide-1k:evidence',
+      'stress-wide-1k:least',
+      'stress-wide-1k:ranking',
+      'stress-wide-1k:load',
+      'stress-wide-1k:leaf',
+    ])
+    expect(serviceMocks.getNodeCounterSet.mock.calls.map((call) => call.slice(0, 3))).toEqual([
+      ['stress-balanced-1k', 'n-00000', 'database'],
+      ['stress-wide-1k', 'n-00000', 'database'],
+    ])
+    expect(serviceMocks.getGraphBySlug.mock.calls).toEqual([
+      ['stress-balanced-1k', 'database'],
+      ['stress-wide-1k', 'database'],
+    ])
+    expect(serviceMocks.updateNode).toHaveBeenNthCalledWith(
+      1,
+      'stress-balanced-1k',
+      'n-00999',
+      { priorOdds: 4.5 },
+      benchmarkSet.id,
+    )
+    expect(serviceMocks.getGraphCatalog).not.toHaveBeenCalled()
+    expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(2)
+    expect(onGraphUpdated).toHaveBeenCalledOnce()
+    expect(screen.getByRole('tab', { name: 'Run' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('stops the stress suite by interrupting a cancellable request and launches nothing else', async () => {
+    let receivedSignal: AbortSignal | undefined
+    serviceMocks.getNodeCounterSet.mockImplementation((...args: unknown[]) => {
+      receivedSignal = args[3] as AbortSignal
+      return new Promise((_, reject) => {
+        receivedSignal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+      })
+    })
+    const interruptedRun = {
+      runNumber: 1,
+      benchmarkSetId: benchmarkSet.id,
+      algorithm: { name: 'minimal-counter-set', implementation: 'greedy' },
+      graph: { slug: 'stress-balanced-1k' },
+      invocation: { dataSource: 'database', targetNodeId: 'n-00000' },
+      outcome: { status: 'cancelled' },
+      details: {},
+    }
+    serviceMocks.getPerformanceRuns
+      .mockResolvedValueOnce(emptyReport())
+      .mockResolvedValueOnce(report([interruptedRun]))
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        installedStressGraphIds={['stress-balanced-1k']}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+
+    const stopButton = await screen.findByRole('button', { name: 'Stop suite' })
+    await waitFor(() => expect(serviceMocks.getNodeCounterSet).toHaveBeenCalledOnce())
+    fireEvent.click(stopButton)
+
+    expect(await screen.findByText('Stress suite stopped')).toBeInTheDocument()
+    expect(screen.getByText(/1 request interrupted/)).toBeInTheDocument()
+    expect(screen.getByText('Stress suite stopped').closest('[role="status"]')).toHaveFocus()
+    expect(receivedSignal?.aborted).toBe(true)
+    expect(serviceMocks.getBoundedNodeCounterSet).not.toHaveBeenCalled()
+    expect(serviceMocks.getGraphBySlug).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: 'Run' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('article', { name: /Report for run/ })).not.toBeInTheDocument()
+  })
+
+  it('discovers installed stress graphs and stops after a non-cancellable request finishes', async () => {
+    let finishEvidenceRun!: () => void
+    const evidenceRun = new Promise<void>((resolve) => {
+      finishEvidenceRun = resolve
+    })
+    serviceMocks.getGraphCatalog.mockResolvedValue([
+      {
+        slug: 'stress-balanced-1k',
+        title: 'Balanced tree',
+        description: null,
+        nodeCount: 1000,
+        edgeCount: 999,
+      },
+      {
+        slug: 'sample-medium',
+        title: 'Sample',
+        description: null,
+        nodeCount: 20,
+        edgeCount: 19,
+      },
+    ])
+    serviceMocks.getEvidenceImpactRanking.mockImplementation(async () => {
+      await evidenceRun
+      return { supportingEvidence: [], counterEvidence: [] }
+    })
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+
+    expect(await screen.findByText(/3 of 6 · Balanced tree \(1,000 nodes\) · Evidence impact ranking/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop suite' }))
+    expect(screen.getByText('Stopping stress suite…')).toBeInTheDocument()
+    expect(serviceMocks.getLeastRobustNode).not.toHaveBeenCalled()
+
+    finishEvidenceRun()
+
+    expect(await screen.findByText('Stress suite stopped')).toBeInTheDocument()
+    expect(screen.getByText(/3 requests completed/)).toBeInTheDocument()
+    expect(screen.getByText(/3 of 6 attempted/)).toBeInTheDocument()
+    expect(serviceMocks.getLeastRobustNode).not.toHaveBeenCalled()
+    expect(serviceMocks.getGraphBySlug).not.toHaveBeenCalled()
+    expect(serviceMocks.getGraphCatalog).toHaveBeenCalledOnce()
+  })
+
+  it('continues after a suite request fails and identifies the graph and operation', async () => {
+    serviceMocks.getNodeCounterSet.mockRejectedValueOnce(new Error('Request failed'))
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        installedStressGraphIds={['stress-balanced-1k']}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+
+    expect(await screen.findByText('Stress suite complete')).toBeInTheDocument()
+    expect(screen.getByText(/5 requests completed · 1 request failed/)).toBeInTheDocument()
+    expect(serviceMocks.getBoundedNodeCounterSet).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByText('Review failed requests'))
+    expect(screen.getByText('Balanced tree (1,000 nodes) · Minimal counter set')).toBeInTheDocument()
+  })
+
+  it('stops launching suite work when the dialog unmounts', async () => {
+    let receivedSignal: AbortSignal | undefined
+    serviceMocks.getNodeCounterSet.mockImplementation((...args: unknown[]) => {
+      receivedSignal = args[3] as AbortSignal
+      return new Promise((_, reject) => {
+        receivedSignal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+      })
+    })
+
+    const view = render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        installedStressGraphIds={['stress-balanced-1k']}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Run stress suite' }))
+    await waitFor(() => expect(serviceMocks.getNodeCounterSet).toHaveBeenCalledOnce())
+
+    view.unmount()
+
+    expect(receivedSignal?.aborted).toBe(true)
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(2))
+    expect(serviceMocks.getBoundedNodeCounterSet).not.toHaveBeenCalled()
+  })
+
   it('skips leaf updates in fixture mode', async () => {
     render(
       <InsightsLabDialog
@@ -543,7 +798,6 @@ describe('InsightsLabDialog', () => {
         graphDataSource="fixture"
         isOpen
         onClose={vi.fn()}
-        selectedNodeId="node-002"
       />,
     )
 
@@ -571,6 +825,10 @@ describe('InsightsLabDialog', () => {
       name: 'Run Leaf update',
     })).toBeDisabled()
     expect(screen.getByText('This graph has no node to update.')).toBeInTheDocument()
+    expect(within(operationCard(/^Minimal counter set$/)).getByRole('button', {
+      name: 'Run Minimal counter set',
+    })).toBeDisabled()
+    expect(screen.getAllByText('This graph has no root node for this algorithm.')).toHaveLength(3)
   })
 
   it('isolates the page behind the modal and restores focus when it closes', async () => {
@@ -587,7 +845,6 @@ describe('InsightsLabDialog', () => {
           graphDataSource="database"
           isOpen
           onClose={onClose}
-          selectedNodeId="node-002"
         />
       </>,
     )
@@ -618,7 +875,6 @@ describe('InsightsLabDialog', () => {
           graphDataSource="database"
           isOpen={false}
           onClose={onClose}
-          selectedNodeId="node-002"
         />
       </>,
     )
@@ -635,7 +891,6 @@ describe('InsightsLabDialog', () => {
         graphDataSource="database"
         isOpen
         onClose={vi.fn()}
-        selectedNodeId="node-002"
       />,
     )
 

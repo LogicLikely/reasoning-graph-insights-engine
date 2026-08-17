@@ -3,6 +3,8 @@ import type { GraphFixture, GraphFixtureNode } from '../../fixtures/sampleGraph'
 import {
   getBoundedNodeCounterSet,
   getEvidenceImpactRanking,
+  getGraphBySlug,
+  getGraphCatalog,
   getLeastRobustNode,
   getNodeCounterSet,
   getNodeRobustnessRanking,
@@ -16,7 +18,7 @@ import {
   type PerformanceReportDocument,
   type PerformanceRunRecord,
 } from '../../services/performanceRuns'
-import { isStressGraphId } from '../../services/stressGraphs'
+import { STRESS_GRAPH_OPTIONS, type StressGraphId } from '../../services/stressGraphs'
 import { InsightsLabTrends } from './InsightsLabTrends'
 import './InsightsLabDialog.css'
 
@@ -24,13 +26,37 @@ export interface InsightsLabDialogProps {
   isOpen: boolean
   graph: GraphFixture | null
   graphDataSource: GraphDataSource
-  selectedNodeId?: string
+  installedStressGraphIds?: readonly StressGraphId[]
   onClose: () => void
   onGraphUpdated?: () => void
 }
 
 type LabTab = 'run' | 'history' | 'trends'
 type OperationId = 'minimal' | 'bounded' | 'evidence' | 'least' | 'ranking' | 'leaf'
+
+type SuiteProgress = {
+  current: number
+  total: number
+  graphLabel?: string
+  graphSlug?: string
+  operationTitle?: string
+}
+
+type SuiteFailure = {
+  graphLabel: string
+  graphSlug: string
+  operationTitle: string
+}
+
+type SuiteSummary = {
+  status: 'completed' | 'stopped' | 'empty'
+  total: number
+  completed: number
+  failed: number
+  interrupted: number
+  graphCount: number
+  failures: readonly SuiteFailure[]
+}
 
 type OperationDefinition = {
   id: OperationId
@@ -49,8 +75,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
   {
     id: 'minimal',
     title: 'Minimal counter set',
-    description: 'Run the greedy counter-set search for the selected node.',
-    explanation: 'Quickly looks for a small group of existing counterarguments that would lower the selected node below the Lab\'s confidence cutoff. It considers the most promising counters first.',
+    description: 'Run the greedy counter-set search for the graph root.',
+    explanation: 'Quickly looks for a small group of existing counterarguments that would lower the graph root below the Lab\'s confidence cutoff. It considers the most promising counters first.',
     caveat: 'This is a fast search, not a proof: a smaller counter set may exist.',
     algorithmName: 'minimal-counter-set',
     implementation: 'greedy',
@@ -60,8 +86,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
   {
     id: 'bounded',
     title: 'Bounded minimal counter set',
-    description: 'Run the exact bounded search for the selected node.',
-    explanation: 'Tries counterargument combinations from smallest to largest to find the fewest that would lower the selected node below the confidence cutoff.',
+    description: 'Run the exact bounded search for the graph root.',
+    explanation: 'Tries counterargument combinations from smallest to largest to find the fewest that would lower the graph root below the confidence cutoff.',
     caveat: 'The search considers at most 20 candidates. If more eligible counters exist, the result may be useful without being proven globally minimal.',
     algorithmName: 'minimal-counter-set',
     implementation: 'bounded-brute-force',
@@ -71,8 +97,8 @@ const OPERATIONS: readonly OperationDefinition[] = [
   {
     id: 'evidence',
     title: 'Evidence impact ranking',
-    description: 'Rank evidence by its impact on the selected node.',
-    explanation: 'Estimates how much each supporting or opposing piece of evidence affects the selected node by calculating what its confidence would be without that evidence. It separates supporting and counter evidence, then ranks each group by the predicted change.',
+    description: 'Rank evidence by its impact on the graph root.',
+    explanation: 'Estimates how much each supporting or opposing piece of evidence affects the graph root by calculating what its confidence would be without that evidence. It separates supporting and counter evidence, then ranks each group by the predicted change.',
     caveat: 'This measures sensitivity within the model, not whether a piece of evidence is true or caused the outcome.',
     algorithmName: 'evidence-impact-ranking',
     requiresTarget: true,
@@ -129,6 +155,89 @@ function getHighestOrdinalNode(nodes: readonly GraphFixtureNode[]): GraphFixture
   return nodes.reduce<GraphFixtureNode | undefined>((highest, node) => (
     highest === undefined || node.id > highest.id ? node : highest
   ), undefined)
+}
+
+function compareNodeIds(left: GraphFixtureNode, right: GraphFixtureNode): number {
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+}
+
+function getCanonicalRootNode(graph: GraphFixture): GraphFixtureNode | undefined {
+  return graph.nodes
+    .filter(({ kind }) => kind === 'root')
+    .sort(compareNodeIds)[0]
+}
+
+async function invokeOperation({
+  benchmarkSetId,
+  dataSource,
+  graphSlug,
+  leafTargetNode,
+  operation,
+  signal,
+  targetNodeId,
+}: {
+  benchmarkSetId: string
+  dataSource: GraphDataSource
+  graphSlug: string
+  leafTargetNode?: GraphFixtureNode
+  operation: OperationDefinition
+  signal?: AbortSignal
+  targetNodeId?: string
+}): Promise<number | undefined> {
+  switch (operation.id) {
+    case 'minimal':
+      await getNodeCounterSet(
+        graphSlug,
+        targetNodeId!,
+        dataSource,
+        signal,
+        benchmarkSetId,
+      )
+      return undefined
+    case 'bounded': {
+      const result = await getBoundedNodeCounterSet(
+        graphSlug,
+        targetNodeId!,
+        dataSource,
+        signal,
+        benchmarkSetId,
+      )
+      return result.runNumber
+    }
+    case 'evidence':
+      await getEvidenceImpactRanking(
+        graphSlug,
+        targetNodeId!,
+        dataSource,
+        signal,
+        benchmarkSetId,
+      )
+      return undefined
+    case 'least':
+      await getLeastRobustNode(
+        graphSlug,
+        dataSource,
+        signal,
+        benchmarkSetId,
+      )
+      return undefined
+    case 'ranking':
+      await getNodeRobustnessRanking(
+        graphSlug,
+        dataSource,
+        signal,
+        benchmarkSetId,
+      )
+      return undefined
+    case 'leaf':
+      await updateNode(
+        graphSlug,
+        leafTargetNode!.id,
+        { priorOdds: leafTargetNode!.priorOdds },
+        benchmarkSetId,
+      )
+      return undefined
+  }
 }
 
 function getOperationTime(run: PerformanceRunRecord): number | null {
@@ -219,12 +328,12 @@ function presentedOutcome(run: PerformanceRunRecord): Record<string, unknown> | 
 function runMatches(
   run: PerformanceRunRecord,
   operation: OperationDefinition,
-  graph: GraphFixture,
+  graphSlug: string,
   graphDataSource: GraphDataSource,
   benchmarkSetId: string,
   targetNodeId?: string,
 ): boolean {
-  if (run.algorithm?.name !== operation.algorithmName || run.graph?.slug !== graph.slug) return false
+  if (run.algorithm?.name !== operation.algorithmName || run.graph?.slug !== graphSlug) return false
   if (run.invocation?.dataSource !== graphDataSource) return false
   if (run.benchmarkSetId !== benchmarkSetId) return false
   if (operation.implementation && run.algorithm?.implementation !== operation.implementation) return false
@@ -242,7 +351,7 @@ export function InsightsLabDialog({ isOpen, ...props }: InsightsLabDialogProps) 
 function OpenInsightsLabDialog({
   graph,
   graphDataSource,
-  selectedNodeId,
+  installedStressGraphIds,
   onClose,
   onGraphUpdated,
 }: OpenDialogProps) {
@@ -254,10 +363,14 @@ function OpenInsightsLabDialog({
   const historyBackRef = useRef<HTMLButtonElement>(null)
   const runViewButtonRefs = useRef(new Map<number, HTMLButtonElement>())
   const runningStatusRef = useRef<HTMLDivElement>(null)
+  const suiteResultRef = useRef<HTMLDivElement>(null)
+  const suiteButtonRef = useRef<HTMLButtonElement>(null)
   const focusHistoryDetailRef = useRef(false)
   const focusRunListItemRef = useRef<number | undefined>(undefined)
+  const focusSuiteResultRef = useRef(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const runGuardRef = useRef(false)
+  const suiteStopRequestedRef = useRef(false)
   const [tab, setTab] = useState<LabTab>('run')
   const [expandedOperationId, setExpandedOperationId] = useState<OperationId>()
   const [runs, setRuns] = useState<PerformanceRunRecord[]>([])
@@ -274,20 +387,26 @@ function OpenInsightsLabDialog({
   const [activeOperation, setActiveOperation] = useState<OperationDefinition | null>(null)
   const [isCancellationRequested, setIsCancellationRequested] = useState(false)
   const [isFinalizingRun, setIsFinalizingRun] = useState(false)
+  const [isSuiteRunning, setIsSuiteRunning] = useState(false)
+  const [suiteProgress, setSuiteProgress] = useState<SuiteProgress | null>(null)
+  const [suiteSummary, setSuiteSummary] = useState<SuiteSummary | null>(null)
 
-  const selectedNode = useMemo(
-    () => graph?.nodes.find(({ id }) => id === selectedNodeId),
-    [graph, selectedNodeId],
-  )
   const highestNode = useMemo(
     () => graph ? getHighestOrdinalNode(graph.nodes) : undefined,
     [graph],
   )
-  const usesCanonicalStressTarget = graph ? isStressGraphId(graph.slug) : false
-  const algorithmTargetNodeId = usesCanonicalStressTarget
-    ? CANONICAL_STRESS_TARGET_ID
-    : selectedNode?.id
+  const algorithmTargetNode = useMemo(
+    () => graph ? getCanonicalRootNode(graph) : undefined,
+    [graph],
+  )
+  const algorithmTargetNodeId = algorithmTargetNode?.id
+  const isBusy = activeOperation !== null || isSuiteRunning
   const selectedRun = runs.find(({ runNumber }) => runNumber === selectedRunNumber)
+  const knownInstalledStressGraphs = useMemo(() => {
+    if (installedStressGraphIds === undefined) return undefined
+    const installedIds = new Set<string>(installedStressGraphIds)
+    return STRESS_GRAPH_OPTIONS.filter(({ id }) => installedIds.has(id))
+  }, [installedStressGraphIds])
 
   const receiveBenchmarkSets = (nextSets: BenchmarkSet[]) => {
     setBenchmarkSets(nextSets)
@@ -357,6 +476,8 @@ function OpenInsightsLabDialog({
 
     return () => {
       isActive = false
+      suiteStopRequestedRef.current = true
+      abortControllerRef.current?.abort()
       for (const { element, hadInert, previousAriaHidden } of isolatedElements) {
         if (!hadInert) element.removeAttribute('inert')
         if (previousAriaHidden === null) element.removeAttribute('aria-hidden')
@@ -367,8 +488,15 @@ function OpenInsightsLabDialog({
   }, [])
 
   useEffect(() => {
-    if (activeOperation) runningStatusRef.current?.focus()
-  }, [activeOperation, isCancellationRequested, isFinalizingRun])
+    if (isBusy) runningStatusRef.current?.focus()
+  }, [isBusy])
+
+  useEffect(() => {
+    if (isBusy || !focusSuiteResultRef.current) return
+    focusSuiteResultRef.current = false
+    const focusTarget = suiteResultRef.current ?? suiteButtonRef.current
+    focusTarget?.focus()
+  }, [isBusy, suiteSummary])
 
   useEffect(() => {
     if (tab !== 'history' || selectedRunNumber === undefined || !focusHistoryDetailRef.current) return
@@ -440,7 +568,7 @@ function OpenInsightsLabDialog({
 
   const handleCreateBenchmarkSet = async () => {
     const name = newBenchmarkSetName.trim()
-    if (!name || isCreatingBenchmarkSet || activeOperation) return
+    if (!name || isCreatingBenchmarkSet || isBusy) return
     setIsCreatingBenchmarkSet(true)
     setBenchmarkSetError(null)
     try {
@@ -493,62 +621,16 @@ function OpenInsightsLabDialog({
 
       try {
         requestStarted = true
-        switch (operation.id) {
-          case 'minimal':
-            await getNodeCounterSet(
-              graph.slug,
-              targetNodeId!,
-              graphDataSource,
-              controller?.signal,
-              benchmarkSetId,
-            )
-            break
-          case 'bounded': {
-            const result = await getBoundedNodeCounterSet(
-              graph.slug,
-              targetNodeId!,
-              graphDataSource,
-              controller?.signal,
-              benchmarkSetId,
-            )
-            exactRunNumber = result.runNumber
-            break
-          }
-          case 'evidence':
-            await getEvidenceImpactRanking(
-              graph.slug,
-              targetNodeId!,
-              graphDataSource,
-              undefined,
-              benchmarkSetId,
-            )
-            break
-          case 'least':
-            await getLeastRobustNode(
-              graph.slug,
-              graphDataSource,
-              controller?.signal,
-              benchmarkSetId,
-            )
-            break
-          case 'ranking':
-            await getNodeRobustnessRanking(
-              graph.slug,
-              graphDataSource,
-              controller?.signal,
-              benchmarkSetId,
-            )
-            break
-          case 'leaf':
-            await updateNode(
-              graph.slug,
-              leafTargetNode!.id,
-              { priorOdds: leafTargetNode!.priorOdds },
-              benchmarkSetId,
-            )
-            onGraphUpdated?.()
-            break
-        }
+        exactRunNumber = await invokeOperation({
+          benchmarkSetId,
+          dataSource: graphDataSource,
+          graphSlug: graph.slug,
+          leafTargetNode,
+          operation,
+          signal: controller?.signal,
+          targetNodeId,
+        })
+        if (operation.id === 'leaf') onGraphUpdated?.()
         requestCompleted = true
       } catch (error) {
         launchFailure = error
@@ -571,7 +653,7 @@ function OpenInsightsLabDialog({
             && runMatches(
               run,
               operation,
-              graph,
+              graph.slug,
               graphDataSource,
               benchmarkSetId,
               targetNodeId,
@@ -622,6 +704,195 @@ function OpenInsightsLabDialog({
     }
   }
 
+  const launchStressSuite = async () => {
+    if (runGuardRef.current || !selectedBenchmarkSetId) return
+
+    const benchmarkSetId = selectedBenchmarkSetId
+    runGuardRef.current = true
+    suiteStopRequestedRef.current = false
+    setExpandedOperationId(undefined)
+    setSelectedRunNumber(undefined)
+    setTab('run')
+    setRunError(null)
+    setRunNotice(null)
+    setSuiteSummary(null)
+    setSuiteProgress({ current: 0, total: 0 })
+    setIsSuiteRunning(true)
+    setIsCancellationRequested(false)
+    setIsFinalizingRun(false)
+
+    const suiteWatermark = runs.reduce((maximum, run) => Math.max(maximum, run.runNumber), -1)
+    let completed = 0
+    let failed = 0
+    let interrupted = 0
+    let processed = 0
+    let graphCount = 0
+    let total = 0
+    let didUpdateActiveGraph = false
+    const failures: SuiteFailure[] = []
+    let interruptedRun: {
+      graphSlug: string
+      operation: OperationDefinition
+      targetNodeId?: string
+    } | undefined
+
+    try {
+      let installedGraphs = knownInstalledStressGraphs
+      if (installedGraphs === undefined) {
+        const catalog = await getGraphCatalog()
+        const installedIds = new Set(catalog.map(({ slug }) => slug))
+        installedGraphs = STRESS_GRAPH_OPTIONS.filter(({ id }) => installedIds.has(id))
+      }
+
+      graphCount = installedGraphs.length
+      total = graphCount * OPERATIONS.length
+      setSuiteProgress({ current: 0, total })
+
+      if (installedGraphs.length === 0) {
+        setSuiteSummary({
+          status: 'empty',
+          total,
+          completed,
+          failed,
+          interrupted,
+          graphCount,
+          failures,
+        })
+        return
+      }
+
+      suite: for (const graphOption of installedGraphs) {
+        let loadedGraph: GraphFixture | undefined
+
+        for (const operation of OPERATIONS) {
+          if (suiteStopRequestedRef.current) break suite
+
+          setActiveOperation(operation)
+          setIsCancellationRequested(false)
+          setSuiteProgress({
+            current: processed + 1,
+            total,
+            graphLabel: graphOption.label,
+            graphSlug: graphOption.id,
+            operationTitle: operation.title,
+          })
+
+          let countItem = false
+          let leafTargetNode: GraphFixtureNode | undefined
+          const controller = operation.cancellable ? new AbortController() : null
+          abortControllerRef.current = controller
+
+          try {
+            if (operation.id === 'leaf') {
+              try {
+                loadedGraph ??= await getGraphBySlug(graphOption.id, 'database')
+              } catch (error) {
+                countItem = true
+                throw error
+              }
+
+              if (suiteStopRequestedRef.current) break suite
+              leafTargetNode = getHighestOrdinalNode(loadedGraph.nodes)
+              countItem = true
+              if (!leafTargetNode) throw new Error('The stress graph has no node to update.')
+            } else {
+              countItem = true
+            }
+
+            await invokeOperation({
+              benchmarkSetId,
+              dataSource: 'database',
+              graphSlug: graphOption.id,
+              leafTargetNode,
+              operation,
+              signal: controller?.signal,
+              targetNodeId: operation.requiresTarget ? CANONICAL_STRESS_TARGET_ID : undefined,
+            })
+            completed += 1
+            if (operation.id === 'leaf' && graph?.slug === graphOption.id) {
+              didUpdateActiveGraph = true
+            }
+          } catch {
+            if (controller?.signal.aborted && suiteStopRequestedRef.current) {
+              interrupted += 1
+              interruptedRun = {
+                graphSlug: graphOption.id,
+                operation,
+                targetNodeId: operation.requiresTarget ? CANONICAL_STRESS_TARGET_ID : leafTargetNode?.id,
+              }
+            } else {
+              failed += 1
+              failures.push({
+                graphLabel: graphOption.label,
+                graphSlug: graphOption.id,
+                operationTitle: operation.title,
+              })
+            }
+          } finally {
+            if (countItem) processed += 1
+            abortControllerRef.current = null
+            setActiveOperation(null)
+          }
+
+          if (suiteStopRequestedRef.current) break suite
+        }
+      }
+
+      const stopped = suiteStopRequestedRef.current
+        && (processed < total || interrupted > 0)
+      setSuiteSummary({
+        status: stopped ? 'stopped' : 'completed',
+        total,
+        completed,
+        failed,
+        interrupted,
+        graphCount,
+        failures,
+      })
+    } catch {
+      setRunError('Unable to load the installed stress-graph catalog, so the suite was not started.')
+    } finally {
+      setIsFinalizingRun(true)
+      try {
+        const attempts = interruptedRun ? CANCEL_REPORT_POLL_ATTEMPTS : 1
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          const document = await getPerformanceRuns()
+          const nextRuns = sortRuns(document)
+          setRuns(nextRuns)
+          receiveBenchmarkSets(Array.isArray(document.benchmarkSets) ? document.benchmarkSets : [])
+          setHistoryError(null)
+
+          const foundInterruptedReport = !interruptedRun || nextRuns.some((run) => (
+            run.runNumber > suiteWatermark
+            && runMatches(
+              run,
+              interruptedRun!.operation,
+              interruptedRun!.graphSlug,
+              'database',
+              benchmarkSetId,
+              interruptedRun!.targetNodeId,
+            )
+          ))
+          if (foundInterruptedReport || attempt === attempts - 1) break
+          await new Promise((resolve) => setTimeout(resolve, CANCEL_REPORT_POLL_INTERVAL_MS))
+        }
+      } catch {
+        setHistoryError('Unable to refresh performance run history.')
+      }
+      if (didUpdateActiveGraph) onGraphUpdated?.()
+      focusSuiteResultRef.current = true
+      setTab('run')
+      setSuiteProgress(null)
+      setActiveOperation(null)
+      setIsFinalizingRun(false)
+      setIsCancellationRequested(false)
+      setIsSuiteRunning(false)
+      abortControllerRef.current = null
+      suiteStopRequestedRef.current = false
+      runGuardRef.current = false
+    }
+  }
+
   return (
     <div
       className="insights-lab-dialog__backdrop"
@@ -647,7 +918,7 @@ function OpenInsightsLabDialog({
           <button
             aria-label="Close Insights Lab"
             className="insights-lab-dialog__close"
-            disabled={activeOperation !== null}
+            disabled={isBusy}
             onClick={onClose}
             ref={closeRef}
             type="button"
@@ -703,7 +974,7 @@ function OpenInsightsLabDialog({
           </div>
         </header>
 
-        {activeOperation ? (
+        {isBusy ? (
           <div
             aria-live="polite"
             className="insights-lab-dialog__running"
@@ -714,11 +985,45 @@ function OpenInsightsLabDialog({
             <span className="insights-lab-dialog__spinner" aria-hidden="true" />
             <div>
               <strong>
-                {isFinalizingRun ? 'Finalizing…' : isCancellationRequested ? 'Cancelling…' : 'Running…'}
+                {isSuiteRunning
+                  ? isFinalizingRun
+                    ? 'Finalizing stress suite…'
+                    : isCancellationRequested
+                      ? 'Stopping stress suite…'
+                      : suiteProgress?.total
+                        ? 'Running stress suite…'
+                        : 'Preparing stress suite…'
+                  : isFinalizingRun
+                    ? 'Finalizing…'
+                    : isCancellationRequested
+                      ? 'Cancelling…'
+                      : 'Running…'}
               </strong>
-              <span>{isFinalizingRun ? 'Waiting for the stored report.' : activeOperation.title}</span>
+              <span>
+                {isSuiteRunning
+                  ? isFinalizingRun
+                    ? 'Refreshing run history.'
+                    : suiteProgress?.total
+                      ? `${suiteProgress.current} of ${suiteProgress.total} · ${suiteProgress.graphLabel ?? suiteProgress.graphSlug ?? 'Stress graph'} · ${suiteProgress.operationTitle ?? 'Starting next operation'}`
+                      : 'Finding installed database stress graphs.'
+                  : isFinalizingRun
+                    ? 'Waiting for the stored report.'
+                    : activeOperation?.title}
+              </span>
             </div>
-            {activeOperation.cancellable && !isFinalizingRun ? (
+            {isSuiteRunning && !isFinalizingRun ? (
+              <button
+                disabled={isCancellationRequested}
+                onClick={() => {
+                  suiteStopRequestedRef.current = true
+                  setIsCancellationRequested(true)
+                  abortControllerRef.current?.abort()
+                }}
+                type="button"
+              >
+                Stop suite
+              </button>
+            ) : activeOperation?.cancellable && !isFinalizingRun ? (
               <button
                 disabled={isCancellationRequested}
                 onClick={() => {
@@ -729,7 +1034,7 @@ function OpenInsightsLabDialog({
               >
                 Cancel run
               </button>
-            ) : !isFinalizingRun ? <span>This run cannot be cancelled.</span> : null}
+            ) : !isSuiteRunning && !isFinalizingRun ? <span>This run cannot be cancelled.</span> : null}
           </div>
         ) : null}
         {runError ? <p className="insights-lab-dialog__error" role="alert">{runError}</p> : null}
@@ -752,7 +1057,7 @@ function OpenInsightsLabDialog({
               <div>
                 <label htmlFor="insights-lab-benchmark-set">Benchmark set</label>
                 <select
-                  disabled={activeOperation !== null || isCreatingBenchmarkSet}
+                  disabled={isBusy || isCreatingBenchmarkSet}
                   id="insights-lab-benchmark-set"
                   onChange={(event) => {
                     setBenchmarkSetError(null)
@@ -779,7 +1084,7 @@ function OpenInsightsLabDialog({
                 <label htmlFor="insights-lab-new-benchmark-set">New benchmark set</label>
                 <div>
                   <input
-                    disabled={activeOperation !== null || isCreatingBenchmarkSet}
+                    disabled={isBusy || isCreatingBenchmarkSet}
                     id="insights-lab-new-benchmark-set"
                     onChange={(event) => {
                       setBenchmarkSetError(null)
@@ -790,7 +1095,7 @@ function OpenInsightsLabDialog({
                     value={newBenchmarkSetName}
                   />
                   <button
-                    disabled={!newBenchmarkSetName.trim() || activeOperation !== null || isCreatingBenchmarkSet}
+                    disabled={!newBenchmarkSetName.trim() || isBusy || isCreatingBenchmarkSet}
                     type="submit"
                   >
                     {isCreatingBenchmarkSet ? 'Creating…' : 'Create and select'}
@@ -800,18 +1105,79 @@ function OpenInsightsLabDialog({
               {benchmarkSetError ? <p role="alert">{benchmarkSetError}</p> : null}
             </form>
             <div className="insights-lab-dialog__context">
-              <span>{usesCanonicalStressTarget ? 'Canonical algorithm target' : 'Selected node'}</span>
+              <span>Canonical algorithm target</span>
               <strong>
-                {usesCanonicalStressTarget
-                  ? `Root (${CANONICAL_STRESS_TARGET_ID})`
-                  : selectedNode
-                    ? `${selectedNode.title} (${selectedNode.id})`
-                    : 'Select a node for counter-set and evidence-impact operations'}
+                {algorithmTargetNode
+                  ? `Root (${algorithmTargetNode.id})`
+                  : 'This graph does not contain a root node'}
               </strong>
-              {usesCanonicalStressTarget ? (
-                <small>Counter-set and evidence-impact runs always use this root on stress graphs.</small>
-              ) : null}
+              <small>Counter-set and evidence-impact runs always use the graph root.</small>
             </div>
+            <section
+              aria-labelledby="insights-lab-stress-suite-title"
+              className="insights-lab-dialog__suite-action"
+            >
+              <div>
+                <h3 id="insights-lab-stress-suite-title">Run stress suite</h3>
+                <p>
+                  Run all six Lab operations, one at a time, on
+                  {' '}
+                  {knownInstalledStressGraphs === undefined
+                    ? 'every installed database stress graph'
+                    : `${knownInstalledStressGraphs.length} installed database stress ${knownInstalledStressGraphs.length === 1 ? 'graph' : 'graphs'}`}.
+                </p>
+                <small>No warm-up runs are included.</small>
+              </div>
+              <button
+                disabled={isBusy
+                  || isHistoryLoading
+                  || !selectedBenchmarkSetId
+                  || knownInstalledStressGraphs?.length === 0}
+                onClick={() => void launchStressSuite()}
+                ref={suiteButtonRef}
+                type="button"
+              >
+                Run stress suite
+              </button>
+            </section>
+            {suiteSummary ? (
+              <div
+                className="insights-lab-dialog__suite-summary"
+                ref={suiteResultRef}
+                role="status"
+                tabIndex={-1}
+              >
+                <strong>
+                  {suiteSummary.status === 'completed'
+                    ? 'Stress suite complete'
+                    : suiteSummary.status === 'stopped'
+                      ? 'Stress suite stopped'
+                      : 'No stress graphs found'}
+                </strong>
+                {suiteSummary.status === 'empty' ? (
+                  <span>Install at least one database stress graph to run the suite.</span>
+                ) : (
+                  <span>
+                    {suiteSummary.completed} {suiteSummary.completed === 1 ? 'request' : 'requests'} completed
+                    {suiteSummary.failed > 0 ? ` · ${suiteSummary.failed} ${suiteSummary.failed === 1 ? 'request' : 'requests'} failed` : ''}
+                    {suiteSummary.interrupted > 0 ? ` · ${suiteSummary.interrupted} request interrupted` : ''}
+                    {` · ${suiteSummary.completed + suiteSummary.failed + suiteSummary.interrupted} of ${suiteSummary.total} attempted across ${suiteSummary.graphCount} ${suiteSummary.graphCount === 1 ? 'graph' : 'graphs'}.`}
+                  </span>
+                )}
+                {suiteSummary.failures.length > 0 ? (
+                  <details>
+                    <summary>Review failed requests</summary>
+                    <ul>
+                      {suiteSummary.failures.map((failure) => (
+                        <li key={`${failure.graphSlug}:${failure.operationTitle}`}>
+                          {failure.graphLabel} · {failure.operationTitle}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+              </div>
+            ) : null}
             <div className="insights-lab-dialog__operations">
               {OPERATIONS.map((operation) => {
                 const infoPanelId = `insights-lab-operation-${operation.id}-info`
@@ -821,17 +1187,11 @@ function OpenInsightsLabDialog({
                 const wrongSource = operation.databaseOnly && graphDataSource !== 'database'
                 const disabled = !graph
                   || isHistoryLoading
-                  || activeOperation !== null
+                  || isBusy
                   || !selectedBenchmarkSetId
                   || missingTarget
                   || missingLeafTarget
                   || wrongSource
-                const description = usesCanonicalStressTarget && operation.requiresTarget
-                  ? operation.description.replace('the selected node', 'the canonical root')
-                  : operation.description
-                const explanation = usesCanonicalStressTarget && operation.requiresTarget
-                  ? operation.explanation.replaceAll('the selected node', 'the canonical root')
-                  : operation.explanation
                 return (
                   <article className="insights-lab-dialog__operation" key={operation.id}>
                     <div>
@@ -842,7 +1202,7 @@ function OpenInsightsLabDialog({
                           aria-expanded={isInfoExpanded}
                           aria-label={`About ${operation.title}`}
                           className="insights-lab-dialog__info-button"
-                          disabled={activeOperation !== null}
+                          disabled={isBusy}
                           onClick={() => setExpandedOperationId((current) => (
                             current === operation.id ? undefined : operation.id
                           ))}
@@ -851,21 +1211,21 @@ function OpenInsightsLabDialog({
                           <span aria-hidden="true">i</span>
                         </button>
                       </div>
-                      <p>{description}</p>
+                      <p>{operation.description}</p>
                       <section
                         aria-label={`About ${operation.title}`}
                         className="insights-lab-dialog__algorithm-info"
                         hidden={!isInfoExpanded}
                         id={infoPanelId}
                       >
-                        <p>{explanation}</p>
+                        <p>{operation.explanation}</p>
                         <div>
                           <strong>Keep in mind</strong>
                           <p>{operation.caveat}</p>
                         </div>
                       </section>
                       {wrongSource ? <small>Database graphs only; fixture updates are skipped.</small> : null}
-                      {missingTarget ? <small>Select a node to enable this algorithm.</small> : null}
+                      {missingTarget ? <small>This graph has no root node for this algorithm.</small> : null}
                       {missingLeafTarget ? <small>This graph has no node to update.</small> : null}
                     </div>
                     <button

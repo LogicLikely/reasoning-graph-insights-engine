@@ -58,6 +58,7 @@
 .insights-lab-dialog__tabs button,
 .insights-lab-dialog__running button,
 .insights-lab-dialog__operation > button,
+.insights-lab-dialog__suite-action > button,
 .insights-lab-dialog__benchmark-create button,
 .insights-lab-dialog__history-table button,
 .insights-lab-dialog__history-detail-toolbar button {
@@ -259,6 +260,84 @@
 
 .insights-lab-dialog__context strong {
   overflow-wrap: anywhere;
+}
+
+.insights-lab-dialog__suite-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(13, 93, 86, 0.3);
+  border-radius: 0.85rem;
+  background: rgba(233, 240, 232, 0.58);
+}
+
+.insights-lab-dialog__suite-action > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.insights-lab-dialog__suite-action h3 {
+  font-family: inherit;
+  font-size: 0.98rem;
+  letter-spacing: 0;
+}
+
+.insights-lab-dialog__suite-action p,
+.insights-lab-dialog__suite-action small,
+.insights-lab-dialog__suite-summary span {
+  font-size: 0.8rem;
+}
+
+.insights-lab-dialog__suite-action small,
+.insights-lab-dialog__suite-summary span {
+  color: var(--color-text-muted);
+}
+
+.insights-lab-dialog__suite-action > button {
+  min-width: 9.25rem;
+  min-height: 2.55rem;
+  flex: 0 0 auto;
+  padding: 0.55rem 0.85rem;
+  border-color: var(--color-accent);
+  border-radius: 0.6rem;
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.insights-lab-dialog__suite-summary {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.85rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(13, 93, 86, 0.26);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.insights-lab-dialog__suite-summary strong {
+  color: var(--color-accent);
+}
+
+.insights-lab-dialog__suite-summary details {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.insights-lab-dialog__suite-summary summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.insights-lab-dialog__suite-summary ul {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0.45rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--color-text-muted);
 }
 
 .insights-lab-dialog__operations {
@@ -637,6 +716,10 @@
     align-items: flex-start;
   }
 
+  .insights-lab-dialog__suite-action {
+    align-items: flex-start;
+  }
+
   .insights-lab-dialog__benchmark-sets {
     grid-template-columns: 1fr;
   }
@@ -670,11 +753,17 @@
     flex-direction: column;
   }
 
+  .insights-lab-dialog__suite-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .insights-lab-dialog__benchmark-create > div {
     grid-template-columns: 1fr;
   }
 
-  .insights-lab-dialog__operation > button {
+  .insights-lab-dialog__operation > button,
+  .insights-lab-dialog__suite-action > button {
     width: 100%;
   }
 
