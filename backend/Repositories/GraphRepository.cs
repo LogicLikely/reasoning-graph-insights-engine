@@ -64,7 +64,6 @@ public class GraphRepository : IGraphRepository
             from_node_id AS "From", 
             to_node_id AS "To", 
             kind,
-            importance_to_parent AS "ImportanceToParent",
             probability_given_parent AS "ProbabilityGivenParent",
             probability_given_not_parent AS "ProbabilityGivenNotParent"
         FROM edges
@@ -158,7 +157,6 @@ public class GraphRepository : IGraphRepository
             From = row.From,
             To = row.To,
             Kind = row.Kind,
-            ImportanceToParent = row.ImportanceToParent,
             ProbabilityGivenParent = row.ProbabilityGivenParent,
             ProbabilityGivenNotParent = row.ProbabilityGivenNotParent
         }).ToList();
@@ -186,7 +184,6 @@ public class GraphRepository : IGraphRepository
         public string From { get; set; } = default!;
         public string To { get; set; } = default!;
         public string Kind { get; set; } = default!;
-        public decimal ImportanceToParent { get; set; } = 1m;
         public decimal ProbabilityGivenParent { get; set; } = 0.5m;
         public decimal ProbabilityGivenNotParent { get; set; } = 0.5m;
     }
@@ -219,7 +216,7 @@ public class GraphRepository : IGraphRepository
         if (string.Equals(node.Kind, "evidence", StringComparison.OrdinalIgnoreCase))
         {
             evidence ??= new GraphEvidenceDto();
-            evidence.Score = GetEvidenceScoreFromLogOdds(node.PriorOdds);
+            evidence.Score = GetEvidenceScoreFromLogOdds(node.PosteriorOdds);
         }
 
         return evidence != null
@@ -271,7 +268,6 @@ public class GraphRepository : IGraphRepository
         GraphNodeDto node,
         string? parentID = null,
         string edgeKind = "support",
-        decimal importanceToParent = 1m,
         decimal probabilityGivenParent = 0.5m,
         decimal probabilityGivenNotParent = 0.5m,
         CancellationToken cancellationToken = default)
@@ -301,7 +297,7 @@ public class GraphRepository : IGraphRepository
                 node.BodyText,
                 node.Category,
                 Tags = node.Tags.ToArray(),
-                node.PriorOdds,
+                PriorOdds = IsEvidenceLikeNode(node.Kind) ? 0m : node.PriorOdds,
                 node.PosteriorOdds,
                 Evidence = SerializeEvidenceForNode(node)
             };
@@ -317,7 +313,6 @@ public class GraphRepository : IGraphRepository
                         from_node_id,
                         to_node_id,
                         kind,
-                        importance_to_parent,
                         probability_given_parent,
                         probability_given_not_parent
                     ) VALUES (
@@ -326,7 +321,6 @@ public class GraphRepository : IGraphRepository
                         @From,
                         @To,
                         @Kind,
-                        @ImportanceToParent,
                         @ProbabilityGivenParent,
                         @ProbabilityGivenNotParent
                     );
@@ -340,7 +334,6 @@ public class GraphRepository : IGraphRepository
                     From = node.Id,
                     To = parentID,
                     Kind = edgeKind,
-                    ImportanceToParent = importanceToParent,
                     ProbabilityGivenParent = probabilityGivenParent,
                     ProbabilityGivenNotParent = probabilityGivenNotParent
                 };
@@ -370,7 +363,10 @@ public class GraphRepository : IGraphRepository
             SET
                 title = COALESCE(@Title, title),
                 body_text = COALESCE(@BodyText, body_text),
-                prior_odds = COALESCE(@PriorOdds, prior_odds),
+                prior_odds = CASE
+                    WHEN LOWER(kind) IN ('evidence', 'objection') THEN 0
+                    ELSE COALESCE(@PriorOdds, prior_odds)
+                END,
                 posterior_odds = COALESCE(@PosteriorOdds, posterior_odds),
                 evidence = CASE
                     WHEN LOWER(kind) = 'evidence' AND @EvidenceScore IS NOT NULL
@@ -392,13 +388,19 @@ public class GraphRepository : IGraphRepository
                 node.BodyText,
                 node.PriorOdds,
                 node.PosteriorOdds,
-                EvidenceScore = node.PriorOdds.HasValue
-                    ? GetEvidenceScoreFromLogOdds(node.PriorOdds.Value)
+                EvidenceScore = node.PosteriorOdds.HasValue
+                    ? GetEvidenceScoreFromLogOdds(node.PosteriorOdds.Value)
                     : (decimal?)null
             },
             cancellationToken: cancellationToken));
 
         return rowsAffected > 0;
+    }
+
+    private static bool IsEvidenceLikeNode(string kind)
+    {
+        return string.Equals(kind, "evidence", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "objection", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<bool> AddEdgeAsync(
@@ -415,7 +417,6 @@ public class GraphRepository : IGraphRepository
                 from_node_id,
                 to_node_id,
                 kind,
-                importance_to_parent,
                 probability_given_parent,
                 probability_given_not_parent
             ) VALUES (
@@ -424,7 +425,6 @@ public class GraphRepository : IGraphRepository
                 @From,
                 @To,
                 @Kind,
-                @ImportanceToParent,
                 @ProbabilityGivenParent,
                 @ProbabilityGivenNotParent
             );
@@ -443,7 +443,6 @@ public class GraphRepository : IGraphRepository
                 edge.From,
                 edge.To,
                 edge.Kind,
-                edge.ImportanceToParent,
                 edge.ProbabilityGivenParent,
                 edge.ProbabilityGivenNotParent
             },
@@ -463,7 +462,6 @@ public class GraphRepository : IGraphRepository
         const string UpdateEdgeSql = """
             UPDATE edges
             SET
-                importance_to_parent = COALESCE(@ImportanceToParent, importance_to_parent),
                 probability_given_parent = COALESCE(@ProbabilityGivenParent, probability_given_parent),
                 probability_given_not_parent = COALESCE(@ProbabilityGivenNotParent, probability_given_not_parent),
                 updated_at = now()
@@ -477,7 +475,6 @@ public class GraphRepository : IGraphRepository
             {
                 Slug = slug,
                 EdgeId = edgeId,
-                edge.ImportanceToParent,
                 edge.ProbabilityGivenParent,
                 edge.ProbabilityGivenNotParent
             },

@@ -273,7 +273,6 @@ public class GraphServiceTests
                 node,
                 null,
                 "support",
-                1m,
                 0.5m,
                 0.5m,
                 It.IsAny<CancellationToken>()))
@@ -325,7 +324,6 @@ public class GraphServiceTests
                 node,
                 "A",
                 "support",
-                1m,
                 0.8m,
                 0.2m,
                 It.IsAny<CancellationToken>()))
@@ -341,7 +339,6 @@ public class GraphServiceTests
             node,
             "A",
             "support",
-            1m,
             0.8m,
             0.2m,
             CancellationToken.None);
@@ -364,7 +361,7 @@ public class GraphServiceTests
             Kind = "evidence",
             Title = "B",
             BodyText = "B",
-            PriorOdds = 0m,
+            PriorOdds = 5m,
             PosteriorOdds = leafLogBayesFactor
         };
         var graph = GraphWith(
@@ -380,7 +377,6 @@ public class GraphServiceTests
                 node,
                 "A",
                 "support",
-                1m,
                 0.8m,
                 0.2m,
                 It.IsAny<CancellationToken>()))
@@ -396,12 +392,12 @@ public class GraphServiceTests
             node,
             "A",
             "support",
-            1m,
             0.8m,
             0.2m,
             CancellationToken.None);
 
         Assert.IsTrue(result);
+        Assert.AreEqual(0m, node.PriorOdds);
         decimal expectedParentPosterior = 0.4m + TransformLogBayesFactor(
             leafLogBayesFactor,
             0.8m,
@@ -656,7 +652,7 @@ public class GraphServiceTests
     }
 
     [TestMethod]
-    public async Task UpdateEdgeAsync_RecalculatesParentAfterImportanceUpdate()
+    public async Task UpdateEdgeAsync_RecalculatesParentAfterConditionalProbabilityUpdate()
     {
         var repositoryMock = new Mock<IGraphRepository>();
         decimal leafLogBayesFactor = (decimal)Math.Log(4d);
@@ -666,7 +662,7 @@ public class GraphServiceTests
                 Node("B", 0m, "evidence", leafLogBayesFactor)
             ],
             [Edge("E-B-A", "B", "A", "support", 10m, 0.8m, 0.2m)]);
-        var update = new GraphEdgeUpdateDto { ImportanceToParent = 10 };
+        var update = new GraphEdgeUpdateDto { ProbabilityGivenParent = 0.8m };
 
         repositoryMock
             .Setup(repository => repository.UpdateEdgeAsync("sample-medium", "E-B-A", update, It.IsAny<CancellationToken>()))
@@ -975,19 +971,26 @@ public class GraphServiceTests
         string from,
         string to,
         string kind,
-        decimal importanceToParent,
+        decimal likelihoodRatio,
         decimal probabilityGivenParent = 0.5m,
         decimal probabilityGivenNotParent = 0.5m)
     {
+        bool hasExplicitProbabilities =
+            probabilityGivenParent != 0.5m ||
+            probabilityGivenNotParent != 0.5m;
+
         return new GraphEdge
         {
             Id = id,
             From = from,
             To = to,
             Kind = kind,
-            ImportanceToParent = importanceToParent,
-            ProbabilityGivenParent = probabilityGivenParent,
-            ProbabilityGivenNotParent = probabilityGivenNotParent
+            ProbabilityGivenParent = hasExplicitProbabilities
+                ? probabilityGivenParent
+                : likelihoodRatio >= 1m ? 1m : likelihoodRatio,
+            ProbabilityGivenNotParent = hasExplicitProbabilities
+                ? probabilityGivenNotParent
+                : likelihoodRatio >= 1m ? 1m / likelihoodRatio : 1m
         };
     }
 

@@ -7,8 +7,9 @@ namespace Backend.Calculation;
 /// likelihood-ratio paths from evidence nodes to a hypothesis.
 /// </summary>
 /// <remarks>
-/// Edge importance is interpreted as a multiplicative likelihood ratio. Path
-/// strength is the absolute log likelihood ratio (distance from neutral BF=1),
+/// Each edge likelihood ratio is derived as P(child|parent) divided by
+/// P(child|not parent). Path strength is the absolute log likelihood ratio
+/// (distance from neutral BF=1),
 /// and ties in the computed counter/support log scores select the maximum path.
 /// At a merge, all evidence prefixes are retained and the merge node's locally
 /// strongest suffix is shared. This class neither uses nor recalculates
@@ -252,17 +253,10 @@ public sealed class GraphBayesFactorPruner
         return byDestination < 0;
     }
 
-    /// <summary>Validates and converts an edge likelihood ratio to log space.</summary>
+    /// <summary>Derives the edge likelihood ratio directly in log space.</summary>
     private static decimal GetLogEdgeWeight(GraphEdgeCalcState edge)
     {
-        if (edge.ImportanceToParent <= 0m)
-        {
-            throw new InvalidOperationException(
-                $"Edge '{edge.Id}' has invalid likelihood ratio " +
-                $"'{edge.ImportanceToParent}'. Likelihood ratios must be greater than zero.");
-        }
-
-        return (decimal)Math.Log((double)edge.ImportanceToParent);
+        return EdgeProbabilityMath.GetLogLikelihoodRatio(edge);
     }
 
     /// <summary>Selects the path extreme farthest from the neutral likelihood ratio.</summary>
@@ -442,7 +436,6 @@ public sealed class GraphBayesFactorPruner
             From = edge.From,
             To = edge.To,
             Kind = edge.Kind,
-            ImportanceToParent = edge.ImportanceToParent,
             ProbabilityGivenParent = edge.ProbabilityGivenParent,
             ProbabilityGivenNotParent = edge.ProbabilityGivenNotParent
         };

@@ -114,7 +114,7 @@ export const sampleGraph: GraphFixture = {
       title: 'Photographs from beaches',
       bodyText: 'Collections of beach and ocean photographs are cited as visual support.',
       tags: ['observational'],
-      priorOdds: 0.08,
+      priorOdds: 0,
       posteriorOdds: 0.08,
       evidence: {
         type: 'observational',
@@ -143,7 +143,7 @@ export const sampleGraph: GraphFixture = {
       bodyText:
         "At normal scales, human vision is not a reliable way to detect Earth's curvature.",
       category: 'visual-limit',
-      priorOdds: 1.32,
+      priorOdds: 0,
       posteriorOdds: 1.32,
     },
     {
@@ -153,7 +153,7 @@ export const sampleGraph: GraphFixture = {
       bodyText:
         'Refraction can make distant objects appear higher or more visible than expected.',
       category: 'optics',
-      priorOdds: 1.39,
+      priorOdds: 0,
       posteriorOdds: 1.39,
     },
   ],

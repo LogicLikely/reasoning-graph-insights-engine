@@ -49,7 +49,7 @@ describe('insightsGraphAdapter', () => {
     expect(evidence?.search.text).toContain('observational')
     expect(evidence?.search.text).toContain('hard to interpret precisely')
     expect(evidence?.prior).toBeUndefined()
-    expect(evidence?.raw.priorOdds).toBe(0.08)
+    expect(evidence?.raw.priorOdds).toBe(0)
     expect(evidence?.raw.posteriorOdds).toBe(0.08)
   })
 

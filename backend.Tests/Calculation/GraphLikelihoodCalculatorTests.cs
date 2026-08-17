@@ -251,12 +251,12 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [Node("A"), Node("B1"), Node("B2"), Node("C1", kind: "evidence"), Node("C2", kind: "rebut"), Node("C3")],
-            [Edge("E-B1-A", "B1", "A", kind: "support", importanceToParent: 1.3m),
-            Edge("E-B2-A", "B2", "A", kind: "support", importanceToParent: 1.1m),
-            Edge("E-C1-B1", "C1", "B1", kind: "support", importanceToParent: 1.2m),
-            Edge("E-C2-B1", "C2", "B1", kind: "objection", importanceToParent: 0.01m),
-            Edge("E-C2-B2", "C2", "B2", kind: "objection", importanceToParent: 0.1m),
-            Edge("E-C3-B2", "C3", "B2", kind: "support", importanceToParent: 1.5m)]
+            [Edge("E-B1-A", "B1", "A", kind: "support", likelihoodRatio: 1.3m),
+            Edge("E-B2-A", "B2", "A", kind: "support", likelihoodRatio: 1.1m),
+            Edge("E-C1-B1", "C1", "B1", kind: "support", likelihoodRatio: 1.2m),
+            Edge("E-C2-B1", "C2", "B1", kind: "objection", likelihoodRatio: 0.01m),
+            Edge("E-C2-B2", "C2", "B2", kind: "objection", likelihoodRatio: 0.1m),
+            Edge("E-C3-B2", "C3", "B2", kind: "support", likelihoodRatio: 1.5m)]
         );
 
         var result = _calculator.GetSingleAccumulatedLR(context, "C2", "A");
@@ -269,7 +269,7 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [Node("claim"), Node("evidence", kind: "evidence")],
-            [Edge("E-evidence-claim", "evidence", "claim", importanceToParent: 1.5m)]);
+            [Edge("E-evidence-claim", "evidence", "claim", likelihoodRatio: 1.5m)]);
 
         var result = _calculator.GetSingleAccumulatedLR(context, "evidence", "claim");
 
@@ -283,8 +283,8 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("claim"), Node("premise"), Node("evidence", kind: "evidence")],
             [
-                Edge("E-evidence-premise", "evidence", "premise", importanceToParent: 0.25m),
-                Edge("E-premise-claim", "premise", "claim", importanceToParent: 1.8m)
+                Edge("E-evidence-premise", "evidence", "premise", likelihoodRatio: 0.25m),
+                Edge("E-premise-claim", "premise", "claim", likelihoodRatio: 1.8m)
             ]);
 
         var result = _calculator.GetSingleAccumulatedLR(context, "evidence", "claim");
@@ -299,10 +299,10 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("claim"), Node("pathA"), Node("pathB"), Node("evidence", kind: "evidence")],
             [
-                Edge("E-evidence-pathA", "evidence", "pathA", importanceToParent: 0.1m),
-                Edge("E-pathA-claim", "pathA", "claim", importanceToParent: 1m),
-                Edge("E-evidence-pathB", "evidence", "pathB", importanceToParent: 1.8m),
-                Edge("E-pathB-claim", "pathB", "claim", importanceToParent: 1m)
+                Edge("E-evidence-pathA", "evidence", "pathA", likelihoodRatio: 0.1m),
+                Edge("E-pathA-claim", "pathA", "claim", likelihoodRatio: 1m),
+                Edge("E-evidence-pathB", "evidence", "pathB", likelihoodRatio: 1.8m),
+                Edge("E-pathB-claim", "pathB", "claim", likelihoodRatio: 1m)
             ]);
 
         var result = _calculator.GetSingleAccumulatedLR(context, "evidence", "claim");
@@ -316,7 +316,7 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [Node("claim"), Node("otherClaim"), Node("evidence", kind: "evidence")],
-            [Edge("E-evidence-other", "evidence", "otherClaim", importanceToParent: 1.5m)]);
+            [Edge("E-evidence-other", "evidence", "otherClaim", likelihoodRatio: 1.5m)]);
 
         var result = _calculator.GetSingleAccumulatedLR(context, "evidence", "claim");
 
@@ -328,12 +328,12 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [Node("claim"), Node("evidence", kind: "evidence")],
-            [Edge("E-evidence-claim", "evidence", "claim", importanceToParent: 0m)]);
+            [Edge("E-evidence-claim", "evidence", "claim", likelihoodRatio: 0m)]);
 
         var exception = Assert.ThrowsException<InvalidOperationException>(() =>
             _calculator.GetSingleAccumulatedLR(context, "evidence", "claim"));
 
-        StringAssert.Contains(exception.Message, "must be greater than zero");
+        StringAssert.Contains(exception.Message, "range (0, 1]");
     }
 
     [TestMethod]
@@ -351,7 +351,7 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [Node("start"), Node("dead-end"), Node("claim")],
-            [Edge("E-start-dead", "start", "dead-end", importanceToParent: 2m)]);
+            [Edge("E-start-dead", "start", "dead-end", likelihoodRatio: 2m)]);
 
         var result = _calculator.GetMinLogPath(context, "start", "claim");
 
@@ -364,9 +364,9 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("start"), Node("dead-end"), Node("reachable"), Node("claim")],
             [
-                Edge("E-start-dead", "start", "dead-end", importanceToParent: 0.1m),
-                Edge("E-start-reachable", "start", "reachable", importanceToParent: 2m),
-                Edge("E-reachable-claim", "reachable", "claim", importanceToParent: 3m)
+                Edge("E-start-dead", "start", "dead-end", likelihoodRatio: 0.1m),
+                Edge("E-start-reachable", "start", "reachable", likelihoodRatio: 2m),
+                Edge("E-reachable-claim", "reachable", "claim", likelihoodRatio: 3m)
             ]);
 
         var result = _calculator.GetMinLogPath(context, "start", "claim");
@@ -381,10 +381,10 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("start"), Node("path-a"), Node("path-b"), Node("claim")],
             [
-                Edge("E-start-a", "start", "path-a", importanceToParent: 0.5m),
-                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
-                Edge("E-start-b", "start", "path-b", importanceToParent: 2m),
-                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+                Edge("E-start-a", "start", "path-a", likelihoodRatio: 0.5m),
+                Edge("E-a-claim", "path-a", "claim", likelihoodRatio: 0.5m),
+                Edge("E-start-b", "start", "path-b", likelihoodRatio: 2m),
+                Edge("E-b-claim", "path-b", "claim", likelihoodRatio: 2m)
             ]);
 
         var result = _calculator.GetMinLogPath(context, "start", "claim");
@@ -399,10 +399,10 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("start"), Node("path-a"), Node("path-b"), Node("claim")],
             [
-                Edge("E-start-a", "start", "path-a", importanceToParent: 0.5m),
-                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
-                Edge("E-start-b", "start", "path-b", importanceToParent: 2m),
-                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+                Edge("E-start-a", "start", "path-a", likelihoodRatio: 0.5m),
+                Edge("E-a-claim", "path-a", "claim", likelihoodRatio: 0.5m),
+                Edge("E-start-b", "start", "path-b", likelihoodRatio: 2m),
+                Edge("E-b-claim", "path-b", "claim", likelihoodRatio: 2m)
             ]);
 
         var result = _calculator.GetMaxLogPath(context, "start", "claim");
@@ -417,10 +417,10 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("start"), Node("path-a"), Node("path-b"), Node("claim")],
             [
-                Edge("E-start-a", "start", "path-a", importanceToParent: 0.5m),
-                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
-                Edge("E-start-b", "start", "path-b", importanceToParent: 2m),
-                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+                Edge("E-start-a", "start", "path-a", likelihoodRatio: 0.5m),
+                Edge("E-a-claim", "path-a", "claim", likelihoodRatio: 0.5m),
+                Edge("E-start-b", "start", "path-b", likelihoodRatio: 2m),
+                Edge("E-b-claim", "path-b", "claim", likelihoodRatio: 2m)
             ]);
 
         var minimum = _calculator.GetLogPath(context, "start", "claim", LogPathSelection.Minimum);
@@ -438,10 +438,10 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("start"), Node("path-a"), Node("path-b"), Node("claim")],
             [
-                Edge("E-start-a", "start", "path-a", importanceToParent: 0.5m),
-                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
-                Edge("E-start-b", "start", "path-b", importanceToParent: 2m),
-                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+                Edge("E-start-a", "start", "path-a", likelihoodRatio: 0.5m),
+                Edge("E-a-claim", "path-a", "claim", likelihoodRatio: 0.5m),
+                Edge("E-start-b", "start", "path-b", likelihoodRatio: 2m),
+                Edge("E-b-claim", "path-b", "claim", likelihoodRatio: 2m)
             ]);
 
         var minimum = _calculator.GetMinLogPath(context, "start", "claim");
@@ -460,7 +460,7 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [Node("start"), Node("dead-end"), Node("claim")],
-            [Edge("E-start-dead", "start", "dead-end", importanceToParent: 2m)]);
+            [Edge("E-start-dead", "start", "dead-end", likelihoodRatio: 2m)]);
 
         var result = _calculator.GetMaxLogPath(context, "start", "claim");
 
@@ -505,12 +505,12 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [Node("start"), Node("claim")],
-            [Edge("E-start-claim", "start", "claim", importanceToParent: 0m)]);
+            [Edge("E-start-claim", "start", "claim", likelihoodRatio: 0m)]);
 
         var exception = Assert.ThrowsException<InvalidOperationException>(() =>
             _calculator.GetMinLogPath(context, "start", "claim"));
 
-        StringAssert.Contains(exception.Message, "must be greater than zero");
+        StringAssert.Contains(exception.Message, "range (0, 1]");
     }
 
     [TestMethod]
@@ -519,8 +519,8 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("claim"), Node("premise"), Node("evidence"), Node("unrelated")],
             [
-                Edge("E-evidence-premise", "evidence", "premise", importanceToParent: 2m),
-                Edge("E-premise-claim", "premise", "claim", importanceToParent: 3m)
+                Edge("E-evidence-premise", "evidence", "premise", likelihoodRatio: 2m),
+                Edge("E-premise-claim", "premise", "claim", likelihoodRatio: 3m)
             ]);
 
         var result = _calculator.GetStrongestPaths(context, "evidence", PathDirection.Up);
@@ -540,8 +540,8 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("claim"), Node("premise"), Node("evidence")],
             [
-                Edge("E-evidence-premise", "evidence", "premise", importanceToParent: 2m),
-                Edge("E-premise-claim", "premise", "claim", importanceToParent: 3m)
+                Edge("E-evidence-premise", "evidence", "premise", likelihoodRatio: 2m),
+                Edge("E-premise-claim", "premise", "claim", likelihoodRatio: 3m)
             ]);
 
         var result = _calculator.GetStrongestPaths(context, "claim", PathDirection.Down);
@@ -557,10 +557,10 @@ public class GraphLikelihoodCalculatorTests
         var context = GraphCalculationContext.From(
             [Node("claim"), Node("path-a"), Node("path-b"), Node("evidence")],
             [
-                Edge("E-evidence-a", "evidence", "path-a", importanceToParent: 0.1m),
-                Edge("E-a-claim", "path-a", "claim", importanceToParent: 0.5m),
-                Edge("E-evidence-b", "evidence", "path-b", importanceToParent: 2m),
-                Edge("E-b-claim", "path-b", "claim", importanceToParent: 2m)
+                Edge("E-evidence-a", "evidence", "path-a", likelihoodRatio: 0.1m),
+                Edge("E-a-claim", "path-a", "claim", likelihoodRatio: 0.5m),
+                Edge("E-evidence-b", "evidence", "path-b", likelihoodRatio: 2m),
+                Edge("E-b-claim", "path-b", "claim", likelihoodRatio: 2m)
             ]);
 
         var result = _calculator.GetStrongestPaths(context, "evidence", PathDirection.Up);
@@ -599,12 +599,12 @@ public class GraphLikelihoodCalculatorTests
     {
         var context = GraphCalculationContext.From(
             [Node("A"), Node("B1"), Node("B2"), Node("C1", kind: "evidence"), Node("C2", kind: "rebut"), Node("C3")],
-            [Edge("E-B1-A", "B1", "A", kind: "support", importanceToParent: 1.3m),
-            Edge("E-B2-A", "B2", "A", kind: "support", importanceToParent: 1.1m),
-            Edge("E-C1-B1", "C1", "B1", kind: "support", importanceToParent: 1.2m),
-            Edge("E-C2-B1", "C2", "B1", kind: "objection", importanceToParent: 0.01m),
-            Edge("E-C2-B2", "C2", "B2", kind: "objection", importanceToParent: 0.1m),
-            Edge("E-C3-B2", "C3", "B2", kind: "support", importanceToParent: 1.5m)]
+            [Edge("E-B1-A", "B1", "A", kind: "support", likelihoodRatio: 1.3m),
+            Edge("E-B2-A", "B2", "A", kind: "support", likelihoodRatio: 1.1m),
+            Edge("E-C1-B1", "C1", "B1", kind: "support", likelihoodRatio: 1.2m),
+            Edge("E-C2-B1", "C2", "B1", kind: "objection", likelihoodRatio: 0.01m),
+            Edge("E-C2-B2", "C2", "B2", kind: "objection", likelihoodRatio: 0.1m),
+            Edge("E-C3-B2", "C3", "B2", kind: "support", likelihoodRatio: 1.5m)]
         );
 
         var result = _calculator.GetStrongestPaths(context, "A", PathDirection.Down);
@@ -630,10 +630,10 @@ public class GraphLikelihoodCalculatorTests
             ],
             Edges =
             [
-                Edge("E-support-branch", "support-leaf", "branch", importanceToParent: 2m),
-                Edge("E-counter-branch", "counter-leaf", "branch", importanceToParent: 0.5m),
-                Edge("E-branch-root", "branch", "root", importanceToParent: 3m),
-                Edge("E-counter-root", "direct-counter-leaf", "root", importanceToParent: 0.1m)
+                Edge("E-support-branch", "support-leaf", "branch", likelihoodRatio: 2m),
+                Edge("E-counter-branch", "counter-leaf", "branch", likelihoodRatio: 0.5m),
+                Edge("E-branch-root", "branch", "root", likelihoodRatio: 3m),
+                Edge("E-counter-root", "direct-counter-leaf", "root", likelihoodRatio: 0.1m)
             ]
         };
 
@@ -665,8 +665,8 @@ public class GraphLikelihoodCalculatorTests
             Nodes = [Node("A"), Node("B")],
             Edges =
             [
-                Edge("E-A-B", "A", "B", importanceToParent: 2m),
-                Edge("E-B-A", "B", "A", importanceToParent: 3m)
+                Edge("E-A-B", "A", "B", likelihoodRatio: 2m),
+                Edge("E-B-A", "B", "A", likelihoodRatio: 3m)
             ]
         };
 
@@ -748,7 +748,7 @@ public class GraphLikelihoodCalculatorTests
         string from,
         string to,
         string kind = "support",
-        decimal importanceToParent = 10m)
+        decimal likelihoodRatio = 10m)
     {
         return new GraphEdge
         {
@@ -756,7 +756,10 @@ public class GraphLikelihoodCalculatorTests
             From = from,
             To = to,
             Kind = kind,
-            ImportanceToParent = importanceToParent
+            ProbabilityGivenParent = likelihoodRatio >= 1m ? 1m : likelihoodRatio,
+            ProbabilityGivenNotParent = likelihoodRatio >= 1m
+                ? 1m / likelihoodRatio
+                : 1m
         };
     }
 

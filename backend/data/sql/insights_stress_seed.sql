@@ -97,7 +97,10 @@ SELECT
     ),
     payload.category,
     payload.tags,
-    payload.prior_odds,
+    CASE
+        WHEN payload.kind IN ('evidence', 'objection') THEN 0
+        ELSE payload.prior_odds
+    END,
     payload.prior_odds,
     CASE
         WHEN payload.kind = 'evidence' THEN jsonb_build_object(
@@ -138,7 +141,8 @@ INSERT INTO public.edges (
     from_node_id,
     to_node_id,
     kind,
-    importance_to_parent,
+    probability_given_parent,
+    probability_given_not_parent,
     created_at,
     updated_at
 )
@@ -148,7 +152,8 @@ SELECT
     format('n-%s', lpad(generated_edges.node_index::text, 5, '0')),
     format('n-%s', lpad(generated_edges.parent_index::text, 5, '0')),
     CASE WHEN generated_edges.node_index % 2 = 1 THEN 'support' ELSE 'rebut' END,
-    CASE WHEN generated_edges.node_index % 2 = 1 THEN 1.001 ELSE 0.999 END,
+    CASE WHEN generated_edges.node_index % 2 = 1 THEN 0.5005 ELSE 0.4995 END,
+    0.5,
     TIMESTAMPTZ '2026-08-15 00:00:00+00',
     TIMESTAMPTZ '2026-08-15 00:00:00+00'
 FROM generated_edges
@@ -183,7 +188,8 @@ INSERT INTO public.edges (
     from_node_id,
     to_node_id,
     kind,
-    importance_to_parent,
+    probability_given_parent,
+    probability_given_not_parent,
     created_at,
     updated_at
 )
@@ -193,7 +199,8 @@ SELECT
     format('n-%s', lpad(local_diamonds.node_index::text, 5, '0')),
     format('n-%s', lpad(local_diamonds.alternate_parent_index::text, 5, '0')),
     CASE WHEN local_diamonds.node_index % 2 = 1 THEN 'support' ELSE 'rebut' END,
-    CASE WHEN local_diamonds.node_index % 2 = 1 THEN 1.001 ELSE 0.999 END,
+    CASE WHEN local_diamonds.node_index % 2 = 1 THEN 0.5005 ELSE 0.4995 END,
+    0.5,
     TIMESTAMPTZ '2026-08-15 00:00:00+00',
     TIMESTAMPTZ '2026-08-15 00:00:00+00'
 FROM local_diamonds

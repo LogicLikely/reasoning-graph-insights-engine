@@ -286,7 +286,6 @@ public class GraphBayesFactorCalculatorTests
             From = from,
             To = to,
             Kind = "support",
-            ImportanceToParent = 1m,
             ProbabilityGivenParent = probabilityGivenParent,
             ProbabilityGivenNotParent = probabilityGivenNotParent
         };

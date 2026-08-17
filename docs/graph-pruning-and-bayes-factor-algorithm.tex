@@ -101,15 +101,14 @@ parent proposition:
 
 Thus evidence is encountered on the \emph{from} side of an edge, and the
 hypothesis is reached by repeatedly following edges in their stored direction.
-For an edge \(e=(u,v)\), the implementation stores three distinct quantities:
+For an edge \(e=(u,v)\), the implementation stores exactly two numerical
+weights:
 
 \begin{center}
 \begin{tabular}{lll}
 \toprule
 Symbol & Implementation field & Meaning \\
 \midrule
-\(r_e\) & \texttt{ImportanceToParent}
-    & positive path-ranking likelihood ratio \\
 \(a_e\) & \texttt{ProbabilityGivenParent}
     & \(P(u\mid v)\) \\
 \(b_e\) & \texttt{ProbabilityGivenNotParent}
@@ -118,13 +117,17 @@ Symbol & Implementation field & Meaning \\
 \end{tabular}
 \end{center}
 
-The pruning stage currently uses only \(r_e\).  The Bayes-factor stage uses
-only \(a_e\) and \(b_e\).  This distinction is important: the nonlinear edge
-transform used during Bayes-factor calculation does not, without additional
-assumptions, reduce to one static likelihood ratio suitable for path ranking.
-The two probabilities are separately specified model parameters; neither is
-determined by the other.  The stored edge kind (for example, \texttt{support} or
-\texttt{rebut}) does not alter either numerical algorithm.
+The pruning likelihood ratio is derived rather than stored:
+\[
+    r_e=\frac{a_e}{b_e},
+    \qquad
+    \ell_e=\log a_e-\log b_e.
+\]
+Both stored probabilities must therefore lie in \((0,1]\), ensuring that
+every derived ratio is finite and positive.  The Bayes-factor stage uses the
+same \(a_e\) and \(b_e\) in its nonlinear transform.  The stored edge kind
+(for example, \texttt{support} or \texttt{rebut}) does not alter either
+numerical algorithm.
 
 Each node also stores \texttt{PriorOdds} and \texttt{PosteriorOdds}.  Both are
 natural-log odds:
@@ -170,9 +173,9 @@ The algorithms use the following assumptions.
     \item Node identifiers and edge identifiers are unique.
     \item Every edge endpoint refers to an existing node.
     \item The portion of the graph that can reach \(H\) is acyclic.
-    \item Every relevant path-ranking weight satisfies \(r_e>0\).
-    \item Every retained conditional probability satisfies
-          \(0\leq a_e\leq 1\) and \(0\leq b_e\leq 1\).
+    \item Every stored conditional probability satisfies
+          \(0<a_e\leq 1\) and \(0<b_e\leq 1\), so \(r_e=a_e/b_e\)
+          is finite and positive.
     \item When the ordinary-BF API is used, every relevant leaf has a supplied
           Bayes factor greater than zero.  The log-BF API instead accepts a
           natural-log BF directly.
@@ -253,9 +256,9 @@ The hypothesis itself is always in \(R_H\).
 
 \subsection{Step 3: Define Log-Likelihood Path Scores}
 
-Each path-ranking edge weight is converted to log space:
+Each path-ranking edge weight is derived directly in log space:
 \[
-    \ell_e = \log r_e.
+    \ell_e = \log r_e = \log a_e-\log b_e.
 \]
 
 For a path
@@ -1032,6 +1035,16 @@ Because both fields store natural-log odds, the first branch is
       =\log\BF_v.
 \]
 
+The persistence and editing convention fixes \texttt{PriorOdds}(v)=0 for
+evidence and objection nodes.  The likelihood entered by an author is stored
+only in \texttt{PosteriorOdds}(v).  Consequently, for a structural
+evidence-like leaf the base case simplifies to
+\[
+    \Lambda_{\mathrm{leaf}}[v]=\texttt{PosteriorOdds}(v)=\log\BF_v.
+\]
+Claims and roots instead initialize \texttt{PosteriorOdds} to their authored
+\texttt{PriorOdds} until downstream evidence is recalculated.
+
 The neutral second branch is important for a hypothesis with no downstream
 evidence.  It gives \(\log\BF_H=0\), so that hypothesis's recalculated
 posterior equals its prior instead of feeding a previously calculated
@@ -1137,7 +1150,7 @@ Missing hypothesis & calculation or pruning stops \\
 Duplicate node or edge identifier & pruning stops \\
 Dangling edge endpoint & graph-context construction stops \\
 Relevant cycle & topological processing stops \\
-Nonpositive relevant \(r_e\) & pruning stops \\
+Stored \(a_e\) or \(b_e\) outside \((0,1]\) & pruning stops \\
 Missing leaf BF or log BF & BF calculation stops \\
 Nonpositive ordinary leaf BF & ordinary-BF calculation stops \\
 \(a_e\) or \(b_e\) outside \([0,1]\) & BF calculation stops \\
@@ -1157,10 +1170,10 @@ problem statement admits more than one interpretation.
 
 \subsection{Path Metric}
 
-Pruning uses \texttt{ImportanceToParent} as a multiplicative path likelihood
-ratio.  It does not derive a pruning score from \(a_e\) and \(b_e\).  Changing
-this requires defining how the nonlinear BF transform should be scored before
-the child Bayes factor is known.
+Pruning derives the static path likelihood ratio \(r_e=a_e/b_e\) from the
+same two conditional probabilities used by BF calculation.  It ranks products
+of these ratios; the later BF recurrence still applies the full nonlinear edge
+transform once the child Bayes factor is known.
 
 \subsection{Meaning of ``Strongest''}
 
@@ -1193,12 +1206,11 @@ centralized or replaced with an explicit evidence-node input set.
 \subsection{Legacy Path Analytics}
 
 The evidence-impact, robustness, and minimal-counter-set operations still use
-\texttt{GraphLikelihoodCalculator} and the legacy
-\texttt{ImportanceToParent}-based path model.  They are intentionally not part
-of the posterior-odds integration described here and can therefore disagree
-with a posterior produced by the conditional-probability BF recurrence.  They
-should be migrated separately once BF-based definitions for those analytics
-are specified.
+\texttt{GraphLikelihoodCalculator}.  Their path scores now derive the same
+static ratio \(a_e/b_e\), but their higher-level definitions remain legacy
+path analytics rather than the nonlinear BF recurrence.  They should be
+migrated separately once BF-based definitions for those analytics are
+specified.
 
 \subsection{Stored Odds and Leaf Observation Ownership}
 

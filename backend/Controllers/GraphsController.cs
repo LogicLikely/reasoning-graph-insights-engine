@@ -150,9 +150,8 @@ public class GraphsController : ControllerBase
         CancellationToken cancellationToken,
         [FromQuery] string? parentID = null,
         [FromQuery] string edgeKind = "support",
-        [FromQuery] decimal importanceToParent = 1m,
-        [FromQuery, Range(typeof(decimal), "0", "1")] decimal probabilityGivenParent = 0.5m,
-        [FromQuery, Range(typeof(decimal), "0", "1")] decimal probabilityGivenNotParent = 0.5m)
+        [FromQuery, Range(typeof(decimal), "0.000000001", "1")] decimal probabilityGivenParent = 0.5m,
+        [FromQuery, Range(typeof(decimal), "0.000000001", "1")] decimal probabilityGivenNotParent = 0.5m)
     {
         Console.WriteLine($"Adding node to graph {slug}");
         var success = await _graphService.AddNodeAsync(
@@ -160,7 +159,6 @@ public class GraphsController : ControllerBase
             nodeDto,
             parentID,
             edgeKind,
-            importanceToParent,
             probabilityGivenParent,
             probabilityGivenNotParent,
             cancellationToken);

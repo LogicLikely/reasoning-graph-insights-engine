@@ -24,14 +24,17 @@ public class StressGraphSeedSqlTests
     }
 
     [TestMethod]
-    public void Sql_InitializesPosteriorOddsFromPriorOddsWithoutLegacyRecalculation()
+    public void Sql_UsesNeutralEvidencePriorsAndRetainsAuthoredPosteriors()
     {
         var normalizedSql = ReadSeedSql()
             .Replace("\r\n", "\n", StringComparison.Ordinal);
 
         StringAssert.Contains(
             normalizedSql,
-            "payload.prior_odds,\n    payload.prior_odds,");
+            "WHEN payload.kind IN ('evidence', 'objection') THEN 0");
+        StringAssert.Contains(
+            normalizedSql,
+            "END,\n    payload.prior_odds,");
         Assert.IsFalse(
             normalizedSql.Contains(
                 "UPDATE public.nodes AS node",

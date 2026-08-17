@@ -16,7 +16,8 @@ public enum PathDirection
 }
 
 /// <summary>
-/// Provides legacy ImportanceToParent-based path analytics. Persisted
+/// Provides legacy likelihood-ratio path analytics. Edge likelihood ratios are
+/// derived from the two conditional probabilities. Persisted
 /// posterior log odds are calculated by <see cref="GraphPosteriorOddsCalculator"/>.
 /// </summary>
 public sealed class GraphLikelihoodCalculator
@@ -193,9 +194,6 @@ public sealed class GraphLikelihoodCalculator
         decimal? bestPath = null;
         foreach (var edge in parentEdges)
         {
-            if (edge.ImportanceToParent <= 0m) throw new InvalidOperationException(
-                $"Edge '{edge.Id}' has invalid likelihood ratio '{edge.ImportanceToParent}'. Likelihood ratios must be greater than zero.");
-
             if (!path.Add(edge.ToNodeId)) throw new InvalidOperationException(
                                             $"Cycle detected while calculating minimum log path at node '{edge.ToNodeId}'.");
 
@@ -204,7 +202,7 @@ public sealed class GraphLikelihoodCalculator
 
             if (!remainingPath.HasValue) continue;
 
-            var currentPath = (decimal)Math.Log((double)edge.ImportanceToParent) + remainingPath.Value;
+            var currentPath = GetLogEdgeWeight(edge) + remainingPath.Value;
             if (!bestPath.HasValue || IsBetterLogPath(currentPath, bestPath.Value, selection))
             {
                 bestPath = currentPath;
@@ -546,13 +544,7 @@ public sealed class GraphLikelihoodCalculator
 
     private static decimal GetLogEdgeWeight(GraphEdgeCalcState edge)
     {
-        if (edge.ImportanceToParent <= 0m)
-        {
-            throw new InvalidOperationException(
-                $"Edge '{edge.Id}' has invalid likelihood ratio '{edge.ImportanceToParent}'. Likelihood ratios must be greater than zero.");
-        }
-
-        return (decimal)Math.Log((double)edge.ImportanceToParent);
+        return EdgeProbabilityMath.GetLogLikelihoodRatio(edge);
     }
 
     private static Dictionary<string, List<GraphEdgeCalcState>> GetConnectEdgesDict(

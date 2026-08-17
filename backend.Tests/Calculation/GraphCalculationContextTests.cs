@@ -87,7 +87,7 @@ public class GraphCalculationContextTests
     {
         var context = GraphCalculationContext.From(
             [Node("A"), Node("B")],
-            [Edge("E-B-A", "B", "A", "rebut", 7m, 0.88m, 0.12m)]);
+            [Edge("E-B-A", "B", "A", "rebut", 0.88m, 0.12m)]);
 
         var edge = context.ParentEdgesByChildId["B"][0];
 
@@ -95,7 +95,6 @@ public class GraphCalculationContextTests
         Assert.AreEqual("B", edge.FromNodeId);
         Assert.AreEqual("A", edge.ToNodeId);
         Assert.AreEqual("rebut", edge.Kind);
-        Assert.AreEqual(7, edge.ImportanceToParent);
         Assert.AreEqual(0.88m, edge.ProbabilityGivenParent);
         Assert.AreEqual(0.12m, edge.ProbabilityGivenNotParent);
     }
@@ -127,7 +126,6 @@ public class GraphCalculationContextTests
         string from,
         string to,
         string kind = "support",
-        decimal importanceToParent = 1m,
         decimal probabilityGivenParent = 0.5m,
         decimal probabilityGivenNotParent = 0.5m)
     {
@@ -137,7 +135,6 @@ public class GraphCalculationContextTests
             From = from,
             To = to,
             Kind = kind,
-            ImportanceToParent = importanceToParent,
             ProbabilityGivenParent = probabilityGivenParent,
             ProbabilityGivenNotParent = probabilityGivenNotParent
         };

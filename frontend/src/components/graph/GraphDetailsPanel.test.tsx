@@ -22,7 +22,8 @@ describe('GraphDetailsPanel', () => {
 
     expect(screen.getByText('Photographs from beaches')).toBeInTheDocument()
     expect(screen.getAllByText(/observational/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/52\.00/)).toHaveLength(2)
+    expect(screen.getByText('Evidence likelihood')).toBeInTheDocument()
+    expect(screen.getByText(/52\.00/)).toBeInTheDocument()
     expect(screen.getByText(/This node supports/i)).toBeInTheDocument()
     expect(screen.getByText('The horizon looks flat')).toBeInTheDocument()
     expect(screen.getByText('Derived likelihood ratio: 5.000')).toBeInTheDocument()
@@ -66,11 +67,8 @@ describe('GraphDetailsPanel', () => {
 
     const submittedData = onUpdate.mock.calls[0][1]
     expect(submittedData.kind).toBeUndefined()
-    expect(submittedData.priorOdds).toBeCloseTo(Math.log(0.245 / 0.755), 5)
-    expect(submittedData.posteriorOdds - submittedData.priorOdds).toBeCloseTo(
-      node!.posteriorOdds - node!.priorOdds,
-      5,
-    )
+    expect(submittedData.priorOdds).toBe(0)
+    expect(submittedData.posteriorOdds).toBeCloseTo(Math.log(0.245 / 0.755), 5)
     expect(onUpdateEdge).toHaveBeenCalledWith('E-C1-E1', {
       probabilityGivenParent: 0.8,
       probabilityGivenNotParent: 0.2,
@@ -105,13 +103,32 @@ describe('GraphDetailsPanel', () => {
     const submittedData = onAddSupporting.mock.calls[0][1]
     expect(onAddSupporting.mock.calls[0][0]).toBe('E1')
     expect(submittedData.kind).toBe('objection')
-    expect(submittedData.priorOdds).toBeCloseTo(Math.log(0.65 / 0.35), 5)
+    expect(submittedData.priorOdds).toBe(0)
     expect(submittedData.posteriorOdds).toBeCloseTo(Math.log(0.65 / 0.35), 5)
     expect(onAddSupporting.mock.calls[0][2]).toEqual({
       kind: 'rebut',
       probabilityGivenParent: 0.5,
       probabilityGivenNotParent: 0.5,
     })
+  })
+
+  it('initializes a new claim posterior to its entered prior likelihood', () => {
+    const onAddSupporting = vi.fn()
+    const node = sampleGraph.nodes.find((graphNode) => graphNode.id === 'E1')
+
+    render(<GraphDetailsPanel node={node} onAddSupporting={onAddSupporting} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a child node connected to this selected node' }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New claim' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A new claim.' } })
+    fireEvent.change(screen.getByLabelText('Likelihood'), { target: { value: '65' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Node' }))
+
+    const submittedData = onAddSupporting.mock.calls[0][1]
+    const expectedLogOdds = Math.log(0.65 / 0.35)
+    expect(submittedData.kind).toBe('claim')
+    expect(submittedData.priorOdds).toBeCloseTo(expectedLogOdds, 5)
+    expect(submittedData.posteriorOdds).toBeCloseTo(expectedLogOdds, 5)
   })
 
   it('requires conditional probabilities between zero and one', () => {

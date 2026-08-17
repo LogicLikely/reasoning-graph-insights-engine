@@ -21,7 +21,7 @@ public class GraphPosteriorOddsCalculatorTests
                     priorOdds: -1m,
                     posteriorOdds: -1m + evidenceLogBayesFactor)
             ],
-            [Edge("E-E-H", "E", "H", importance: 0.01m, a: 0.8m, b: 0.2m)]);
+            [Edge("E-E-H", "E", "H", a: 0.8m, b: 0.2m)]);
 
         decimal result = _calculator.CalculateNodeLogPosteriorOdds(graph, "H");
 
@@ -46,7 +46,6 @@ public class GraphPosteriorOddsCalculatorTests
                 "E-E-H",
                 "E",
                 "H",
-                importance: 10m,
                 a: 0.2m,
                 b: 0.8m,
                 kind: "counter")]);
@@ -68,14 +67,16 @@ public class GraphPosteriorOddsCalculatorTests
                 EvidenceWithLogBayesFactor("E2", Log(4m), kind: "objection")
             ],
             [
-                Edge("E-E1-H", "E1", "H", a: 1m, b: 0m),
-                Edge("E-E2-H", "E2", "H", a: 0m, b: 1m, kind: "counter")
+                Edge("E-E1-H", "E1", "H", a: 0.999999999m, b: 0.000000001m),
+                Edge("E-E2-H", "E2", "H", a: 0.000000001m, b: 0.999999999m, kind: "counter")
             ]);
 
         decimal result = _calculator.CalculateNodeLogPosteriorOdds(graph, "H");
 
-        // E1 contributes 2 and E2 contributes 1/4, so BF_H = 1/2.
-        AssertDecimalEqual(0.25m + Log(0.5m), result);
+        decimal expectedBayesFactor =
+            Transform(2m, 0.999999999m, 0.000000001m) *
+            Transform(4m, 0.000000001m, 0.999999999m);
+        AssertDecimalEqual(0.25m + Log(expectedBayesFactor), result);
     }
 
     [TestMethod]
@@ -107,7 +108,7 @@ public class GraphPosteriorOddsCalculatorTests
                 Node("H", priorOdds: 1.25m, posteriorOdds: -40m),
                 Node("C", priorOdds: 7m, posteriorOdds: -7m)
             ],
-            [Edge("E-C-H", "C", "H", a: 1m, b: 0m)]);
+            [Edge("E-C-H", "C", "H", a: 0.999999999m, b: 0.000000001m)]);
 
         decimal result = _calculator.CalculateNodeLogPosteriorOdds(graph, "H");
 
@@ -203,19 +204,25 @@ public class GraphPosteriorOddsCalculatorTests
                 EvidenceWithLogBayesFactor("E2", Log(3m))
             ],
             [
-                Edge("E-E1-M", "E1", "M", importance: 1m, a: 1m, b: 0m),
-                Edge("E-E2-M", "E2", "M", importance: 1m, a: 1m, b: 0m),
-                Edge("E-M-A", "M", "A", importance: 9m, a: 1m, b: 0m),
-                Edge("E-A-H", "A", "H", importance: 1m, a: 0.8m, b: 0.2m),
-                Edge("E-M-B", "M", "B", importance: 2m, a: 0m, b: 1m),
-                Edge("E-B-H", "B", "H", importance: 1m, a: 0m, b: 1m)
+                Edge("E-E1-M", "E1", "M", a: 0.999999999m, b: 0.000000001m),
+                Edge("E-E2-M", "E2", "M", a: 0.999999999m, b: 0.000000001m),
+                Edge("E-M-A", "M", "A", a: 0.9m, b: 0.1m),
+                Edge("E-A-H", "A", "H", a: 0.8m, b: 0.2m),
+                Edge("E-M-B", "M", "B", a: 0.51m, b: 0.49m),
+                Edge("E-B-H", "B", "H", a: 0.51m, b: 0.49m)
             ]);
 
         decimal result = _calculator.CalculateNodeLogPosteriorOdds(graph, "H");
 
-        // Importance selects M -> A -> H. E1 and E2 first combine to BF_M = 2 * 3,
-        // then the shared nonlinear suffix is applied once.
-        decimal expectedBayesFactor = Transform(6m, 0.8m, 0.2m);
+        // The derived ratios select M -> A -> H. The two leaf contributions
+        // combine at M, then the shared nonlinear suffix is applied once.
+        decimal expectedAtM =
+            Transform(2m, 0.999999999m, 0.000000001m) *
+            Transform(3m, 0.999999999m, 0.000000001m);
+        decimal expectedBayesFactor = Transform(
+            Transform(expectedAtM, 0.9m, 0.1m),
+            0.8m,
+            0.2m);
         AssertDecimalEqual(Log(expectedBayesFactor), result);
     }
 
@@ -224,10 +231,10 @@ public class GraphPosteriorOddsCalculatorTests
     {
         var highGraph = GraphWith(
             [Node("H", priorOdds: 99m), EvidenceWithLogBayesFactor("E", Log(4m))],
-            [Edge("E-E-H", "E", "H", a: 1m, b: 0m)]);
+            [Edge("E-E-H", "E", "H", a: 0.999999999m, b: 0.000000001m)]);
         var lowGraph = GraphWith(
             [Node("H", priorOdds: -99m), EvidenceWithLogBayesFactor("E", Log(4m), kind: "objection")],
-            [Edge("E-E-H", "E", "H", a: 0m, b: 1m, kind: "counter")]);
+            [Edge("E-E-H", "E", "H", a: 0.000000001m, b: 0.999999999m, kind: "counter")]);
 
         decimal high = _calculator.CalculateNodeLogPosteriorOdds(highGraph, "H");
         decimal low = _calculator.CalculateNodeLogPosteriorOdds(lowGraph, "H");
@@ -248,11 +255,11 @@ public class GraphPosteriorOddsCalculatorTests
                     priorOdds: -100m,
                     posteriorOdds: 100m)
             ],
-            [Edge("E-E-H", "E", "H", a: 1m, b: 0m)]);
+            [Edge("E-E-H", "E", "H", a: 0.999999999m, b: 0.000000001m)]);
 
         decimal result = _calculator.CalculateNodeLogPosteriorOdds(graph, "H");
 
-        Assert.AreEqual(100m, result);
+        AssertDecimalEqual(Log(0.999999999m / 0.000000001m), result);
     }
 
     [TestMethod]
@@ -349,7 +356,6 @@ public class GraphPosteriorOddsCalculatorTests
         string id,
         string from,
         string to,
-        decimal importance = 1m,
         decimal a = 0.5m,
         decimal b = 0.5m,
         string kind = "support")
@@ -360,7 +366,6 @@ public class GraphPosteriorOddsCalculatorTests
             From = from,
             To = to,
             Kind = kind,
-            ImportanceToParent = importance,
             ProbabilityGivenParent = a,
             ProbabilityGivenNotParent = b
         };

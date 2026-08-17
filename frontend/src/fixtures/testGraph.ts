@@ -69,7 +69,7 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Evidence Alpha',
             bodyText: 'Test Evidence Alpha supplies a synthetic supporting record for Test Claim Alpha.',
             tags: ['synthetic'],
-            priorOdds: 0.08,
+            priorOdds: 0,
             posteriorOdds: 0.08,
             evidence: {
                 type: 'documentary',
@@ -97,7 +97,7 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Counterpoint Alpha',
             bodyText: 'Test Counterpoint Alpha rebuts Test Premise Alpha in this synthetic graph.',
             category: 'test-counterpoint',
-            priorOdds: 0.8,
+            priorOdds: 0,
             posteriorOdds: 0.8,
         },
         {
@@ -106,7 +106,7 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Counterpoint Beta',
             bodyText: 'Test Counterpoint Beta rebuts Test Claim Gamma in this synthetic graph.',
             category: 'test-counterpoint',
-            priorOdds: 0.4,
+            priorOdds: 0,
             posteriorOdds: 0.4,
         },
         {
@@ -115,7 +115,7 @@ export const sampleGraph: GraphFixture = {
             title: 'Test Counterpoint Beta',
             bodyText: 'Test Counterpoint Beta rebuts Test Claim Gamma in this synthetic graph.',
             category: 'test-counterpoint',
-            priorOdds: 0.5,
+            priorOdds: 0,
             posteriorOdds: 0.5,
         },
     ],

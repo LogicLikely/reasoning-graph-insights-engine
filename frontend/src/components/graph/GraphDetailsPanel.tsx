@@ -116,6 +116,10 @@ function getEdgeKindForNodeKind(kind: GraphFixtureNode['kind']): GraphFixtureEdg
   return kind === 'objection' ? 'rebut' : 'support'
 }
 
+function isEvidenceLikeNode(kind: GraphFixtureNode['kind']) {
+  return kind === 'evidence' || kind === 'objection'
+}
+
 function formatEdgeKindLabel(kind: GraphFixtureEdge['kind']) {
   return kind === 'rebut' ? 'Counter' : 'Support'
 }
@@ -188,30 +192,29 @@ export function GraphDetailsPanel({
     if (!isFormValid) return
 
     const probability = Number(formData.likelihoodPercent) / 100
-    const priorLogOdds = probabilityToLogOdds(probability)
+    const likelihoodLogOdds = probabilityToLogOdds(probability)
+    const isEvidenceLike = isEvidenceLikeNode(formData.kind)
     const submissionData: Partial<GraphFixtureNode> = {
       title: (formData.title ?? '').trim(),
       bodyText: (formData.bodyText ?? '').trim(),
-      priorOdds: priorLogOdds
+      // Evidence likelihood is an authored posterior relative to neutral
+      // prior log odds. Claims instead treat this field as their prior.
+      priorOdds: isEvidenceLike ? 0 : likelihoodLogOdds,
     }
 
     if (mode === 'add') {
       onAddSupporting?.(node.id, {
         ...submissionData,
         kind: formData.kind,
-        // Until an observation is authored, log(BF) = posterior - prior = 0.
-        posteriorOdds: priorLogOdds,
+        posteriorOdds: likelihoodLogOdds,
         tags: ['dynamic']
       }, {
         kind: derivedEdgeKind,
         ...parentEdgeWeights,
       })
     } else if (mode === 'edit') {
-      if (node.kind === 'evidence' || node.kind === 'objection') {
-        // Prior/posterior are both log odds. Move them together so editing the
-        // displayed prior does not silently change the authored leaf log(BF).
-        submissionData.posteriorOdds = priorLogOdds +
-          (node.posteriorOdds - node.priorOdds)
+      if (isEvidenceLike) {
+        submissionData.posteriorOdds = likelihoodLogOdds
       }
       onUpdate?.(node.id, submissionData)
       parentRelations.forEach((relation) => {
@@ -261,7 +264,9 @@ export function GraphDetailsPanel({
       title: node.title ?? '',
       bodyText: node.bodyText ?? '',
       kind: node.kind,
-      likelihoodPercent: formatLogOddsAsPercent(node.priorOdds) ?? '',
+      likelihoodPercent: formatLogOddsAsPercent(
+        isEvidenceLikeNode(node.kind) ? node.posteriorOdds : node.priorOdds,
+      ) ?? '',
       parentEdgeWeights: neutralEdgeWeightFormData,
     })
     setEdgeWeightData(parentEdgeWeightEntries)
@@ -582,16 +587,26 @@ export function GraphDetailsPanel({
             </dd>
           </>
         ) : null}
-        {formatMetric(node.priorOdds) ? (
+        {isEvidenceLikeNode(node.kind) && formatMetric(node.posteriorOdds) ? (
           <>
-            <dt>Prior likelihood</dt>
-            <dd>{formatLogOddsAsPercent(node.priorOdds)}%</dd>
+            <dt>Evidence likelihood</dt>
+            <dd>{formatLogOddsAsPercent(node.posteriorOdds)}%</dd>
           </>
         ) : null}
-        {formatMetric(node.posteriorOdds) ? (
+        {!isEvidenceLikeNode(node.kind) ? (
           <>
-            <dt>Posterior likelihood</dt>
-            <dd>{formatLogOddsAsPercent(node.posteriorOdds)}%</dd>
+            {formatMetric(node.priorOdds) ? (
+              <>
+                <dt>Prior likelihood</dt>
+                <dd>{formatLogOddsAsPercent(node.priorOdds)}%</dd>
+              </>
+            ) : null}
+            {formatMetric(node.posteriorOdds) ? (
+              <>
+                <dt>Posterior likelihood</dt>
+                <dd>{formatLogOddsAsPercent(node.posteriorOdds)}%</dd>
+              </>
+            ) : null}
           </>
         ) : null}
         {node.kind == 'evidence' && node.evidence ? (

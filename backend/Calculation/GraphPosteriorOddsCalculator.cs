@@ -9,8 +9,9 @@ namespace Backend.Calculation;
 /// used as leaf Bayes-factor inputs.
 /// </summary>
 /// <remarks>
-/// PriorOdds and PosteriorOdds store natural-log odds. For an evidence or
-/// objection leaf, PosteriorOdds - PriorOdds is therefore log(BF). A
+/// PriorOdds and PosteriorOdds store natural-log odds. Persistence initializes
+/// evidence and objection PriorOdds to zero, so their authored PosteriorOdds
+/// directly equal log(BF); the subtraction remains explicit here. A
 /// non-evidence target without downstream evidence is BF-neutral. The final
 /// update is PosteriorOdds(H) = PriorOdds(H) + log(BF_H), clamped to the
 /// supported log-odds range. CalculateNodeLogPosteriorOdds is read-only;

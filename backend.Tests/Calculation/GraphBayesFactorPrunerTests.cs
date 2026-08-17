@@ -351,7 +351,6 @@ public class GraphBayesFactorPrunerTests
         clonedEvidence.Title = "Changed title";
         clonedEvidence.Tags.Add("changed-tag");
         clonedEvidence.Evidence!.Rationale = "Changed rationale";
-        clonedEdge.ImportanceToParent = 99m;
         clonedEdge.ProbabilityGivenParent = 0.1m;
         clonedEdge.ProbabilityGivenNotParent = 0.9m;
         result.Nodes.Clear();
@@ -360,7 +359,6 @@ public class GraphBayesFactorPrunerTests
         Assert.AreEqual("Evidence", evidence.Title);
         CollectionAssert.AreEqual(new[] { "source", "primary" }, evidence.Tags);
         Assert.AreEqual("Original rationale", evidence.Evidence!.Rationale);
-        Assert.AreEqual(3m, sourceEdge.ImportanceToParent);
         Assert.AreEqual(0.76m, sourceEdge.ProbabilityGivenParent);
         Assert.AreEqual(0.24m, sourceEdge.ProbabilityGivenNotParent);
         Assert.AreEqual(2, graph.Nodes.Count);
@@ -399,18 +397,26 @@ public class GraphBayesFactorPrunerTests
     }
 
     [TestMethod]
-    public void Prune_ThrowsForNonPositiveLikelihoodRatio()
+    public void Prune_ThrowsForProbabilityThatCannotDefineFiniteLikelihoodRatio()
     {
-        foreach (decimal likelihoodRatio in new[] { 0m, -1m })
+        foreach (decimal probability in new[] { 0m, -1m })
         {
             var graph = GraphWith(
                 [Node("H"), Node("E", "evidence")],
-                [Edge("E-E-H", "E", "H", likelihoodRatio)]);
+                [new GraphEdge
+                {
+                    Id = "E-E-H",
+                    From = "E",
+                    To = "H",
+                    Kind = "support",
+                    ProbabilityGivenParent = probability,
+                    ProbabilityGivenNotParent = 1m
+                }]);
 
             var exception = Assert.ThrowsException<InvalidOperationException>(() =>
                 _pruner.Prune(graph, "H"));
 
-            StringAssert.Contains(exception.Message, "must be greater than zero");
+            StringAssert.Contains(exception.Message, "range (0, 1]");
         }
     }
 
@@ -449,7 +455,7 @@ public class GraphBayesFactorPrunerTests
         string id,
         string from,
         string to,
-        decimal importanceToParent,
+        decimal likelihoodRatio,
         string kind = "support")
     {
         return new GraphEdge
@@ -458,7 +464,10 @@ public class GraphBayesFactorPrunerTests
             From = from,
             To = to,
             Kind = kind,
-            ImportanceToParent = importanceToParent
+            ProbabilityGivenParent = likelihoodRatio >= 1m ? 1m : likelihoodRatio,
+            ProbabilityGivenNotParent = likelihoodRatio >= 1m
+                ? 1m / likelihoodRatio
+                : 1m
         };
     }
 

@@ -10,7 +10,7 @@ public class GraphService : IGraphService
 {
     private readonly IGraphRepository _graphRepository;
 
-    // Legacy ImportanceToParent-based ranking, robustness, and counter analytics.
+    // Legacy likelihood-ratio ranking, robustness, and counter analytics.
     private readonly GraphLikelihoodCalculator _calculator;
 
     // BF-based pruning, recurrence, and persisted posterior-log-odds updates.
@@ -95,7 +95,6 @@ public class GraphService : IGraphService
                     From = edge.From,
                     To = edge.To,
                     Kind = edge.Kind,
-                    ImportanceToParent = edge.ImportanceToParent,
                     ProbabilityGivenParent = edge.ProbabilityGivenParent,
                     ProbabilityGivenNotParent = edge.ProbabilityGivenNotParent
                 })
@@ -317,7 +316,6 @@ public class GraphService : IGraphService
                 From = edge.From,
                 To = edge.To,
                 Kind = edge.Kind,
-                ImportanceToParent = edge.ImportanceToParent,
                 ProbabilityGivenParent = edge.ProbabilityGivenParent,
                 ProbabilityGivenNotParent = edge.ProbabilityGivenNotParent
             }).ToList()
@@ -329,17 +327,22 @@ public class GraphService : IGraphService
         GraphNodeDto node,
         string? parentID = null,
         string edgeKind = "support",
-        decimal importanceToParent = 1m,
         decimal probabilityGivenParent = 0.5m,
         decimal probabilityGivenNotParent = 0.5m,
         CancellationToken cancellationToken = default)
     {
+        // Evidence-like nodes treat the authored likelihood as posterior
+        // evidence strength relative to neutral prior log odds.
+        if (IsEvidenceLikeNodeKind(node.Kind))
+        {
+            node.PriorOdds = 0m;
+        }
+
         var added = await _graphRepository.AddNodeAsync(
             slug,
             node,
             parentID,
             edgeKind,
-            importanceToParent,
             probabilityGivenParent,
             probabilityGivenNotParent,
             cancellationToken);
@@ -354,6 +357,12 @@ public class GraphService : IGraphService
             cancellationToken);
 
         return true;
+    }
+
+    private static bool IsEvidenceLikeNodeKind(string kind)
+    {
+        return string.Equals(kind, "evidence", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "objection", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<bool> UpdateNodeAsync(
@@ -411,10 +420,9 @@ public class GraphService : IGraphService
             return false;
         }
 
-        // Importance changes the selected pruned paths; either conditional
-        // probability changes the BF transform on the retained edge.
-        if (edge.ImportanceToParent.HasValue ||
-            edge.ProbabilityGivenParent.HasValue ||
+        // Either probability changes both the derived pruning LR and the BF
+        // transform on the retained edge.
+        if (edge.ProbabilityGivenParent.HasValue ||
             edge.ProbabilityGivenNotParent.HasValue)
         {
             var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
@@ -590,7 +598,7 @@ public class GraphService : IGraphService
                 continue;
             }
 
-            var multiplier = GetAncestorImportanceMultiplier(context, nodeId, targetNodeId);
+            var multiplier = GetAncestorLikelihoodMultiplier(context, nodeId, targetNodeId);
             if (multiplier is null)
             {
                 continue;
@@ -602,7 +610,7 @@ public class GraphService : IGraphService
         return counterQueue;
     }
 
-    private static decimal? GetAncestorImportanceMultiplier(
+    private static decimal? GetAncestorLikelihoodMultiplier(
         GraphCalculationContext context,
         string startNodeId,
         string targetNodeId)
@@ -643,7 +651,8 @@ public class GraphService : IGraphService
                         $"Cycle detected while finding counter priority at node '{parentNodeId}'.");
                 }
 
-                var nextMultiplier = current.Multiplier * (parentEdge.ImportanceToParent / 10m);
+                var nextMultiplier = current.Multiplier *
+                    EdgeProbabilityMath.GetLikelihoodRatio(parentEdge);
                 var nextPath = new HashSet<string>(current.Path) { parentNodeId };
                 stack.Push(new CounterTraversalState(parentNodeId, nextMultiplier, nextPath));
             }
