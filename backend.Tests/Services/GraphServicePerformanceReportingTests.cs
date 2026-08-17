@@ -52,6 +52,10 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual(0L, Detail<long>(run, "subsetEvaluations"));
         Assert.AreEqual("notApplicable", Detail<string>(run, "proofStatus"));
         Assert.IsTrue(Detail<bool>(run, "thresholdReached"));
+        CollectionAssert.AreEqual(
+            new[] { "O1" },
+            DetailStringArray(run, "returnedNodeIds"));
+        Assert.IsFalse(Detail<bool>(run, "returnedNodeIdsTruncated"));
         AssertCommonTiming(run, expectLoad: true, expectPersist: false);
     }
 
@@ -93,7 +97,108 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual("notProven", Detail<string>(run, "proofStatus"));
         Assert.AreEqual("candidateLimit", Detail<string>(run, "stopReason"));
         Assert.IsTrue(Detail<bool>(run, "thresholdReached"));
+        CollectionAssert.AreEqual(
+            new[] { "O00", "O01" },
+            DetailStringArray(run, "returnedNodeIds"));
+        Assert.IsFalse(Detail<bool>(run, "returnedNodeIdsTruncated"));
         AssertCommonTiming(run, expectLoad: true, expectPersist: false);
+    }
+
+    [TestMethod]
+    public async Task MinimalCounterSetPreview_IsCappedAtTwentyAndMarksTruncation()
+    {
+        var graph = GraphWith([Node("R", kind: "root")], []);
+        var repository = RepositoryReturning(graph);
+        var store = new CapturingPerformanceRunStore();
+        var calculator = new GraphLikelihoodCalculator();
+        var evaluator = new FixedMinimalCounterSetEvaluator(25);
+        var service = new GraphService(
+            repository.Object,
+            calculator,
+            new GreedyMinimalCounterSetSolver(evaluator),
+            new BoundedBruteForceMinimalCounterSetSolver(evaluator),
+            store);
+
+        var result = await service.GetMinimalCounterSetAsync(
+            graph.Slug,
+            "R",
+            CancellationToken.None);
+
+        Assert.IsNull(result);
+        var run = AssertSingleRun(store);
+        Assert.AreEqual(25, Detail<int>(run, "returnedSetSize"));
+        CollectionAssert.AreEqual(
+            Enumerable.Range(0, 20).Select(index => $"O{index:00}").ToArray(),
+            DetailStringArray(run, "returnedNodeIds"));
+        Assert.IsTrue(Detail<bool>(run, "returnedNodeIdsTruncated"));
+    }
+
+    [TestMethod]
+    public async Task EvidenceAndRobustnessPreviews_AreBoundedAndPreserveResultOrder()
+    {
+        var nodes = new List<GraphNode> { Node("R", kind: "root") };
+        var edges = new List<GraphEdge>();
+        for (var index = 0; index < 6; index++)
+        {
+            var supportingNodeId = $"S{index:00}";
+            var counterNodeId = $"C{index:00}";
+            nodes.Add(Node(supportingNodeId, kind: "evidence"));
+            nodes.Add(Node(counterNodeId, kind: "objection"));
+            edges.Add(Edge(
+                $"E-{supportingNodeId}-R",
+                supportingNodeId,
+                "R",
+                "support",
+                2m + index));
+            edges.Add(Edge(
+                $"E-{counterNodeId}-R",
+                counterNodeId,
+                "R",
+                "rebut",
+                0.5m - (index * 0.05m)));
+        }
+
+        var graph = GraphWith(nodes, edges);
+        var repository = RepositoryReturning(graph);
+        var store = new CapturingPerformanceRunStore();
+        var service = CreateService(repository.Object, store);
+
+        var evidence = await service.GetEvidenceImpactRankingAsync(
+            graph.Slug,
+            "R",
+            CancellationToken.None);
+        var ranking = await service.GetNodeRobustnessRankingAsync(
+            graph.Slug,
+            CancellationToken.None);
+
+        Assert.IsNotNull(evidence);
+        Assert.IsNotNull(ranking);
+        Assert.AreEqual(6, evidence.SupportingEvidence.Count);
+        Assert.AreEqual(6, evidence.CounterEvidence.Count);
+        Assert.AreEqual(13, ranking.Count);
+
+        var supportingPreview = store.Runs[0].Details["supportingPreview"]!.AsArray();
+        var counterPreview = store.Runs[0].Details["counterPreview"]!.AsArray();
+        Assert.AreEqual(5, supportingPreview.Count);
+        Assert.AreEqual(5, counterPreview.Count);
+        CollectionAssert.AreEqual(
+            evidence.SupportingEvidence.Take(5).Select(item => item.NodeId).ToArray(),
+            supportingPreview
+                .Select(item => item!["nodeId"]!.GetValue<string>())
+                .ToArray());
+        CollectionAssert.AreEqual(
+            evidence.CounterEvidence.Take(5).Select(item => item.NodeId).ToArray(),
+            counterPreview
+                .Select(item => item!["nodeId"]!.GetValue<string>())
+                .ToArray());
+
+        var rankingPreview = store.Runs[1].Details["rankingPreview"]!.AsArray();
+        Assert.AreEqual(10, rankingPreview.Count);
+        CollectionAssert.AreEqual(
+            ranking.Take(10).Select(item => item.NodeId).ToArray(),
+            rankingPreview
+                .Select(item => item!["nodeId"]!.GetValue<string>())
+                .ToArray());
     }
 
     [TestMethod]
@@ -139,6 +244,12 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual(2, Detail<int>(evidenceRun, "reachableEvidenceCount"));
         Assert.AreEqual(1, Detail<int>(evidenceRun, "supportingResultCount"));
         Assert.AreEqual(1, Detail<int>(evidenceRun, "counterResultCount"));
+        var supportingPreview = evidenceRun.Details["supportingPreview"]!.AsArray();
+        var counterPreview = evidenceRun.Details["counterPreview"]!.AsArray();
+        Assert.AreEqual(1, supportingPreview.Count);
+        Assert.AreEqual("E1", supportingPreview[0]!["nodeId"]!.GetValue<string>());
+        Assert.AreEqual(1, counterPreview.Count);
+        Assert.AreEqual("O1", counterPreview[0]!["nodeId"]!.GetValue<string>());
 
         var leastRobustRun = store.Runs[1];
         AssertCommonCalculationRun(
@@ -149,6 +260,7 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual(2, Detail<int>(leastRobustRun, "edgesExamined"));
         Assert.AreEqual(2, Detail<int>(leastRobustRun, "leafCount"));
         Assert.IsNotNull(leastRobustRun.Details["selectedNodeId"]);
+        Assert.IsNotNull(leastRobustRun.Details["selectedNodeTitle"]);
 
         var rankingRun = store.Runs[2];
         AssertCommonCalculationRun(
@@ -158,6 +270,11 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual(3, Detail<int>(rankingRun, "nodesEvaluated"));
         Assert.AreEqual(2, Detail<int>(rankingRun, "edgesExamined"));
         Assert.AreEqual(3, Detail<int>(rankingRun, "rankedItemCount"));
+        var rankingPreview = rankingRun.Details["rankingPreview"]!.AsArray();
+        Assert.AreEqual(3, rankingPreview.Count);
+        Assert.AreEqual(
+            ranking![0].NodeId,
+            rankingPreview[0]!["nodeId"]!.GetValue<string>());
     }
 
     [TestMethod]
@@ -427,6 +544,16 @@ public sealed class GraphServicePerformanceReportingTests
         return run.Details[name]!.GetValue<T>();
     }
 
+    private static string[] DetailStringArray(
+        PerformanceRunRecord run,
+        string name)
+    {
+        return run.Details[name]!
+            .AsArray()
+            .Select(item => item!.GetValue<string>())
+            .ToArray();
+    }
+
     private static PerformanceRunRecord AssertSingleRun(
         CapturingPerformanceRunStore store)
     {
@@ -528,6 +655,16 @@ public sealed class GraphServicePerformanceReportingTests
     {
         public List<PerformanceRunRecord> Runs { get; } = [];
 
+        public Task<PerformanceReportDocument> ReadAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new PerformanceReportDocument
+            {
+                Runs = Runs.ToList()
+            });
+        }
+
         public Task<PerformanceRunRecord> AppendAsync(
             PerformanceRunRecord run,
             CancellationToken cancellationToken = default)
@@ -536,6 +673,52 @@ public sealed class GraphServicePerformanceReportingTests
             var stored = run with { RunNumber = Runs.Count + 1L };
             Runs.Add(stored);
             return Task.FromResult(stored);
+        }
+    }
+
+    private sealed class FixedMinimalCounterSetEvaluator : IMinimalCounterSetEvaluator
+    {
+        private readonly int _candidateCount;
+
+        public FixedMinimalCounterSetEvaluator(int candidateCount)
+        {
+            _candidateCount = candidateCount;
+        }
+
+        public IMinimalCounterSetProblem CreateProblem(
+            Graph graph,
+            string targetNodeId,
+            IEnumerable<string> nodeIds,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new FixedMinimalCounterSetProblem(_candidateCount);
+        }
+    }
+
+    private sealed class FixedMinimalCounterSetProblem : IMinimalCounterSetProblem
+    {
+        public FixedMinimalCounterSetProblem(int candidateCount)
+        {
+            Candidates = Enumerable.Range(0, candidateCount)
+                .Select(index => new MinimalCounterCandidate(
+                    $"O{index:00}",
+                    candidateCount - index))
+                .ToArray();
+        }
+
+        public decimal ThresholdLogOdds => -1m;
+
+        public decimal InitialTargetLogOdds => 30m;
+
+        public IReadOnlyList<MinimalCounterCandidate> Candidates { get; }
+
+        public decimal GetTargetLogOddsContribution(
+            string counterNodeId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return -1m;
         }
     }
 }

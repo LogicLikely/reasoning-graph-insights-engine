@@ -10,12 +10,26 @@ public sealed class JsonPerformanceRunStore : IPerformanceRunStore, IDisposable
     };
 
     private readonly string _filePath;
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly SemaphoreSlim _accessLock = new(1, 1);
 
     public JsonPerformanceRunStore(string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         _filePath = Path.GetFullPath(filePath);
+    }
+
+    public async Task<PerformanceReportDocument> ReadAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _accessLock.WaitAsync(cancellationToken);
+        try
+        {
+            return await ReadReportFileAsync(cancellationToken);
+        }
+        finally
+        {
+            _accessLock.Release();
+        }
     }
 
     public async Task<PerformanceRunRecord> AppendAsync(
@@ -24,10 +38,10 @@ public sealed class JsonPerformanceRunStore : IPerformanceRunStore, IDisposable
     {
         ArgumentNullException.ThrowIfNull(run);
 
-        await _writeLock.WaitAsync(cancellationToken);
+        await _accessLock.WaitAsync(cancellationToken);
         try
         {
-            var report = await ReadReportAsync(cancellationToken);
+            var report = await ReadReportFileAsync(cancellationToken);
             var storedRun = run with
             {
                 RunNumber = report.Runs.Count == 0
@@ -42,16 +56,16 @@ public sealed class JsonPerformanceRunStore : IPerformanceRunStore, IDisposable
         }
         finally
         {
-            _writeLock.Release();
+            _accessLock.Release();
         }
     }
 
     public void Dispose()
     {
-        _writeLock.Dispose();
+        _accessLock.Dispose();
     }
 
-    private async Task<PerformanceReportDocument> ReadReportAsync(
+    private async Task<PerformanceReportDocument> ReadReportFileAsync(
         CancellationToken cancellationToken)
     {
         if (!File.Exists(_filePath))

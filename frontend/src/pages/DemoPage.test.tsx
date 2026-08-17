@@ -110,6 +110,32 @@ vi.mock('../components/graph/InsightsGraphCanvas', () => ({
   ),
 }))
 
+vi.mock('../components/graph/InsightsLabDialog', () => ({
+  InsightsLabDialog: ({
+    graph,
+    graphDataSource,
+    isOpen,
+    onClose,
+    onGraphUpdated,
+    selectedNodeId,
+  }: {
+    graph: typeof sampleGraph | null
+    graphDataSource: 'fixture' | 'database'
+    isOpen: boolean
+    onClose: () => void
+    onGraphUpdated?: () => void
+    selectedNodeId?: string
+  }) => isOpen ? (
+    <div aria-label="Insights Lab" data-testid="insights-lab-dialog" role="dialog">
+      <span data-testid="insights-lab-context">
+        {[graph?.slug ?? 'no-graph', graphDataSource, selectedNodeId ?? 'no-selection'].join('|')}
+      </span>
+      <button onClick={onGraphUpdated} type="button">Simulate graph update</button>
+      <button onClick={onClose} type="button">Close Insights Lab</button>
+    </div>
+  ) : null,
+}))
+
 describe('DemoPage', () => {
   beforeEach(() => {
     getGraphBySlugMock.mockReset()
@@ -155,86 +181,74 @@ describe('DemoPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('prints the least robust node when r is pressed', async () => {
-    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+  it('opens and closes the Insights Lab with the active graph context', async () => {
     getGraphBySlugMock.mockResolvedValue(sampleGraph)
-    getLeastRobustNodeMock.mockResolvedValue({
-      nodeId: 'C1',
-      nodeTitle: 'Least robust claim',
-      robustness: 0.75,
-    })
 
     render(<DemoPage />)
-    await screen.findByTestId('insights-graph-canvas')
 
-    fireEvent.keyDown(window, { key: 'r' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Insights Lab' }))
+
+    expect(screen.getByRole('dialog', { name: 'Insights Lab' })).toBeInTheDocument()
+    expect(screen.getByTestId('insights-lab-context')).toHaveTextContent(
+      'sample-medium|database|E1',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close Insights Lab' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Insights Lab' })).not.toBeInTheDocument()
+  })
+
+  it('reloads the active graph when the Insights Lab reports an update', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    await screen.findByTestId('insights-graph-canvas')
+    fireEvent.click(screen.getByRole('button', { name: 'Insights Lab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate graph update' }))
 
     await waitFor(() => {
-      expect(getLeastRobustNodeMock).toHaveBeenCalledWith('sample-medium', 'database')
-      expect(consoleLog).toHaveBeenCalledWith('Least robust claim: 0.75')
+      expect(getGraphBySlugMock).toHaveBeenCalledTimes(2)
     })
   })
 
-  it('prints the bounded counter-set result when b is pressed with a selected node', async () => {
-    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const result = {
-      counterNodeIds: ['O1'],
-      proofStatus: 'proven',
-      runNumber: 12,
+  it('does not launch analyses from the removed I, B, E, R, or J shortcuts', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
+    for (const key of ['i', 'b', 'e', 'r', 'j']) {
+      fireEvent.keyDown(window, { key })
     }
+
+    expect(getNodeCounterSetMock).not.toHaveBeenCalled()
+    expect(getBoundedNodeCounterSetMock).not.toHaveBeenCalled()
+    expect(getEvidenceImpactRankingMock).not.toHaveBeenCalled()
+    expect(getLeastRobustNodeMock).not.toHaveBeenCalled()
+    expect(getNodeRobustnessRankingMock).not.toHaveBeenCalled()
+  })
+
+  it('gates page keyboard shortcuts while the Insights Lab is open', async () => {
     getGraphBySlugMock.mockResolvedValue(sampleGraph)
-    getBoundedNodeCounterSetMock.mockResolvedValue(result)
 
     render(<DemoPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
-    fireEvent.keyDown(window, { key: 'b' })
+    fireEvent.click(screen.getByRole('button', { name: 'Insights Lab' }))
+    fireEvent.keyDown(window, { key: 'a' })
+    fireEvent.keyDown(window, { key: 'd' })
+    fireEvent.keyDown(window, { key: 'Escape' })
 
-    await waitFor(() => {
-      expect(getBoundedNodeCounterSetMock).toHaveBeenCalledWith('sample-medium', 'E1', 'database')
-      expect(consoleLog).toHaveBeenCalledWith(result)
-      expect(getNodeCounterSetMock).not.toHaveBeenCalled()
-    })
-  })
+    expect(addNodeMock).not.toHaveBeenCalled()
+    expect(deleteNodeMock).not.toHaveBeenCalled()
+    expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--open')
 
-  it('preserves the greedy counter-set behavior when i is pressed with a selected node', async () => {
-    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
-    getGraphBySlugMock.mockResolvedValue(sampleGraph)
-    getNodeCounterSetMock.mockResolvedValue(['O1'])
+    fireEvent.click(screen.getByRole('button', { name: 'Close Insights Lab' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
 
-    render(<DemoPage />)
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
-    fireEvent.keyDown(window, { key: 'i' })
-
-    await waitFor(() => {
-      expect(getNodeCounterSetMock).toHaveBeenCalledWith('sample-medium', 'E1', 'database')
-      expect(consoleLog).toHaveBeenCalledWith(['O1'])
-      expect(getBoundedNodeCounterSetMock).not.toHaveBeenCalled()
-    })
-  })
-
-  it('prints node IDs and robustness scores in ascending order when j is pressed', async () => {
-    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const ranking = [
-      { nodeId: 'C1', nodeTitle: 'First', robustness: 0.25 },
-      { nodeId: 'E1', nodeTitle: 'Second', robustness: 0.75 },
-    ]
-    getGraphBySlugMock.mockResolvedValue(sampleGraph)
-    getNodeRobustnessRankingMock.mockResolvedValue(ranking)
-
-    render(<DemoPage />)
-    await screen.findByTestId('insights-graph-canvas')
-
-    fireEvent.keyDown(window, { key: 'j' })
-
-    await waitFor(() => {
-      expect(getNodeRobustnessRankingMock).toHaveBeenCalledWith('sample-medium', 'database')
-      expect(consoleLog).toHaveBeenCalledWith([
-        { nodeId: 'C1', robustness: 0.25 },
-        { nodeId: 'E1', robustness: 0.75 },
-      ])
-    })
+    expect(screen.getByTestId('demo-details-sheet')).not.toHaveClass('demo-details-sheet--open')
   })
 
   it('selects a database graph and uses its slug for mutations', async () => {
@@ -445,42 +459,6 @@ describe('DemoPage', () => {
     expect(screen.getByTestId('insights-graph-canvas')).toBeInTheDocument()
     expect(screen.getByTestId('demo-details-sheet')).toHaveClass('demo-details-sheet--open')
     expect(screen.getByText('Photographs from beaches')).toBeInTheDocument()
-  })
-
-  it('prints the evidence impact ranking when e is pressed with a selected node', async () => {
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
-    getGraphBySlugMock.mockResolvedValue(sampleGraph)
-    getEvidenceImpactRankingMock.mockResolvedValue({
-      supportingEvidence: [
-        { nodeId: 'C1', logLr: 1, probabilityDifference: 0.2 },
-        { nodeId: 'E2', logLr: 0.52, probabilityDifference: 0.1 },
-        { nodeId: 'E1', logLr: 0.47, probabilityDifference: 0.09 },
-      ],
-      counterEvidence: [
-        { nodeId: 'O3', logLr: -1.87, probabilityDifference: -0.3 },
-        { nodeId: 'O2', logLr: -1.53, probabilityDifference: -0.25 },
-        { nodeId: 'O1', logLr: -1.49, probabilityDifference: -0.2 },
-      ],
-    })
-
-    render(<DemoPage />)
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
-    fireEvent.keyDown(window, { key: 'e' })
-
-    await waitFor(() => {
-      expect(getEvidenceImpactRankingMock).toHaveBeenCalledWith('sample-medium', 'E1', 'database')
-      expect(consoleLogSpy).toHaveBeenCalledWith({
-        supportingEvidence: [
-          { nodeId: 'E2', logLr: 0.52, probabilityDifference: 0.1 },
-          { nodeId: 'E1', logLr: 0.47, probabilityDifference: 0.09 },
-        ],
-        counterEvidence: [
-          { nodeId: 'O2', logLr: -1.53, probabilityDifference: -0.25 },
-          { nodeId: 'O1', logLr: -1.49, probabilityDifference: -0.2 },
-        ],
-      })
-    })
   })
 
   it('keeps page details in sync with GraphMap fullscreen requests', async () => {

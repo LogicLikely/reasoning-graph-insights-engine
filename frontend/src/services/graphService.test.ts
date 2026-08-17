@@ -200,6 +200,99 @@ describe('graphService', () => {
     )
   })
 
+  it('forwards an AbortSignal to cancellable insight operations', async () => {
+    const postSpy = vi.fn().mockResolvedValue({
+      data: {
+        counterNodeIds: ['O1'],
+        proofStatus: 'proven',
+        runNumber: 12,
+      },
+    })
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const {
+      getBoundedNodeCounterSet,
+      getLeastRobustNode,
+      getNodeCounterSet,
+      getNodeRobustnessRanking,
+    } = await import('./graphService')
+    const signal = new AbortController().signal
+
+    await getNodeCounterSet('sample-medium', 'R1', 'database', signal)
+    await getBoundedNodeCounterSet('sample-medium', 'R1', 'database', signal)
+    await getLeastRobustNode('sample-medium', 'database', signal)
+    await getNodeRobustnessRanking('sample-medium', 'database', signal)
+
+    expect(postSpy).toHaveBeenNthCalledWith(
+      1,
+      '/api/graphs/sample-medium/nodes/R1/minimal-counter-set',
+      undefined,
+      { signal },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/graphs/sample-medium/nodes/R1/bounded-minimal-counter-set',
+      undefined,
+      { signal },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      3,
+      '/api/graphs/sample-medium/least-robust-node',
+      undefined,
+      { signal },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      4,
+      '/api/graphs/sample-medium/node-robustness-ranking',
+      undefined,
+      { signal },
+    )
+  })
+
+  it('keeps cancellable insight calls config-free when no signal is supplied', async () => {
+    const postSpy = vi.fn().mockResolvedValue({
+      data: {
+        counterNodeIds: ['O1'],
+        proofStatus: 'proven',
+        runNumber: 12,
+      },
+    })
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const {
+      getBoundedNodeCounterSet,
+      getLeastRobustNode,
+      getNodeCounterSet,
+      getNodeRobustnessRanking,
+    } = await import('./graphService')
+
+    await getNodeCounterSet('sample-medium', 'R1', 'database')
+    await getBoundedNodeCounterSet('sample-medium', 'R1', 'database')
+    await getLeastRobustNode('sample-medium', 'database')
+    await getNodeRobustnessRanking('sample-medium', 'database')
+
+    expect(postSpy).toHaveBeenNthCalledWith(
+      1,
+      '/api/graphs/sample-medium/nodes/R1/minimal-counter-set',
+      undefined,
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/graphs/sample-medium/nodes/R1/bounded-minimal-counter-set',
+      undefined,
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      3,
+      '/api/graphs/sample-medium/least-robust-node',
+      undefined,
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      4,
+      '/api/graphs/sample-medium/node-robustness-ranking',
+      undefined,
+    )
+  })
+
   it('posts selected stress graph IDs to the reset endpoint', async () => {
     const postSpy = vi.fn().mockResolvedValue({})
 

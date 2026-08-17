@@ -1,21 +1,25 @@
-# Performance Reporting PoC
+# Performance Reporting and Insights Lab
 
-The application records backend performance runs for the current graph algorithms and for recalculation after a node-likelihood edit. This is a manual proof of concept: it records each operation, but it does not schedule runs, prevent overlap, perform repetitions, or calculate summary statistics.
+The application records backend performance runs for the current graph algorithms and for recalculation after a node-likelihood edit. The Insights Lab launches one operation at a time in the current browser session and exposes the persisted run history. It does not schedule repetitions, enforce non-overlap across clients, or calculate summary statistics.
+
+Open **Insights Lab** from the Graph Overview panel. The **Run** tab launches an operation against the active graph, and the **History** tab lists every persisted run newest-first. Selecting a history row shows its complete recorded metadata and a bounded result preview.
 
 ## Recorded operations
 
-The analysis keys are case-insensitive. `I`, `B`, and `E` require a selected node; `R` and `J` operate on the active graph.
-
-| Key or action | Recorded operation |
+| Lab action | Recorded operation |
 | --- | --- |
-| `I` | Greedy minimal counter set for the selected node |
-| `B` | Bounded brute-force minimal counter set for the selected node |
-| `E` | Evidence-impact ranking for the selected node |
-| `R` | Least robust node in the graph |
-| `J` | Full node-robustness ranking |
-| Save a likelihood edit | Recalculate and persist ancestors after updating a database-backed node's likelihood (`priorOdds`) |
+| Minimal counter set | Greedy minimal counter set for the selected node |
+| Bounded minimal counter set | Bounded brute-force minimal counter set for the selected node |
+| Evidence impact ranking | Evidence-impact ranking for the selected node |
+| Least robust node | Least robust node in the graph |
+| Robustness ranking | Full node-robustness ranking |
+| Leaf update | Reapply the current `priorOdds` to the ordinal-highest node, then recalculate and persist its ancestors |
 
-For the leaf-edit workload, the user is responsible for selecting the intended leaf. The report records whether the edited node was actually a leaf, the old and new values, affected-node count, maximum ancestor distance, and persisted-row count. Edits that do not include `priorOdds` do not create a leaf-recalculation run.
+Minimal counter set, bounded minimal counter set, and evidence impact ranking require a selected node. The two robustness operations use the entire active graph. Fixture graphs support all five read-only operations; Leaf update is database-only.
+
+The Lab deliberately chooses the ordinal-highest node for the leaf-update workload and tolerates that node not being a leaf. It reapplies the current value so the full update/recalculation/persistence path is measured without intentionally changing graph state. The report records whether the node was actually a leaf, the old and new values, affected-node count, maximum ancestor distance, and persisted-row count. Ordinary database edits that include `priorOdds` continue to create leaf-update records as well.
+
+The Lab offers best-effort request cancellation for the greedy, bounded, and robustness operations. Evidence-impact and leaf-update runs do not expose Cancel because their current backend work cannot be stopped reliably and safely mid-operation.
 
 ## Results file
 
@@ -50,9 +54,11 @@ Each run has the following top-level fields:
 
 JSON persistence happens after the measured operation timers stop. Completed, failed, cancelled, and bounded-but-not-proven runs can all be recorded.
 
+The frontend reads the same document through `GET /api/performance-runs`. Run numbers are assigned by the backend store; users do not supply run or batch identifiers.
+
 ## Bounded brute-force proof semantics
 
-`B` has a hardcoded limit of 20 reachable counter candidates. Candidates are ordered deterministically by greedy priority and then node ID, and only the first 20 are searched. Subsets are considered in increasing cardinality.
+The bounded minimal counter-set operation has a hardcoded limit of 20 reachable counter candidates. Candidates are ordered deterministically by greedy priority and then node ID, and only the first 20 are searched. Subsets are considered in increasing cardinality.
 
 - With 20 or fewer candidates, completion is reported as `proven`: the full candidate universe was available to the search. A returned set has proven minimum cardinality; if no set crosses the threshold, that absence is also proven for the available candidates.
 - With more than 20 candidates, the run is always `notProven` with stop reason `candidateLimit`, because candidates were excluded. A result may still cross the threshold, but global minimality has not been established.
@@ -60,9 +66,9 @@ JSON persistence happens after the measured operation timers stop. Completed, fa
 
 The JSON records total, searched, and excluded candidate counts, subset evaluations, fully exhausted cardinality, threshold values, proof status, and stop reason.
 
-## Manual benchmark protocol
+## Optional manual benchmark protocol
 
-The user must keep runs separate and hold inputs constant. Do not press another analysis key or start another edit until the current operation finishes.
+Each click in Insights Lab launches and records exactly one operation. For a manual comparison, keep runs separate and hold inputs constant; do not start another operation until the current operation finishes.
 
 For each algorithm, graph, and selected node combination:
 
@@ -78,7 +84,7 @@ For each algorithm, graph, and selected node combination:
 3. Execute five measured repetitions, one at a time, with the same graph, target node, and inputs.
 4. Retain all five raw runs and compare their median `computeElapsedMilliseconds` and median `operationElapsedMilliseconds` rather than relying on one run.
 
-For a leaf edit, restore the leaf to the same starting likelihood before every measured edit. If restoration is performed through the application, it also creates a recorded run; exclude those restoration run numbers from the five-run comparison. Restore once after the warm-up as well.
+The Lab's same-value leaf update does not require restoration. If benchmarking an ordinary value-changing likelihood edit instead, restore the leaf to the same starting likelihood before every measured edit. A restoration performed through the application creates another recorded run and must be excluded from the comparison.
 
 ## Interpreting resource measurements
 

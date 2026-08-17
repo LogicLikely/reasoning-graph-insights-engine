@@ -12,6 +12,13 @@ public sealed class NullPerformanceRunStore : IPerformanceRunStore
     {
     }
 
+    public Task<PerformanceReportDocument> ReadAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new PerformanceReportDocument());
+    }
+
     public Task<PerformanceRunRecord> AppendAsync(
         PerformanceRunRecord run,
         CancellationToken cancellationToken = default)

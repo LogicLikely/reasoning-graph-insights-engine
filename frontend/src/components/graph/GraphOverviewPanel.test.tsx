@@ -83,6 +83,26 @@ describe('GraphOverviewPanel', () => {
     expect(onResetDatabase).toHaveBeenCalledTimes(1)
   })
 
+  it('opens the Insights Lab when its button is pressed', () => {
+    const onOpenInsightsLab = vi.fn()
+
+    render(
+      <GraphOverviewPanel
+        title="Sample Reasoning Graph"
+        description="A local fixture description."
+        nodeCount={10}
+        edgeCount={9}
+        fixtureName="sample-medium"
+        dataSource="fixture"
+        onOpenInsightsLab={onOpenInsightsLab}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Insights Lab' }))
+
+    expect(onOpenInsightsLab).toHaveBeenCalledTimes(1)
+  })
+
   it('hides the reset database button when the fixture is active', () => {
     vi.stubEnv('VITE_USE_FIXTURE', 'true')
 

@@ -12,6 +12,10 @@ namespace Backend.Services;
 
 public class GraphService : IGraphService
 {
+    private const int MinimalCounterSetPreviewLimit = 20;
+    private const int EvidenceImpactPreviewLimit = 5;
+    private const int RobustnessRankingPreviewLimit = 10;
+
     private readonly IGraphRepository _graphRepository;
     private readonly GraphLikelihoodCalculator _calculator;
     private readonly GreedyMinimalCounterSetSolver _greedyMinimalCounterSetSolver;
@@ -1264,7 +1268,14 @@ public class GraphService : IGraphService
             ["finalTargetLogOdds"] = result.FinalTargetLogOdds,
             ["thresholdReached"] = result.ThresholdReached,
             ["proofStatus"] = ToProofStatusValue(result.ProofStatus),
-            ["stopReason"] = ToStopReasonValue(result.StopReason)
+            ["stopReason"] = ToStopReasonValue(result.StopReason),
+            ["returnedNodeIds"] = new JsonArray(
+                result.CounterNodeIds
+                    .Take(MinimalCounterSetPreviewLimit)
+                    .Select(nodeId => JsonValue.Create(nodeId))
+                    .ToArray()),
+            ["returnedNodeIdsTruncated"] =
+                result.CounterNodeIds.Count > MinimalCounterSetPreviewLimit
         };
     }
 
@@ -1284,7 +1295,11 @@ public class GraphService : IGraphService
             ["supportingResultCount"] = result.SupportingEvidence.Count,
             ["counterResultCount"] = result.CounterEvidence.Count,
             ["neutralEvidenceCount"] =
-                Math.Max(0, reachableEvidenceCount - returnedEvidenceCount)
+                Math.Max(0, reachableEvidenceCount - returnedEvidenceCount),
+            ["supportingPreview"] = CreateEvidenceImpactPreview(
+                result.SupportingEvidence),
+            ["counterPreview"] = CreateEvidenceImpactPreview(
+                result.CounterEvidence)
         };
     }
 
@@ -1299,6 +1314,7 @@ public class GraphService : IGraphService
             ["leafCount"] = PerformanceRunMetadataCapture.CountLeafNodes(graph),
             ["robustnessResultCount"] = graph.Nodes.Count,
             ["selectedNodeId"] = result?.NodeId,
+            ["selectedNodeTitle"] = result?.NodeTitle,
             ["selectedRobustness"] = result?.Robustness
         };
     }
@@ -1313,8 +1329,33 @@ public class GraphService : IGraphService
             ["edgesExamined"] = graph.Edges.Count,
             ["leafCount"] = PerformanceRunMetadataCapture.CountLeafNodes(graph),
             ["robustnessResultCount"] = result.Count,
-            ["rankedItemCount"] = result.Count
+            ["rankedItemCount"] = result.Count,
+            ["rankingPreview"] = new JsonArray(
+                result
+                    .Take(RobustnessRankingPreviewLimit)
+                    .Select(item => new JsonObject
+                    {
+                        ["nodeId"] = item.NodeId,
+                        ["nodeTitle"] = item.NodeTitle,
+                        ["robustness"] = item.Robustness
+                    })
+                    .ToArray())
         };
+    }
+
+    private static JsonArray CreateEvidenceImpactPreview(
+        IEnumerable<EvidenceImpactDto> result)
+    {
+        return new JsonArray(
+            result
+                .Take(EvidenceImpactPreviewLimit)
+                .Select(item => new JsonObject
+                {
+                    ["nodeId"] = item.NodeId,
+                    ["logLr"] = item.LogLr,
+                    ["probabilityDifference"] = item.ProbabilityDifference
+                })
+                .ToArray());
     }
 
     private static int CountReachableEvidenceNodes(Graph graph, string targetNodeId)

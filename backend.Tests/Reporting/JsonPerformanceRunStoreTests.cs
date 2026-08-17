@@ -29,6 +29,31 @@ public class JsonPerformanceRunStoreTests
     }
 
     [TestMethod]
+    public async Task ReadAsync_ReturnsEmptySchemaVersionOneDocument_WhenFileDoesNotExist()
+    {
+        using var store = new JsonPerformanceRunStore(_reportPath);
+
+        var report = await store.ReadAsync();
+
+        Assert.AreEqual(PerformanceReportDocument.CurrentSchemaVersion, report.SchemaVersion);
+        Assert.AreEqual(0, report.Runs.Count);
+        Assert.IsFalse(File.Exists(_reportPath));
+    }
+
+    [TestMethod]
+    public async Task ReadAsync_ReturnsPersistedRuns()
+    {
+        using var store = new JsonPerformanceRunStore(_reportPath);
+        await store.AppendAsync(CreateRun("least-robust-node"));
+
+        var report = await store.ReadAsync();
+
+        Assert.AreEqual(1, report.Runs.Count);
+        Assert.AreEqual(1L, report.Runs[0].RunNumber);
+        Assert.AreEqual("least-robust-node", report.Runs[0].Algorithm.Name);
+    }
+
+    [TestMethod]
     public async Task AppendAsync_CreatesVersionedReportAndAssignsSequentialRunNumbers()
     {
         using var store = new JsonPerformanceRunStore(_reportPath);

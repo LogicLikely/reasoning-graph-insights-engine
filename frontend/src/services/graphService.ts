@@ -49,14 +49,20 @@ export async function getNodeCounterSet(
   slug: string,
   targetNodeId: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
 ): Promise<string[] | null> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<{
-    counterNodeIds: string[] | null
-  }>(`/api/graphs/${slug}/nodes/${targetNodeId}/minimal-counter-set`, graphContext)
+  const url = `/api/graphs/${slug}/nodes/${targetNodeId}/minimal-counter-set`
+  const response = signal
+    ? await httpClient.post<{ counterNodeIds: string[] | null }>(
+      url,
+      graphContext,
+      { signal },
+    )
+    : await httpClient.post<{ counterNodeIds: string[] | null }>(url, graphContext)
 
   return response.data.counterNodeIds
 }
@@ -71,15 +77,16 @@ export async function getBoundedNodeCounterSet(
   slug: string,
   targetNodeId: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
 ): Promise<BoundedNodeCounterSet> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<BoundedNodeCounterSet>(
-    `/api/graphs/${slug}/nodes/${targetNodeId}/bounded-minimal-counter-set`,
-    graphContext,
-  )
+  const url = `/api/graphs/${slug}/nodes/${targetNodeId}/bounded-minimal-counter-set`
+  const response = signal
+    ? await httpClient.post<BoundedNodeCounterSet>(url, graphContext, { signal })
+    : await httpClient.post<BoundedNodeCounterSet>(url, graphContext)
 
   return response.data
 }
@@ -104,15 +111,16 @@ export type NodeRobustness = {
 export async function getLeastRobustNode(
   slug: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
 ): Promise<NodeRobustness> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<NodeRobustness>(
-    `/api/graphs/${slug}/least-robust-node`,
-    graphContext,
-  )
+  const url = `/api/graphs/${slug}/least-robust-node`
+  const response = signal
+    ? await httpClient.post<NodeRobustness>(url, graphContext, { signal })
+    : await httpClient.post<NodeRobustness>(url, graphContext)
 
   return response.data
 }
@@ -120,15 +128,16 @@ export async function getLeastRobustNode(
 export async function getNodeRobustnessRanking(
   slug: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
 ): Promise<NodeRobustness[]> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<NodeRobustness[]>(
-    `/api/graphs/${slug}/node-robustness-ranking`,
-    graphContext,
-  )
+  const url = `/api/graphs/${slug}/node-robustness-ranking`
+  const response = signal
+    ? await httpClient.post<NodeRobustness[]>(url, graphContext, { signal })
+    : await httpClient.post<NodeRobustness[]>(url, graphContext)
 
   return response.data
 }
@@ -137,15 +146,16 @@ export async function getEvidenceImpactRanking(
   slug: string,
   targetNodeId: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
 ): Promise<EvidenceImpactRanking> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<EvidenceImpactRanking>(
-    `/api/graphs/${slug}/nodes/${targetNodeId}/evidence-impact-ranking`,
-    graphContext,
-  )
+  const url = `/api/graphs/${slug}/nodes/${targetNodeId}/evidence-impact-ranking`
+  const response = signal
+    ? await httpClient.post<EvidenceImpactRanking>(url, graphContext, { signal })
+    : await httpClient.post<EvidenceImpactRanking>(url, graphContext)
 
   return response.data
 }
