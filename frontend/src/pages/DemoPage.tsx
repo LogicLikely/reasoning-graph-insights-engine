@@ -9,6 +9,7 @@ import {
   addEdge,
   addNode,
   deleteNode,
+  getBoundedNodeCounterSet,
   getDefaultGraphDataSource,
   getEvidenceImpactRanking,
   getGraphCatalog,
@@ -219,6 +220,19 @@ export function DemoPage() {
       console.log(counterNodeIds)
     } catch {
       setGraphError('Failed to get the minimal counter set from the server.')
+    }
+  }, [activeGraphSlug, graphDataSource])
+
+  const handleBoundedNodeCounterSet = useCallback(async (nodeId: string) => {
+    if (!activeGraphSlug) {
+      return
+    }
+
+    try {
+      const result = await getBoundedNodeCounterSet(activeGraphSlug, nodeId, graphDataSource)
+      console.log(result)
+    } catch {
+      setGraphError('Failed to get the bounded minimal counter set from the server.')
     }
   }, [activeGraphSlug, graphDataSource])
 
@@ -439,6 +453,11 @@ export function DemoPage() {
           void handleNodeCounterSet(selectedNodeId)
         }
       }
+      else if (event.key.toLowerCase() === 'b') {
+        if (selectedNodeId !== undefined) {
+          void handleBoundedNodeCounterSet(selectedNodeId)
+        }
+      }
       else if (event.key.toLowerCase() === 'e') {
         if (selectedNodeId !== undefined) {
           void handleEvidenceImpactRanking(selectedNodeId)
@@ -455,7 +474,7 @@ export function DemoPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphFullscreen, isResetDialogOpen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking, handleLeastRobustNode, handleNodeRobustnessRanking])
+  }, [selectedNodeId, isGraphFullscreen, isResetDialogOpen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleBoundedNodeCounterSet, handleEvidenceImpactRanking, handleLeastRobustNode, handleNodeRobustnessRanking])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const activeGraphSummary = graphDataSource === 'database'

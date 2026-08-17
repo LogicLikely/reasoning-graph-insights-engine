@@ -152,6 +152,9 @@ backend.Tests/bin/
 backend.Tests/obj/
 *.lscache
 
+# PoC performance reports
+/artifacts/performance/
+
 # Maintainer-only stress-corpus editorial policy
 /tools/stress-corpus/sensitive-content-policy.local.json
 

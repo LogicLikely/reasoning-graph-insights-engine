@@ -61,6 +61,29 @@ export async function getNodeCounterSet(
   return response.data.counterNodeIds
 }
 
+export type BoundedNodeCounterSet = {
+  counterNodeIds: string[] | null
+  proofStatus: 'proven' | 'notProven'
+  runNumber: number
+}
+
+export async function getBoundedNodeCounterSet(
+  slug: string,
+  targetNodeId: string,
+  dataSource: GraphDataSource = getDefaultGraphDataSource(),
+): Promise<BoundedNodeCounterSet> {
+  const graphContext = dataSource === 'fixture'
+    ? await getGraphBySlugFromFixture(slug)
+    : undefined
+
+  const response = await httpClient.post<BoundedNodeCounterSet>(
+    `/api/graphs/${slug}/nodes/${targetNodeId}/bounded-minimal-counter-set`,
+    graphContext,
+  )
+
+  return response.data
+}
+
 export type EvidenceImpactRanking = {
   supportingEvidence: EvidenceImpact[]
   counterEvidence: EvidenceImpact[]

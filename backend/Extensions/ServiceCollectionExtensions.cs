@@ -1,6 +1,8 @@
 using Backend.Configuration;
 using Backend.Calculation;
+using Backend.Calculation.MinimalCounterSets;
 using Backend.Data;
+using Backend.Reporting;
 using Backend.Repositories;
 using Backend.Services;
 
@@ -19,6 +21,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGraphRepository, GraphRepository>();
         services.AddScoped<IGraphService, GraphService>();
         services.AddSingleton<GraphLikelihoodCalculator>();
+        services.AddSingleton<IMinimalCounterSetEvaluator, LegacyMinimalCounterSetEvaluator>();
+        services.AddSingleton<GreedyMinimalCounterSetSolver>();
+        services.AddSingleton<BoundedBruteForceMinimalCounterSetSolver>();
+        services.AddSingleton<IPerformanceRunStore>(serviceProvider =>
+        {
+            var environment = serviceProvider.GetRequiredService<IHostEnvironment>();
+            var reportPath = PerformanceReportPathResolver.ResolveFromContentRoot(
+                environment.ContentRootPath);
+
+            return new JsonPerformanceRunStore(reportPath);
+        });
 
         return services;
     }

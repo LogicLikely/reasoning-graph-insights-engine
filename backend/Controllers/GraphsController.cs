@@ -74,13 +74,27 @@ public class GraphsController : ControllerBase
             ? await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, cancellationToken)
             : await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, graphContext, cancellationToken);
 
-        Console.WriteLine(
-            $"Minimal counter set for node '{targetNodeId}': " +
-            (counterNodeIds is null ? "null" : $"[{string.Join(", ", counterNodeIds)}]"));
-
         return Ok(new { counterNodeIds });
     }
-    
+
+    [HttpPost("{slug}/nodes/{targetNodeId}/bounded-minimal-counter-set")]
+    public async Task<IActionResult> GetBoundedMinimalCounterSet(
+        string slug,
+        string targetNodeId,
+        [FromBody] GraphDto? graphContext,
+        CancellationToken cancellationToken)
+    {
+        var result = graphContext is null
+            ? await _graphService.GetBoundedMinimalCounterSetAsync(slug, targetNodeId, cancellationToken)
+            : await _graphService.GetBoundedMinimalCounterSetAsync(
+                slug,
+                targetNodeId,
+                graphContext,
+                cancellationToken);
+
+        return result is null ? NotFound() : Ok(result);
+    }
+
     [HttpPost("{slug}/nodes/{targetNodeId}/evidence-impact-ranking")]
     public async Task<IActionResult> GetEvidenceImpactRanking(
         string slug,

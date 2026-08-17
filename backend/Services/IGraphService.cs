@@ -18,6 +18,10 @@ public interface IGraphService
         CancellationToken cancellationToken = default);
     Task<List<string>?> GetMinimalCounterSetAsync(string slug, string targetNodeId,
         GraphDto graphContext, CancellationToken cancellationToken = default);
+    Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(string slug, string targetNodeId,
+        CancellationToken cancellationToken = default);
+    Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(string slug, string targetNodeId,
+        GraphDto graphContext, CancellationToken cancellationToken = default);
     Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(string slug, string targetNodeId,
         CancellationToken cancellationToken = default);
     Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(string slug, string targetNodeId,

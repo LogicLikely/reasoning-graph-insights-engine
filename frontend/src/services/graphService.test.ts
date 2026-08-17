@@ -118,7 +118,7 @@ describe('graphService', () => {
         { id: 'R1', kind: 'root', priorOdds: 0, posteriorOdds: 0 },
         { id: 'O1', kind: 'objection', priorOdds: 2, posteriorOdds: 2 },
       ],
-      edges: [{ id: 'O1-R1', from: 'O1', to: 'R1', kind: 'rebut', importanceToParent: 10 }],
+      edges: [],
     }
     const fixtureSpy = vi.fn().mockResolvedValue(fixtureGraph)
     const postSpy = vi.fn().mockResolvedValue({ data: { counterNodeIds: ['O1'] } })
@@ -132,6 +132,37 @@ describe('graphService', () => {
     expect(fixtureSpy).toHaveBeenCalledWith('sample-medium')
     expect(postSpy).toHaveBeenCalledWith(
       '/api/graphs/sample-medium/nodes/R1/minimal-counter-set',
+      fixtureGraph,
+    )
+  })
+
+  it('sends the fixture graph to the bounded counter-set API and returns the run result', async () => {
+    const fixtureGraph = {
+      slug: 'sample-medium',
+      nodes: [
+        { id: 'R1', kind: 'root', priorOdds: 0, posteriorOdds: 0 },
+        { id: 'O1', kind: 'objection', priorOdds: 2, posteriorOdds: 2 },
+      ],
+      edges: [],
+    }
+    const fixtureSpy = vi.fn().mockResolvedValue(fixtureGraph)
+    const result = {
+      counterNodeIds: ['O1'],
+      proofStatus: 'proven',
+      runNumber: 12,
+    }
+    const postSpy = vi.fn().mockResolvedValue({ data: result })
+
+    vi.doMock('./graphFixture', () => ({ getGraphBySlugFromFixture: fixtureSpy }))
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const { getBoundedNodeCounterSet } = await import('./graphService')
+
+    await expect(getBoundedNodeCounterSet('sample-medium', 'R1', 'fixture'))
+      .resolves.toEqual(result)
+    expect(fixtureSpy).toHaveBeenCalledWith('sample-medium')
+    expect(postSpy).toHaveBeenCalledWith(
+      '/api/graphs/sample-medium/nodes/R1/bounded-minimal-counter-set',
       fixtureGraph,
     )
   })

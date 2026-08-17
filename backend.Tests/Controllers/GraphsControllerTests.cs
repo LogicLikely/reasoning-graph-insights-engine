@@ -172,6 +172,105 @@ public class GraphsControllerTests
     }
 
     [TestMethod]
+    public async Task GetBoundedMinimalCounterSet_UsesPersistedGraph_WhenContextIsNotProvided()
+    {
+        var expected = new BoundedMinimalCounterSetDto
+        {
+            CounterNodeIds = ["O1"],
+            ProofStatus = "proven",
+            RunNumber = 12
+        };
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.GetBoundedMinimalCounterSetAsync(
+                "sample-medium",
+                "R1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.GetBoundedMinimalCounterSet(
+            "sample-medium",
+            "R1",
+            null,
+            CancellationToken.None);
+
+        var okResult = result as OkObjectResult;
+        Assert.IsNotNull(okResult);
+        Assert.AreSame(expected, okResult.Value);
+        serviceMock.Verify(service => service.GetBoundedMinimalCounterSetAsync(
+            "sample-medium",
+            "R1",
+            It.IsAny<CancellationToken>()), Times.Once);
+        serviceMock.Verify(service => service.GetBoundedMinimalCounterSetAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<GraphDto>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task GetBoundedMinimalCounterSet_UsesProvidedGraphContext()
+    {
+        var graphContext = CreateGraphDto();
+        var expected = new BoundedMinimalCounterSetDto
+        {
+            CounterNodeIds = null,
+            ProofStatus = "notProven",
+            RunNumber = 13
+        };
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.GetBoundedMinimalCounterSetAsync(
+                "sample-medium",
+                "R1",
+                graphContext,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.GetBoundedMinimalCounterSet(
+            "sample-medium",
+            "R1",
+            graphContext,
+            CancellationToken.None);
+
+        var okResult = result as OkObjectResult;
+        Assert.IsNotNull(okResult);
+        Assert.AreSame(expected, okResult.Value);
+        serviceMock.Verify(service => service.GetBoundedMinimalCounterSetAsync(
+            "sample-medium",
+            "R1",
+            graphContext,
+            It.IsAny<CancellationToken>()), Times.Once);
+        serviceMock.Verify(service => service.GetBoundedMinimalCounterSetAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task GetBoundedMinimalCounterSet_ReturnsNotFound_WhenGraphOrTargetDoesNotExist()
+    {
+        var serviceMock = new Mock<IGraphService>();
+        serviceMock
+            .Setup(service => service.GetBoundedMinimalCounterSetAsync(
+                "missing",
+                "R1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((BoundedMinimalCounterSetDto?)null);
+        var controller = new GraphsController(serviceMock.Object);
+
+        var result = await controller.GetBoundedMinimalCounterSet(
+            "missing",
+            "R1",
+            null,
+            CancellationToken.None);
+
+        Assert.IsInstanceOfType<NotFoundResult>(result);
+    }
+
+    [TestMethod]
     public async Task UpdateNode_ReturnsNoContent_WhenUpdateSucceeds()
     {
         var serviceMock = new Mock<IGraphService>();

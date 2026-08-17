@@ -9,6 +9,7 @@ const resetDatabaseMock = vi.fn()
 const addEdgeMock = vi.fn()
 const addNodeMock = vi.fn()
 const deleteNodeMock = vi.fn()
+const getBoundedNodeCounterSetMock = vi.fn()
 const getNodeCounterSetMock = vi.fn()
 const updateEdgeMock = vi.fn()
 const updateNodeMock = vi.fn()
@@ -70,6 +71,7 @@ vi.mock('../services/graphService', () => ({
   addEdge: (...args: unknown[]) => addEdgeMock(...args),
   addNode: (...args: unknown[]) => addNodeMock(...args),
   deleteNode: (...args: unknown[]) => deleteNodeMock(...args),
+  getBoundedNodeCounterSet: (...args: unknown[]) => getBoundedNodeCounterSetMock(...args),
   getDefaultGraphDataSource: () => 'database',
   getEvidenceImpactRanking: (...args: unknown[]) => getEvidenceImpactRankingMock(...args),
   getLeastRobustNode: (...args: unknown[]) => getLeastRobustNodeMock(...args),
@@ -117,6 +119,7 @@ describe('DemoPage', () => {
     addEdgeMock.mockReset()
     addNodeMock.mockReset()
     deleteNodeMock.mockReset()
+    getBoundedNodeCounterSetMock.mockReset()
     getNodeCounterSetMock.mockReset()
     updateEdgeMock.mockReset()
     updateNodeMock.mockReset()
@@ -169,6 +172,45 @@ describe('DemoPage', () => {
     await waitFor(() => {
       expect(getLeastRobustNodeMock).toHaveBeenCalledWith('sample-medium', 'database')
       expect(consoleLog).toHaveBeenCalledWith('Least robust claim: 0.75')
+    })
+  })
+
+  it('prints the bounded counter-set result when b is pressed with a selected node', async () => {
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const result = {
+      counterNodeIds: ['O1'],
+      proofStatus: 'proven',
+      runNumber: 12,
+    }
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    getBoundedNodeCounterSetMock.mockResolvedValue(result)
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
+    fireEvent.keyDown(window, { key: 'b' })
+
+    await waitFor(() => {
+      expect(getBoundedNodeCounterSetMock).toHaveBeenCalledWith('sample-medium', 'E1', 'database')
+      expect(consoleLog).toHaveBeenCalledWith(result)
+      expect(getNodeCounterSetMock).not.toHaveBeenCalled()
+    })
+  })
+
+  it('preserves the greedy counter-set behavior when i is pressed with a selected node', async () => {
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+    getNodeCounterSetMock.mockResolvedValue(['O1'])
+
+    render(<DemoPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
+    fireEvent.keyDown(window, { key: 'i' })
+
+    await waitFor(() => {
+      expect(getNodeCounterSetMock).toHaveBeenCalledWith('sample-medium', 'E1', 'database')
+      expect(consoleLog).toHaveBeenCalledWith(['O1'])
+      expect(getBoundedNodeCounterSetMock).not.toHaveBeenCalled()
     })
   })
 
