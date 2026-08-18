@@ -201,7 +201,7 @@ public sealed class MinimalCounterSetSolverTests
     }
 
     [TestMethod]
-    public void BoundedSolver_ReportsTruncatedEmptySetAsNotProven()
+    public void BoundedSolver_ProvesTruncatedEmptySetIsMinimal()
     {
         var candidates = Enumerable.Range(0, 21)
             .Select(index => new MinimalCounterCandidate($"C{index:00}", 1m))
@@ -221,8 +221,8 @@ public sealed class MinimalCounterSetSolverTests
         Assert.AreEqual(1L, result.SubsetEvaluations);
         Assert.AreEqual(0, result.LargestCardinalityFullyExhausted);
         Assert.AreEqual(0, result.CounterNodeIds.Count);
-        Assert.AreEqual(MinimalCounterSetProofStatus.NotProven, result.ProofStatus);
-        Assert.AreEqual(MinimalCounterSetStopReason.CandidateLimit, result.StopReason);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetStopReason.Completed, result.StopReason);
     }
 
     [TestMethod]

@@ -1,6 +1,6 @@
 # Performance Reporting and Insights Lab
 
-The application records backend performance runs for the current graph algorithms and for recalculation after a node-likelihood edit. The Insights Lab launches individual operations or a sequential standard stress suite in the current browser session, exposes the persisted run history, and charts compute-time trends for named benchmark sets. It does not schedule repetitions or enforce non-overlap across clients.
+The application records backend performance runs for the current graph algorithms and for recalculation after a node-likelihood edit. The Insights Lab launches individual operations or a sequential standard stress suite in the current browser session, exposes the persisted run history, and charts performance trends for named benchmark sets. It does not schedule repetitions or enforce non-overlap across clients.
 
 Open **Insights Lab** from the Graph Overview panel. The **Run** tab creates or selects a benchmark set and launches an operation against the active graph; each information button expands a plain-language explanation of what that operation measures and its important limitations. The **History** tab shows every persisted run newest-first in a bounded, scrollable table. Selecting a run opens a dedicated detail view with its complete recorded metadata and bounded result preview; **Back to all runs** returns to the table. The **Trends** tab compares the selected performance metric across stress-graph sizes, shapes, and benchmark sets.
 
@@ -79,6 +79,7 @@ The **Metric** selector offers:
 - **Total operation time**: backend graph loading, computation, and operation persistence where applicable.
 - **CPU time**: process-wide CPU consumed during the compute scope.
 - **Managed allocations**: current-thread managed allocation volume during the compute scope, not retained or peak memory.
+- **Subset evaluations** (bounded minimal counter set only): the number of candidate subsets examined, including the initial empty set. This hardware-independent count exposes the bounded search's combinatorial work.
 
 Repeated matching runs use the median of the selected metric. Runs without a valid value for that metric do not contribute to its median, sample count, or run-number list. Time and CPU values are shown in milliseconds; allocation values use one consistent IEC byte unit for the visible chart and table.
 
@@ -94,7 +95,8 @@ Graph size always uses a logarithmic X-axis. The Y-axis can use linear spacing f
 The bounded minimal counter-set operation has a hardcoded limit of 20 reachable counter candidates. Candidates are ordered deterministically by greedy priority and then node ID, and only the first 20 are searched. Subsets are considered in increasing cardinality.
 
 - With 20 or fewer candidates, completion is reported as `proven`: the full candidate universe was available to the search. A returned set has proven minimum cardinality; if no set crosses the threshold, that absence is also proven for the available candidates.
-- With more than 20 candidates, the run is always `notProven` with stop reason `candidateLimit`, because candidates were excluded. A result may still cross the threshold, but global minimality has not been established.
+- If the initial target already meets the threshold, the empty set is globally minimal and is reported as `proven` even when candidates would otherwise have been excluded.
+- With more than 20 candidates, and when the empty set did not already meet the threshold, the run is `notProven` with stop reason `candidateLimit`, because candidates were excluded. A result may still cross the threshold, but global minimality has not been established.
 - There is no separate elapsed-time cutoff. The bounded search runs until it finds a threshold-crossing set, exhausts its candidate universe, is cancelled, or fails.
 
 The JSON records total, searched, and excluded candidate counts, subset evaluations, fully exhausted cardinality, threshold values, proof status, and stop reason.

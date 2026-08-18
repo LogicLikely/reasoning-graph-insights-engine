@@ -107,6 +107,44 @@ public sealed class GraphServicePerformanceReportingTests
     }
 
     [TestMethod]
+    public async Task GetBoundedMinimalCounterSetAsync_ReportsTruncatedEmptySetAsProven()
+    {
+        var graph = GraphWith([Node("R", kind: "root")], []);
+        var repository = RepositoryReturning(graph);
+        var store = new CapturingPerformanceRunStore();
+        var calculator = new GraphLikelihoodCalculator();
+        var evaluator = new FixedMinimalCounterSetEvaluator(
+            candidateCount: 25,
+            initialTargetLogOdds: -1m);
+        var service = new GraphService(
+            repository.Object,
+            calculator,
+            new GreedyMinimalCounterSetSolver(evaluator),
+            new BoundedBruteForceMinimalCounterSetSolver(evaluator),
+            store);
+
+        var result = await service.GetBoundedMinimalCounterSetAsync(
+            graph.Slug,
+            "R",
+            CancellationToken.None);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("proven", result.ProofStatus);
+        Assert.IsNotNull(result.CounterNodeIds);
+        Assert.AreEqual(0, result.CounterNodeIds.Count);
+
+        var run = AssertSingleRun(store);
+        Assert.AreEqual(PerformanceRunStatuses.Completed, run.Outcome.Status);
+        Assert.AreEqual(0, run.Outcome.ResultCount);
+        Assert.AreEqual("proven", Detail<string>(run, "proofStatus"));
+        Assert.AreEqual("completed", Detail<string>(run, "stopReason"));
+        Assert.AreEqual(0, Detail<int>(run, "returnedSetSize"));
+        Assert.AreEqual(1L, Detail<long>(run, "subsetEvaluations"));
+        Assert.IsTrue(Detail<bool>(run, "thresholdReached"));
+        Assert.AreEqual(0, DetailStringArray(run, "returnedNodeIds").Length);
+    }
+
+    [TestMethod]
     public async Task MinimalCounterSetPreview_IsCappedAtTwentyAndMarksTruncation()
     {
         var graph = GraphWith([Node("R", kind: "root")], []);
@@ -702,10 +740,14 @@ public sealed class GraphServicePerformanceReportingTests
     private sealed class FixedMinimalCounterSetEvaluator : IMinimalCounterSetEvaluator
     {
         private readonly int _candidateCount;
+        private readonly decimal _initialTargetLogOdds;
 
-        public FixedMinimalCounterSetEvaluator(int candidateCount)
+        public FixedMinimalCounterSetEvaluator(
+            int candidateCount,
+            decimal initialTargetLogOdds = 30m)
         {
             _candidateCount = candidateCount;
+            _initialTargetLogOdds = initialTargetLogOdds;
         }
 
         public IMinimalCounterSetProblem CreateProblem(
@@ -715,14 +757,21 @@ public sealed class GraphServicePerformanceReportingTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return new FixedMinimalCounterSetProblem(_candidateCount);
+            return new FixedMinimalCounterSetProblem(
+                _candidateCount,
+                _initialTargetLogOdds);
         }
     }
 
     private sealed class FixedMinimalCounterSetProblem : IMinimalCounterSetProblem
     {
-        public FixedMinimalCounterSetProblem(int candidateCount)
+        private readonly decimal _initialTargetLogOdds;
+
+        public FixedMinimalCounterSetProblem(
+            int candidateCount,
+            decimal initialTargetLogOdds)
         {
+            _initialTargetLogOdds = initialTargetLogOdds;
             Candidates = Enumerable.Range(0, candidateCount)
                 .Select(index => new MinimalCounterCandidate(
                     $"O{index:00}",
@@ -732,7 +781,7 @@ public sealed class GraphServicePerformanceReportingTests
 
         public decimal ThresholdLogOdds => -1m;
 
-        public decimal InitialTargetLogOdds => 30m;
+        public decimal InitialTargetLogOdds => _initialTargetLogOdds;
 
         public IReadOnlyList<MinimalCounterCandidate> Candidates { get; }
 

@@ -48,7 +48,7 @@ public sealed class BoundedBruteForceMinimalCounterSetSolver : IMinimalCounterSe
                 bestCounterNodeIds,
                 bestLogOdds,
                 thresholdReached: true,
-                wasTruncated);
+                stoppedAtCandidateLimit: false);
         }
 
         var contributions = new decimal[searchedCandidates.Length];
@@ -106,7 +106,7 @@ public sealed class BoundedBruteForceMinimalCounterSetSolver : IMinimalCounterSe
                         GetCounterNodeIds(searchedCandidates, indices),
                         targetLogOdds,
                         thresholdReached: true,
-                        wasTruncated);
+                        stoppedAtCandidateLimit: wasTruncated);
                 }
 
                 if (!MoveNextCombination(indices, searchedCandidates.Length))
@@ -126,7 +126,7 @@ public sealed class BoundedBruteForceMinimalCounterSetSolver : IMinimalCounterSe
             bestCounterNodeIds,
             bestLogOdds,
             thresholdReached: false,
-            wasTruncated);
+            stoppedAtCandidateLimit: wasTruncated);
     }
 
     private static MinimalCounterSetResult CreateResult(
@@ -139,7 +139,7 @@ public sealed class BoundedBruteForceMinimalCounterSetSolver : IMinimalCounterSe
         IReadOnlyList<string> counterNodeIds,
         decimal finalTargetLogOdds,
         bool thresholdReached,
-        bool wasTruncated)
+        bool stoppedAtCandidateLimit)
     {
         return new MinimalCounterSetResult
         {
@@ -153,10 +153,10 @@ public sealed class BoundedBruteForceMinimalCounterSetSolver : IMinimalCounterSe
             CandidatesExamined = candidatesExamined,
             SubsetEvaluations = subsetEvaluations,
             LargestCardinalityFullyExhausted = largestCardinalityFullyExhausted,
-            ProofStatus = wasTruncated
+            ProofStatus = stoppedAtCandidateLimit
                 ? MinimalCounterSetProofStatus.NotProven
                 : MinimalCounterSetProofStatus.Proven,
-            StopReason = wasTruncated
+            StopReason = stoppedAtCandidateLimit
                 ? MinimalCounterSetStopReason.CandidateLimit
                 : MinimalCounterSetStopReason.Completed
         };

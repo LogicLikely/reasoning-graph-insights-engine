@@ -1378,10 +1378,16 @@ function firstArray(details: Record<string, unknown>, names: readonly string[]):
 
 function ResultPreview({ run }: { run: PerformanceRunRecord }) {
   const details = run.details ?? {}
-  const sections: { title: string, items: unknown[] }[] = []
+  const sections: { title: string, items: unknown[], emptyLabel?: string }[] = []
   if (run.algorithm?.name === 'minimal-counter-set') {
     const items = firstArray(details, ['returnedNodeIds'])
-    if (items) sections.push({ title: 'Returned node IDs', items })
+    if (items) sections.push({
+      title: details.thresholdReached === false
+        ? 'Best set examined — threshold not reached'
+        : 'Returned node IDs',
+      items,
+      emptyLabel: details.thresholdReached === false ? 'No nodes (empty set)' : 'None (empty set)',
+    })
   } else if (run.algorithm?.name === 'evidence-impact-ranking') {
     const supporting = firstArray(details, ['supportingPreview', 'topSupportingResults'])
     const counter = firstArray(details, ['counterPreview', 'topCounterResults'])
@@ -1399,7 +1405,12 @@ function ResultPreview({ run }: { run: PerformanceRunRecord }) {
     <section className="insights-lab-dialog__preview">
       <h4>Result preview</h4>
       <div>{sections.map((section) => (
-        <div key={section.title}><strong>{section.title}</strong><ol>{section.items.map((item, index) => <li key={index}><StructuredValue value={item} /></li>)}</ol></div>
+        <div key={section.title}>
+          <strong>{section.title}</strong>
+          {section.items.length === 0
+            ? <span>{section.emptyLabel ?? 'None'}</span>
+            : <ol>{section.items.map((item, index) => <li key={index}><StructuredValue value={item} /></li>)}</ol>}
+        </div>
       ))}</div>
       {details.returnedNodeIdsTruncated === true ? <small>Preview truncated.</small> : null}
     </section>

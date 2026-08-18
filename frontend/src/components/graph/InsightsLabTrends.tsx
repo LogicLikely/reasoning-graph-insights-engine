@@ -9,14 +9,15 @@ export interface InsightsLabTrendsProps {
 }
 
 type TrendMode = 'within' | 'across'
-type TrendMetricId = 'compute' | 'operation' | 'cpu' | 'allocations'
+type TrendMetricId = 'compute' | 'operation' | 'cpu' | 'allocations' | 'subsets'
 type YAxisScale = 'linear' | 'logarithmic'
 
 type TrendMetricDefinition = {
   id: TrendMetricId
   label: string
   axisLabel: string
-  unitKind: 'milliseconds' | 'bytes'
+  unitKind: 'milliseconds' | 'bytes' | 'count'
+  boundedOnly?: boolean
   explanation: string
   significance: string
   readValue: (run: PerformanceRunRecord) => number | null | undefined
@@ -26,6 +27,7 @@ type TrendRun = {
   runNumber: number
   algorithmId: string
   algorithmLabel: string
+  bounded: boolean
   benchmarkSetId: string
   benchmarkSetName: string
   shapeId: string
@@ -110,6 +112,19 @@ const TREND_METRICS: readonly TrendMetricDefinition[] = [
     significance: 'Lower values mean less allocation pressure. This is allocation traffic, not retained or peak memory.',
     readValue: (run) => run.resources?.allocatedBytes,
   },
+  {
+    id: 'subsets',
+    label: 'Subset evaluations',
+    axisLabel: 'Subset evaluations',
+    unitKind: 'count',
+    boundedOnly: true,
+    explanation: 'The number of candidate subsets the bounded solver evaluated during its search.',
+    significance: 'Lower counts mean less combinatorial search work. A count of one usually means the empty set was evaluated before any candidate nodes were added.',
+    readValue: (run) => {
+      const value = run.details?.subsetEvaluations
+      return typeof value === 'number' ? value : undefined
+    },
+  },
 ] as const
 
 const SERIES_COLORS = [
@@ -165,6 +180,11 @@ function getAlgorithmLabel(run: PerformanceRunRecord): string {
   return implementation && implementation !== 'current'
     ? `${baseLabel} (${sentenceCase(implementation)})`
     : baseLabel
+}
+
+function isBoundedMinimalCounterSet(run: PerformanceRunRecord): boolean {
+  return run.algorithm?.name === 'minimal-counter-set'
+    && run.algorithm?.implementation === 'bounded-brute-force'
 }
 
 function getShapeId(run: PerformanceRunRecord): string | undefined {
@@ -269,6 +289,17 @@ function metricPresentation(
       axisLabel: `${metric.axisLabel} (ms)`,
       divisor: 1,
       formatValue: (value) => `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`,
+      formatAxisValue: formatAxisNumber,
+    }
+  }
+
+  if (metric.unitKind === 'count') {
+    return {
+      axisLabel: `${metric.axisLabel} (count)`,
+      divisor: 1,
+      formatValue: (value) => (
+        `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${value === 1 ? 'evaluation' : 'evaluations'}`
+      ),
       formatAxisValue: formatAxisNumber,
     }
   }
@@ -701,6 +732,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
       runNumber: run.runNumber,
       algorithmId: algorithmIdForRun,
       algorithmLabel: getAlgorithmLabel(run),
+      bounded: isBoundedMinimalCounterSet(run),
       benchmarkSetId: benchmarkSet.id,
       benchmarkSetName: getBenchmarkSetLabel(benchmarkSet, benchmarkSets),
       shapeId,
@@ -710,26 +742,16 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     }]
   }), [benchmarkSets, benchmarkSetsById, runs])
 
-  const availableMetricIds = useMemo(() => new Set(
-    TREND_METRICS
-      .filter((metric) => trendRuns.some((run) => validMetricValue(run.metricValues[metric.id])))
-      .map(({ id }) => id),
-  ), [trendRuns])
-  const metricId = availableMetricIds.has(requestedMetricId)
-    ? requestedMetricId
-    : TREND_METRICS.find(({ id }) => availableMetricIds.has(id))?.id ?? 'compute'
-  const metric = metricDefinition(metricId)
-
-  const selectedMetricRuns = useMemo<SelectedMetricTrendRun[]>(() => trendRuns.flatMap((run) => {
-    const metricValue = run.metricValues[metricId]
-    return validMetricValue(metricValue) ? [{ ...run, metricValue }] : []
-  }), [metricId, trendRuns])
-
   const algorithmOptions = useMemo(() => {
-    const options = new Map<string, string>()
-    for (const run of trendRuns) options.set(run.algorithmId, run.algorithmLabel)
+    const options = new Map<string, { label: string; bounded: boolean }>()
+    for (const run of trendRuns) {
+      options.set(run.algorithmId, {
+        label: run.algorithmLabel,
+        bounded: run.bounded,
+      })
+    }
     return [...options.entries()]
-      .map(([id, label]) => ({ id, label }))
+      .map(([id, option]) => ({ id, ...option }))
       .sort((left, right) => left.label.localeCompare(right.label))
   }, [trendRuns])
 
@@ -737,10 +759,40 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     ? requestedAlgorithmId
     : algorithmOptions[0]?.id ?? ''
 
-  const algorithmRuns = useMemo(
-    () => selectedMetricRuns.filter((run) => run.algorithmId === algorithmId),
-    [algorithmId, selectedMetricRuns],
+  const selectedAlgorithmOption = algorithmOptions.find(({ id }) => id === algorithmId)
+  const selectedAlgorithmIsBounded = selectedAlgorithmOption?.bounded ?? false
+
+  const selectedAlgorithmRuns = useMemo(
+    () => trendRuns.filter((run) => run.algorithmId === algorithmId),
+    [algorithmId, trendRuns],
   )
+
+  const availableMetricIds = useMemo(() => new Set(
+    TREND_METRICS
+      .filter((candidateMetric) => (
+        (!candidateMetric.boundedOnly || selectedAlgorithmIsBounded)
+        && selectedAlgorithmRuns.some((run) => (
+          validMetricValue(run.metricValues[candidateMetric.id])
+        ))
+      ))
+      .map(({ id }) => id),
+  ), [selectedAlgorithmIsBounded, selectedAlgorithmRuns])
+  const availableMetrics = useMemo(() => TREND_METRICS.filter((candidateMetric) => (
+    !candidateMetric.boundedOnly || selectedAlgorithmIsBounded
+  )), [selectedAlgorithmIsBounded])
+  const metricId = useMemo(() => (
+    availableMetricIds.has(requestedMetricId)
+      ? requestedMetricId
+      : availableMetrics.find(({ id }) => availableMetricIds.has(id))?.id ?? 'compute'
+  ), [availableMetricIds, availableMetrics, requestedMetricId])
+  const metric = metricDefinition(metricId)
+
+  const algorithmRuns = useMemo<SelectedMetricTrendRun[]>(() => (
+    selectedAlgorithmRuns.flatMap((run) => {
+      const metricValue = run.metricValues[metricId]
+      return validMetricValue(metricValue) ? [{ ...run, metricValue }] : []
+    })
+  ), [metricId, selectedAlgorithmRuns])
 
   const withinSetOptions = useMemo(() => benchmarkSets.filter((benchmarkSet) => (
     algorithmRuns.some((run) => run.benchmarkSetId === benchmarkSet.id)
@@ -808,7 +860,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     ? validRequestedNodeCounts
     : nodeSizeOptions
 
-  const selectedAlgorithmLabel = algorithmOptions.find(({ id }) => id === algorithmId)?.label ?? 'Algorithm'
+  const selectedAlgorithmLabel = selectedAlgorithmOption?.label ?? 'Algorithm'
   const selectedWithinSet = withinSetOptions.find(({ id }) => id === withinSetId)
   const selectedAcrossShapeLabel = acrossShapeId ? getShapeLabel(acrossShapeId) : 'Graph shape'
 
@@ -1048,7 +1100,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
             }}
             value={metricId}
           >
-            {TREND_METRICS.map((option) => (
+            {availableMetrics.map((option) => (
               <option
                 disabled={!availableMetricIds.has(option.id)}
                 key={option.id}

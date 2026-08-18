@@ -28,6 +28,7 @@ interface RunOptions {
   operationMilliseconds?: number
   cpuMilliseconds?: number
   allocatedBytes?: number | null
+  subsetEvaluations?: number | null
   status?: string
 }
 
@@ -43,6 +44,7 @@ function performanceRun({
   operationMilliseconds = computeMilliseconds + 100,
   cpuMilliseconds = computeMilliseconds / 2,
   allocatedBytes = computeMilliseconds * 100,
+  subsetEvaluations,
   status = 'completed',
 }: RunOptions): PerformanceRunRecord {
   return {
@@ -63,6 +65,9 @@ function performanceRun({
       allocatedBytes,
     },
     outcome: { status },
+    details: subsetEvaluations === undefined
+      ? {}
+      : { subsetEvaluations },
   }
 }
 
@@ -119,6 +124,17 @@ async function selectMinimalCounterSet() {
   await waitFor(() => expect(algorithm).toHaveDisplayValue('Minimal counter set'))
 }
 
+async function selectBoundedMinimalCounterSet() {
+  const algorithm = await screen.findByRole('combobox', { name: 'Algorithm' })
+  fireEvent.change(algorithm, {
+    target: {
+      value: screen.getByRole('option', { name: 'Bounded minimal counter set' })
+        .getAttribute('value'),
+    },
+  })
+  await waitFor(() => expect(algorithm).toHaveDisplayValue('Bounded minimal counter set'))
+}
+
 async function selectMetric(label: string) {
   const metric = await screen.findByRole('combobox', { name: 'Metric' })
   fireEvent.change(metric, {
@@ -149,6 +165,53 @@ describe('InsightsLabTrends', () => {
     expect(table).not.toHaveTextContent('#9')
     expect(table).not.toHaveTextContent('#10')
     expect(table).not.toHaveTextContent('#11')
+  })
+
+  it('offers subset evaluations only for bounded runs and supports logarithmic counts', async () => {
+    render(
+      <InsightsLabTrends
+        benchmarkSets={benchmarkSets}
+        runs={[
+          performanceRun({
+            runNumber: 1,
+            implementation: 'bounded-brute-force',
+            subsetEvaluations: 1_048_576,
+          }),
+          performanceRun({
+            runNumber: 2,
+            implementation: 'bounded-brute-force',
+            subsetEvaluations: 4_194_304,
+          }),
+          performanceRun({
+            runNumber: 3,
+            implementation: 'greedy',
+            subsetEvaluations: 7,
+          }),
+        ]}
+      />,
+    )
+
+    await selectBoundedMinimalCounterSet()
+    const metric = screen.getByRole('combobox', { name: 'Metric' })
+    expect(within(metric).getByRole('option', { name: 'Subset evaluations' })).toBeInTheDocument()
+
+    await selectMetric('Subset evaluations')
+    expect(screen.getByText('Subset evaluations (count)', { selector: 'text' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio', { name: 'Logarithmic' }))
+    expect(screen.getByRole('img')).toHaveAccessibleName(/subset evaluations.*logarithmic y-axis/i)
+    expect(screen.getByRole('img').outerHTML).not.toMatch(/NaN|Infinity/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'View data' }))
+    const table = screen.getByRole('table', {
+      name: /Subset evaluations values plotted above/,
+    })
+    expect(table).toHaveTextContent('2,621,440 evaluations median')
+    expect(table).toHaveTextContent('#1, #2')
+    expect(table).not.toHaveTextContent('#3')
+
+    await selectMinimalCounterSet()
+    expect(screen.getByRole('combobox', { name: 'Metric' })).toHaveDisplayValue('Compute time')
+    expect(screen.queryByRole('option', { name: 'Subset evaluations' })).not.toBeInTheDocument()
   })
 
   it('switches among recorded metrics and aggregates repeated runs using the selected metric', async () => {

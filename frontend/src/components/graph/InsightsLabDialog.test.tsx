@@ -238,6 +238,7 @@ describe('InsightsLabDialog', () => {
           outcome: { status: 'notProven', resultCount: 2 },
           details: {
             proofStatus: 'notProven',
+            thresholdReached: false,
             returnedNodeIds: ['node-100', 'node-020'],
             returnedNodeIdsTruncated: false,
           },
@@ -280,7 +281,8 @@ describe('InsightsLabDialog', () => {
     expect(within(report).getAllByText('Not proven').length).toBeGreaterThan(0)
     expect(within(report).getByText(benchmarkSet.name)).toBeInTheDocument()
     expect(within(report).getByText(benchmarkSet.id)).toBeInTheDocument()
-    expect(within(report).getByText('Returned node IDs')).toBeInTheDocument()
+    expect(within(report).getByText('Best set examined — threshold not reached')).toBeInTheDocument()
+    expect(within(report).queryByText('Returned node IDs')).not.toBeInTheDocument()
     expect(within(report).getAllByText('node-100').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to all runs' }))
@@ -345,6 +347,36 @@ describe('InsightsLabDialog', () => {
     expect(screen.getByRole('tab', { name: /History/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('button', { name: 'Back to all runs' })).toHaveFocus()
     expect(screen.queryByRole('region', { name: 'Performance run history' })).not.toBeInTheDocument()
+  })
+
+  it('presents a proven zero-counter result as the empty set', async () => {
+    serviceMocks.getPerformanceRuns.mockResolvedValue(report([{
+      runNumber: 1,
+      benchmarkSetId: benchmarkSet.id,
+      algorithm: { name: 'minimal-counter-set', implementation: 'bounded-brute-force' },
+      graph: { slug: 'lab-graph' },
+      outcome: { status: 'completed', resultCount: 0 },
+      details: {
+        proofStatus: 'proven',
+        thresholdReached: true,
+        returnedNodeIds: [],
+      },
+    }]))
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: /History/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View run 1' }))
+    const reportArticle = screen.getByRole('article', { name: 'Report for run 1' })
+    expect(within(reportArticle).getByText('Returned node IDs')).toBeInTheDocument()
+    expect(within(reportArticle).getByText('None (empty set)')).toBeInTheDocument()
   })
 
   it.each([
