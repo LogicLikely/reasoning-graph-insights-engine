@@ -10,9 +10,6 @@ public class GraphService : IGraphService
 {
     private readonly IGraphRepository _graphRepository;
 
-    // Legacy likelihood-ratio evidence-impact analytics.
-    private readonly GraphLikelihoodCalculator _calculator;
-
     // BF-based pruning, recurrence, and persisted posterior-log-odds updates.
     private readonly GraphPosteriorOddsCalculator _posteriorOddsCalculator;
 
@@ -31,8 +28,9 @@ public class GraphService : IGraphService
         GraphLikelihoodCalculator graphLikelihoodCalculator,
         GraphPosteriorOddsCalculator posteriorOddsCalculator)
     {
+        ArgumentNullException.ThrowIfNull(graphLikelihoodCalculator);
+        ArgumentNullException.ThrowIfNull(posteriorOddsCalculator);
         _graphRepository = graphRepository;
-        _calculator = graphLikelihoodCalculator;
         _posteriorOddsCalculator = posteriorOddsCalculator;
     }
 
@@ -347,7 +345,10 @@ public class GraphService : IGraphService
         var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
         return graph is null
             ? null
-            : _calculator.GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken);
+            : _posteriorOddsCalculator.GetEvidenceImpactRanking(
+                graph,
+                targetNodeId,
+                cancellationToken);
     }
 
     public Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
@@ -363,7 +364,10 @@ public class GraphService : IGraphService
 
         var graph = ToDomainGraph(graphContext);
         return Task.FromResult<EvidenceImpactRankingDto?>(
-            _calculator.GetEvidenceImpactRanking(graph, targetNodeId, cancellationToken));
+            _posteriorOddsCalculator.GetEvidenceImpactRanking(
+                graph,
+                targetNodeId,
+                cancellationToken));
     }
 
     public async Task<bool> DeleteNodeAsync(

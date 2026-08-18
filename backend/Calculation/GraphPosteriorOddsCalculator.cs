@@ -1,4 +1,5 @@
 using Backend.Models.Domain;
+using Backend.Models.Dto;
 
 namespace Backend.Calculation;
 
@@ -110,6 +111,163 @@ public sealed class GraphPosteriorOddsCalculator
         decimal posteriorLogOdds = checked(
             hypothesis.PriorOdds + hypothesisLogBayesFactor);
         return Math.Clamp(posteriorLogOdds, MinLogOdds, MaxLogOdds);
+    }
+
+    /// <summary>
+    /// Splits downstream evidence by node kind, then ranks each group by the
+    /// change produced when that node is removed and the BF graph recalculated.
+    /// </summary>
+    public EvidenceImpactRankingDto GetEvidenceImpactRanking(
+        Graph graph,
+        string hypothesisNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(hypothesisNodeId);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
+        if (!context.NodesById.ContainsKey(hypothesisNodeId))
+        {
+            throw new InvalidOperationException(
+                $"Hypothesis node '{hypothesisNodeId}' does not exist in the graph.");
+        }
+
+        decimal logOddsWithAllEvidence = CalculateNodeLogPosteriorOdds(
+            graph,
+            hypothesisNodeId,
+            cancellationToken);
+        double probabilityWithAllEvidence = LogOddsToProbability(
+            logOddsWithAllEvidence);
+        var includedNodeIds = context.NodesById.Keys.ToHashSet(
+            StringComparer.Ordinal);
+        var impacts = new List<EvidenceImpactDto>();
+
+        foreach (string evidenceNodeId in CollectEvidenceReachingHypothesis(
+                     context,
+                     hypothesisNodeId,
+                     cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            includedNodeIds.Remove(evidenceNodeId);
+            Graph graphWithoutEvidence = CreateInducedGraph(graph, includedNodeIds);
+            decimal logOddsWithoutEvidence = CalculateNodeLogPosteriorOdds(
+                graphWithoutEvidence,
+                hypothesisNodeId,
+                cancellationToken);
+            includedNodeIds.Add(evidenceNodeId);
+
+            impacts.Add(new EvidenceImpactDto
+            {
+                NodeId = evidenceNodeId,
+                // Retain the API's legacy name. Under the BF implementation
+                // this is the marginal target log-odds impact of the node.
+                LogLr = checked(logOddsWithAllEvidence - logOddsWithoutEvidence),
+                ProbabilityDifference = probabilityWithAllEvidence -
+                    LogOddsToProbability(logOddsWithoutEvidence)
+            });
+        }
+
+        return new EvidenceImpactRankingDto
+        {
+            SupportingEvidence = RankImpacts(
+                impacts.Where(impact => IsSupportingEvidenceKind(
+                    context.NodesById[impact.NodeId].Kind))),
+            CounterEvidence = RankImpacts(
+                impacts.Where(impact => IsCounterEvidenceKind(
+                    context.NodesById[impact.NodeId].Kind)))
+        };
+    }
+
+    /// <summary>Collects evidence nodes on directed paths to one hypothesis.</summary>
+    private static List<string> CollectEvidenceReachingHypothesis(
+        GraphCalculationContext context,
+        string hypothesisNodeId,
+        CancellationToken cancellationToken)
+    {
+        var evidenceNodeIds = new List<string>();
+        var visitedNodeIds = new HashSet<string>(StringComparer.Ordinal)
+        {
+            hypothesisNodeId
+        };
+        var nodesToVisit = new Queue<string>();
+        nodesToVisit.Enqueue(hypothesisNodeId);
+
+        while (nodesToVisit.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string parentNodeId = nodesToVisit.Dequeue();
+            if (!context.ChildEdgesByParentId.TryGetValue(
+                    parentNodeId,
+                    out var childEdges))
+            {
+                continue;
+            }
+
+            foreach (var childEdge in childEdges)
+            {
+                string childNodeId = childEdge.FromNodeId;
+                if (!visitedNodeIds.Add(childNodeId))
+                {
+                    continue;
+                }
+
+                if (IsEvidenceKind(context.NodesById[childNodeId].Kind))
+                {
+                    evidenceNodeIds.Add(childNodeId);
+                }
+
+                nodesToVisit.Enqueue(childNodeId);
+            }
+        }
+
+        return evidenceNodeIds;
+    }
+
+    /// <summary>Creates the graph used for one leave-one-evidence-out run.</summary>
+    private static Graph CreateInducedGraph(
+        Graph source,
+        HashSet<string> includedNodeIds)
+    {
+        return new Graph
+        {
+            Id = source.Id,
+            Slug = source.Slug,
+            Title = source.Title,
+            Description = source.Description,
+            Nodes = source.Nodes
+                .Where(node => includedNodeIds.Contains(node.Id))
+                .ToList(),
+            Edges = source.Edges
+                .Where(edge =>
+                    includedNodeIds.Contains(edge.From) &&
+                    includedNodeIds.Contains(edge.To))
+                .ToList()
+        };
+    }
+
+    /// <summary>Orders impacts by absolute confidence change and then node id.</summary>
+    private static List<EvidenceImpactDto> RankImpacts(
+        IEnumerable<EvidenceImpactDto> impacts)
+    {
+        return impacts
+            .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
+            .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>Converts natural-log odds to probability without overflow.</summary>
+    private static double LogOddsToProbability(decimal logOdds)
+    {
+        double value = (double)logOdds;
+        if (value >= 0d)
+        {
+            double inverseOdds = Math.Exp(-value);
+            return 1d / (1d + inverseOdds);
+        }
+
+        double odds = Math.Exp(value);
+        return odds / (1d + odds);
     }
 
     /// <summary>Recalculates and mutates every ancestor, excluding the changed node.</summary>
@@ -299,14 +457,26 @@ public sealed class GraphPosteriorOddsCalculator
     /// <summary>Identifies node kinds that can supply an authored leaf log BF.</summary>
     private static bool IsEvidenceKind(string nodeKind)
     {
+        return IsSupportingEvidenceKind(nodeKind) ||
+               IsCounterEvidenceKind(nodeKind);
+    }
+
+    /// <summary>Identifies a supporting evidence node by its authored kind.</summary>
+    private static bool IsSupportingEvidenceKind(string nodeKind)
+    {
         return string.Equals(
-                   nodeKind,
-                   "evidence",
-                   StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(
-                   nodeKind,
-                   "objection",
-                   StringComparison.OrdinalIgnoreCase);
+            nodeKind,
+            "evidence",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Identifies a rebuttal node by its authored kind.</summary>
+    private static bool IsCounterEvidenceKind(string nodeKind)
+    {
+        return string.Equals(
+            nodeKind,
+            "objection",
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record AncestorTraversalState(
