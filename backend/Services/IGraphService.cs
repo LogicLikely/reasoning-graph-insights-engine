@@ -13,25 +13,54 @@ public interface IGraphService
         CancellationToken cancellationToken = default);
     Task<bool> UpdateNodeAsync(string slug, string nodeId, GraphNodeUpdateDto node,
         CancellationToken cancellationToken = default);
+    Task<bool> UpdateNodeAsync(string slug, string nodeId, GraphNodeUpdateDto node,
+        string? benchmarkSetId, CancellationToken cancellationToken = default);
     Task<bool> AddEdgeAsync(string slug, GraphEdgeDto edge, CancellationToken cancellationToken = default);
     Task<bool> UpdateEdgeAsync(string slug, string edgeId, GraphEdgeUpdateDto edge,
         CancellationToken cancellationToken = default);
     Task<List<string>?> GetMinimalCounterSetAsync(string slug, string targetNodeId,
         CancellationToken cancellationToken = default);
     Task<List<string>?> GetMinimalCounterSetAsync(string slug, string targetNodeId,
+        string? benchmarkSetId, CancellationToken cancellationToken = default);
+    Task<List<string>?> GetMinimalCounterSetAsync(string slug, string targetNodeId,
         GraphDto graphContext, CancellationToken cancellationToken = default);
+    Task<List<string>?> GetMinimalCounterSetAsync(string slug, string targetNodeId,
+        GraphDto graphContext, string? benchmarkSetId,
+        CancellationToken cancellationToken = default);
+    Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(string slug, string targetNodeId,
+        CancellationToken cancellationToken = default);
+    Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(string slug, string targetNodeId,
+        string? benchmarkSetId, CancellationToken cancellationToken = default);
+    Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(string slug, string targetNodeId,
+        GraphDto graphContext, CancellationToken cancellationToken = default);
+    Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(string slug, string targetNodeId,
+        GraphDto graphContext, string? benchmarkSetId,
+        CancellationToken cancellationToken = default);
     Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(string slug, string targetNodeId,
         CancellationToken cancellationToken = default);
     Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(string slug, string targetNodeId,
+        string? benchmarkSetId, CancellationToken cancellationToken = default);
+    Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(string slug, string targetNodeId,
         GraphDto graphContext, CancellationToken cancellationToken = default);
+    Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(string slug, string targetNodeId,
+        GraphDto graphContext, string? benchmarkSetId,
+        CancellationToken cancellationToken = default);
     Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(string slug,
         CancellationToken cancellationToken = default);
+    Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(string slug,
+        string? benchmarkSetId, CancellationToken cancellationToken = default);
     Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(string slug, GraphDto graphContext,
         CancellationToken cancellationToken = default);
+    Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(string slug, GraphDto graphContext,
+        string? benchmarkSetId, CancellationToken cancellationToken = default);
     Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(string slug,
         CancellationToken cancellationToken = default);
+    Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(string slug,
+        string? benchmarkSetId, CancellationToken cancellationToken = default);
     Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(string slug, GraphDto graphContext,
         CancellationToken cancellationToken = default);
+    Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(string slug, GraphDto graphContext,
+        string? benchmarkSetId, CancellationToken cancellationToken = default);
     Task ResetDatabaseAsync(
         IReadOnlyCollection<string> stressGraphIds,
         CancellationToken cancellationToken = default);

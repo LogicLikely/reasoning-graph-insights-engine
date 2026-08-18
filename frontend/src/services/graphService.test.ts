@@ -219,6 +219,37 @@ describe('graphService', () => {
     )
   })
 
+  it('sends the fixture graph to the bounded counter-set API and returns the run result', async () => {
+    const fixtureGraph = {
+      slug: 'sample-medium',
+      nodes: [
+        { id: 'R1', kind: 'root', priorOdds: 0, posteriorOdds: 0 },
+        { id: 'O1', kind: 'objection', priorOdds: 2, posteriorOdds: 2 },
+      ],
+      edges: [],
+    }
+    const fixtureSpy = vi.fn().mockResolvedValue(fixtureGraph)
+    const result = {
+      counterNodeIds: ['O1'],
+      proofStatus: 'proven',
+      runNumber: 12,
+    }
+    const postSpy = vi.fn().mockResolvedValue({ data: result })
+
+    vi.doMock('./graphFixture', () => ({ getGraphBySlugFromFixture: fixtureSpy }))
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const { getBoundedNodeCounterSet } = await import('./graphService')
+
+    await expect(getBoundedNodeCounterSet('sample-medium', 'R1', 'fixture'))
+      .resolves.toEqual(result)
+    expect(fixtureSpy).toHaveBeenCalledWith('sample-medium')
+    expect(postSpy).toHaveBeenCalledWith(
+      '/api/graphs/sample-medium/nodes/R1/bounded-minimal-counter-set',
+      fixtureGraph,
+    )
+  })
+
   it('sends the fixture graph to the evidence-impact API and returns its sorted IDs', async () => {
     const fixtureGraph = {
       slug: 'sample-medium',
@@ -249,6 +280,169 @@ describe('graphService', () => {
     expect(postSpy).toHaveBeenCalledWith(
       '/api/graphs/sample-medium/nodes/R1/evidence-impact-ranking',
       fixtureGraph,
+    )
+  })
+
+  it('forwards an AbortSignal to cancellable insight operations', async () => {
+    const postSpy = vi.fn().mockResolvedValue({
+      data: {
+        counterNodeIds: ['O1'],
+        proofStatus: 'proven',
+        runNumber: 12,
+      },
+    })
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const {
+      getBoundedNodeCounterSet,
+      getLeastRobustNode,
+      getNodeCounterSet,
+      getNodeRobustnessRanking,
+    } = await import('./graphService')
+    const signal = new AbortController().signal
+
+    await getNodeCounterSet('sample-medium', 'R1', 'database', signal)
+    await getBoundedNodeCounterSet('sample-medium', 'R1', 'database', signal)
+    await getLeastRobustNode('sample-medium', 'database', signal)
+    await getNodeRobustnessRanking('sample-medium', 'database', signal)
+
+    expect(postSpy).toHaveBeenNthCalledWith(
+      1,
+      '/api/graphs/sample-medium/nodes/R1/minimal-counter-set',
+      undefined,
+      { signal },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/graphs/sample-medium/nodes/R1/bounded-minimal-counter-set',
+      undefined,
+      { signal },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      3,
+      '/api/graphs/sample-medium/least-robust-node',
+      undefined,
+      { signal },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      4,
+      '/api/graphs/sample-medium/node-robustness-ranking',
+      undefined,
+      { signal },
+    )
+  })
+
+  it('keeps cancellable insight calls config-free when no signal is supplied', async () => {
+    const postSpy = vi.fn().mockResolvedValue({
+      data: {
+        counterNodeIds: ['O1'],
+        proofStatus: 'proven',
+        runNumber: 12,
+      },
+    })
+    vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
+
+    const {
+      getBoundedNodeCounterSet,
+      getLeastRobustNode,
+      getNodeCounterSet,
+      getNodeRobustnessRanking,
+    } = await import('./graphService')
+
+    await getNodeCounterSet('sample-medium', 'R1', 'database')
+    await getBoundedNodeCounterSet('sample-medium', 'R1', 'database')
+    await getLeastRobustNode('sample-medium', 'database')
+    await getNodeRobustnessRanking('sample-medium', 'database')
+
+    expect(postSpy).toHaveBeenNthCalledWith(
+      1,
+      '/api/graphs/sample-medium/nodes/R1/minimal-counter-set',
+      undefined,
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/graphs/sample-medium/nodes/R1/bounded-minimal-counter-set',
+      undefined,
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      3,
+      '/api/graphs/sample-medium/least-robust-node',
+      undefined,
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      4,
+      '/api/graphs/sample-medium/node-robustness-ranking',
+      undefined,
+    )
+  })
+
+  it('tags every Lab insight request with the selected benchmark set', async () => {
+    const postSpy = vi.fn().mockResolvedValue({
+      data: {
+        counterNodeIds: [],
+        proofStatus: 'proven',
+        runNumber: 12,
+        supportingEvidence: [],
+        counterEvidence: [],
+      },
+    })
+    const patchSpy = vi.fn().mockResolvedValue({})
+    vi.doMock('./httpClient', () => ({
+      httpClient: { patch: patchSpy, post: postSpy },
+    }))
+
+    const {
+      getBoundedNodeCounterSet,
+      getEvidenceImpactRanking,
+      getLeastRobustNode,
+      getNodeCounterSet,
+      getNodeRobustnessRanking,
+      updateNode,
+    } = await import('./graphService')
+    const signal = new AbortController().signal
+    const headers = { 'X-Insights-Benchmark-Set-Id': 'benchmark-01' }
+
+    await getNodeCounterSet('sample-medium', 'R1', 'database', signal, 'benchmark-01')
+    await getBoundedNodeCounterSet('sample-medium', 'R1', 'database', signal, 'benchmark-01')
+    await getEvidenceImpactRanking('sample-medium', 'R1', 'database', undefined, 'benchmark-01')
+    await getLeastRobustNode('sample-medium', 'database', signal, 'benchmark-01')
+    await getNodeRobustnessRanking('sample-medium', 'database', signal, 'benchmark-01')
+    await updateNode('sample-medium', 'E1', { priorOdds: 2 }, 'benchmark-01')
+
+    expect(postSpy).toHaveBeenNthCalledWith(
+      1,
+      '/api/graphs/sample-medium/nodes/R1/minimal-counter-set',
+      undefined,
+      { signal, headers },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/graphs/sample-medium/nodes/R1/bounded-minimal-counter-set',
+      undefined,
+      { signal, headers },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      3,
+      '/api/graphs/sample-medium/nodes/R1/evidence-impact-ranking',
+      undefined,
+      { headers },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      4,
+      '/api/graphs/sample-medium/least-robust-node',
+      undefined,
+      { signal, headers },
+    )
+    expect(postSpy).toHaveBeenNthCalledWith(
+      5,
+      '/api/graphs/sample-medium/node-robustness-ranking',
+      undefined,
+      { signal, headers },
+    )
+    expect(patchSpy).toHaveBeenCalledWith(
+      '/api/graphs/sample-medium/nodes/E1',
+      { priorOdds: 2 },
+      { headers },
     )
   })
 

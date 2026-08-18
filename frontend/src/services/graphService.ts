@@ -7,6 +7,16 @@ import type { StressGraphId } from './stressGraphs'
 
 export type GraphDataSource = 'fixture' | 'database'
 
+const BENCHMARK_SET_HEADER = 'X-Insights-Benchmark-Set-Id'
+
+function getInsightsRequestConfig(signal?: AbortSignal, benchmarkSetId?: string) {
+  if (!signal && !benchmarkSetId) return undefined
+  return {
+    ...(signal ? { signal } : {}),
+    ...(benchmarkSetId ? { headers: { [BENCHMARK_SET_HEADER]: benchmarkSetId } } : {}),
+  }
+}
+
 export function getDefaultGraphDataSource(): GraphDataSource {
   return import.meta.env.VITE_USE_FIXTURE === 'true' ? 'fixture' : 'database'
 }
@@ -55,16 +65,50 @@ export async function getNodeCounterSet(
   slug: string,
   targetNodeId: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
+  benchmarkSetId?: string,
 ): Promise<string[] | null> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<{
-    counterNodeIds: string[] | null
-  }>(`/api/graphs/${slug}/nodes/${targetNodeId}/minimal-counter-set`, graphContext)
+  const url = `/api/graphs/${slug}/nodes/${targetNodeId}/minimal-counter-set`
+  const config = getInsightsRequestConfig(signal, benchmarkSetId)
+  const response = config
+    ? await httpClient.post<{ counterNodeIds: string[] | null }>(
+      url,
+      graphContext,
+      config,
+    )
+    : await httpClient.post<{ counterNodeIds: string[] | null }>(url, graphContext)
 
   return response.data.counterNodeIds
+}
+
+export type BoundedNodeCounterSet = {
+  counterNodeIds: string[] | null
+  proofStatus: 'proven' | 'notProven'
+  runNumber: number
+}
+
+export async function getBoundedNodeCounterSet(
+  slug: string,
+  targetNodeId: string,
+  dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
+  benchmarkSetId?: string,
+): Promise<BoundedNodeCounterSet> {
+  const graphContext = dataSource === 'fixture'
+    ? await getGraphBySlugFromFixture(slug)
+    : undefined
+
+  const url = `/api/graphs/${slug}/nodes/${targetNodeId}/bounded-minimal-counter-set`
+  const config = getInsightsRequestConfig(signal, benchmarkSetId)
+  const response = config
+    ? await httpClient.post<BoundedNodeCounterSet>(url, graphContext, config)
+    : await httpClient.post<BoundedNodeCounterSet>(url, graphContext)
+
+  return response.data
 }
 
 export type EvidenceImpactRanking = {
@@ -87,15 +131,18 @@ export type NodeRobustness = {
 export async function getLeastRobustNode(
   slug: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
+  benchmarkSetId?: string,
 ): Promise<NodeRobustness> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<NodeRobustness>(
-    `/api/graphs/${slug}/least-robust-node`,
-    graphContext,
-  )
+  const url = `/api/graphs/${slug}/least-robust-node`
+  const config = getInsightsRequestConfig(signal, benchmarkSetId)
+  const response = config
+    ? await httpClient.post<NodeRobustness>(url, graphContext, config)
+    : await httpClient.post<NodeRobustness>(url, graphContext)
 
   return response.data
 }
@@ -103,15 +150,18 @@ export async function getLeastRobustNode(
 export async function getNodeRobustnessRanking(
   slug: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
+  benchmarkSetId?: string,
 ): Promise<NodeRobustness[]> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<NodeRobustness[]>(
-    `/api/graphs/${slug}/node-robustness-ranking`,
-    graphContext,
-  )
+  const url = `/api/graphs/${slug}/node-robustness-ranking`
+  const config = getInsightsRequestConfig(signal, benchmarkSetId)
+  const response = config
+    ? await httpClient.post<NodeRobustness[]>(url, graphContext, config)
+    : await httpClient.post<NodeRobustness[]>(url, graphContext)
 
   return response.data
 }
@@ -120,15 +170,18 @@ export async function getEvidenceImpactRanking(
   slug: string,
   targetNodeId: string,
   dataSource: GraphDataSource = getDefaultGraphDataSource(),
+  signal?: AbortSignal,
+  benchmarkSetId?: string,
 ): Promise<EvidenceImpactRanking> {
   const graphContext = dataSource === 'fixture'
     ? await getGraphBySlugFromFixture(slug)
     : undefined
 
-  const response = await httpClient.post<EvidenceImpactRanking>(
-    `/api/graphs/${slug}/nodes/${targetNodeId}/evidence-impact-ranking`,
-    graphContext,
-  )
+  const url = `/api/graphs/${slug}/nodes/${targetNodeId}/evidence-impact-ranking`
+  const config = getInsightsRequestConfig(signal, benchmarkSetId)
+  const response = config
+    ? await httpClient.post<EvidenceImpactRanking>(url, graphContext, config)
+    : await httpClient.post<EvidenceImpactRanking>(url, graphContext)
 
   return response.data
 }
@@ -137,8 +190,14 @@ export async function updateNode(
   slug: string,
   nodeId: string,
   data: Partial<GraphFixtureNode>,
+  benchmarkSetId?: string,
 ): Promise<void> {
-  await httpClient.patch(`/api/graphs/${slug}/nodes/${nodeId}`, data)
+  const config = getInsightsRequestConfig(undefined, benchmarkSetId)
+  if (config) {
+    await httpClient.patch(`/api/graphs/${slug}/nodes/${nodeId}`, data, config)
+  } else {
+    await httpClient.patch(`/api/graphs/${slug}/nodes/${nodeId}`, data)
+  }
 }
 
 export async function addEdge(

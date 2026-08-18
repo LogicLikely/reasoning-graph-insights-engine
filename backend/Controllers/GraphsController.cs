@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Backend.Models.Dto;
+using Backend.Reporting;
 using Backend.Services;
 using Backend.Seeding;
 using Microsoft.AspNetCore.Mvc;
@@ -69,29 +70,72 @@ public class GraphsController : ControllerBase
         string slug,
         string targetNodeId,
         [FromBody] GraphDto? graphContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromHeader(Name = PerformanceReportingHeaders.BenchmarkSetId)]
+        string? benchmarkSetId = null)
     {
         var counterNodeIds = graphContext is null
-            ? await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, cancellationToken)
-            : await _graphService.GetMinimalCounterSetAsync(slug, targetNodeId, graphContext, cancellationToken);
-
-        Console.WriteLine(
-            $"Minimal counter set for node '{targetNodeId}': " +
-            (counterNodeIds is null ? "null" : $"[{string.Join(", ", counterNodeIds)}]"));
+            ? await _graphService.GetMinimalCounterSetAsync(
+                slug,
+                targetNodeId,
+                benchmarkSetId,
+                cancellationToken)
+            : await _graphService.GetMinimalCounterSetAsync(
+                slug,
+                targetNodeId,
+                graphContext,
+                benchmarkSetId,
+                cancellationToken);
 
         return Ok(new { counterNodeIds });
     }
-    
+
+    [HttpPost("{slug}/nodes/{targetNodeId}/bounded-minimal-counter-set")]
+    public async Task<IActionResult> GetBoundedMinimalCounterSet(
+        string slug,
+        string targetNodeId,
+        [FromBody] GraphDto? graphContext,
+        CancellationToken cancellationToken,
+        [FromHeader(Name = PerformanceReportingHeaders.BenchmarkSetId)]
+        string? benchmarkSetId = null)
+    {
+        var result = graphContext is null
+            ? await _graphService.GetBoundedMinimalCounterSetAsync(
+                slug,
+                targetNodeId,
+                benchmarkSetId,
+                cancellationToken)
+            : await _graphService.GetBoundedMinimalCounterSetAsync(
+                slug,
+                targetNodeId,
+                graphContext,
+                benchmarkSetId,
+                cancellationToken);
+
+        return result is null ? NotFound() : Ok(result);
+    }
+
     [HttpPost("{slug}/nodes/{targetNodeId}/evidence-impact-ranking")]
     public async Task<IActionResult> GetEvidenceImpactRanking(
         string slug,
         string targetNodeId,
         [FromBody] GraphDto? graphContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromHeader(Name = PerformanceReportingHeaders.BenchmarkSetId)]
+        string? benchmarkSetId = null)
     {
         var ranking = graphContext is null
-            ? await _graphService.GetEvidenceImpactRankingAsync(slug, targetNodeId, cancellationToken)
-            : await _graphService.GetEvidenceImpactRankingAsync(slug, targetNodeId, graphContext, cancellationToken);
+            ? await _graphService.GetEvidenceImpactRankingAsync(
+                slug,
+                targetNodeId,
+                benchmarkSetId,
+                cancellationToken)
+            : await _graphService.GetEvidenceImpactRankingAsync(
+                slug,
+                targetNodeId,
+                graphContext,
+                benchmarkSetId,
+                cancellationToken);
 
         if (ranking is null)
         {
@@ -105,11 +149,20 @@ public class GraphsController : ControllerBase
     public async Task<IActionResult> GetLeastRobustNode(
         string slug,
         [FromBody] GraphDto? graphContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromHeader(Name = PerformanceReportingHeaders.BenchmarkSetId)]
+        string? benchmarkSetId = null)
     {
         var result = graphContext is null
-            ? await _graphService.GetLeastRobustNodeAsync(slug, cancellationToken)
-            : await _graphService.GetLeastRobustNodeAsync(slug, graphContext, cancellationToken);
+            ? await _graphService.GetLeastRobustNodeAsync(
+                slug,
+                benchmarkSetId,
+                cancellationToken)
+            : await _graphService.GetLeastRobustNodeAsync(
+                slug,
+                graphContext,
+                benchmarkSetId,
+                cancellationToken);
 
         return result is null ? NotFound() : Ok(result);
     }
@@ -118,11 +171,20 @@ public class GraphsController : ControllerBase
     public async Task<IActionResult> GetNodeRobustnessRanking(
         string slug,
         [FromBody] GraphDto? graphContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromHeader(Name = PerformanceReportingHeaders.BenchmarkSetId)]
+        string? benchmarkSetId = null)
     {
         var result = graphContext is null
-            ? await _graphService.GetNodeRobustnessRankingAsync(slug, cancellationToken)
-            : await _graphService.GetNodeRobustnessRankingAsync(slug, graphContext, cancellationToken);
+            ? await _graphService.GetNodeRobustnessRankingAsync(
+                slug,
+                benchmarkSetId,
+                cancellationToken)
+            : await _graphService.GetNodeRobustnessRankingAsync(
+                slug,
+                graphContext,
+                benchmarkSetId,
+                cancellationToken);
 
         return result is null ? NotFound() : Ok(result);
     }
@@ -214,10 +276,17 @@ public class GraphsController : ControllerBase
         string slug,
         string nodeId,
         [FromBody] GraphNodeUpdateDto nodeDto,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromHeader(Name = PerformanceReportingHeaders.BenchmarkSetId)]
+        string? benchmarkSetId = null)
     {
         Console.WriteLine($"Updating node {nodeId} in graph {slug}");
-        var success = await _graphService.UpdateNodeAsync(slug, nodeId, nodeDto, cancellationToken);
+        var success = await _graphService.UpdateNodeAsync(
+            slug,
+            nodeId,
+            nodeDto,
+            benchmarkSetId,
+            cancellationToken);
 
         if (!success)
         {

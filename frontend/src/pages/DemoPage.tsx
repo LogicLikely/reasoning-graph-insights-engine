@@ -4,6 +4,7 @@ import { DatabaseResetDialog } from '../components/graph/DatabaseResetDialog'
 import { InsightsGraphCanvas } from '../components/graph/InsightsGraphCanvas'
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel'
 import { GraphOverviewPanel } from '../components/graph/GraphOverviewPanel'
+import { InsightsLabDialog } from '../components/graph/InsightsLabDialog'
 import type {
   GraphFixture,
   GraphFixtureEdge,
@@ -14,12 +15,8 @@ import {
   addNode,
   deleteNode,
   getDefaultGraphDataSource,
-  getEvidenceImpactRanking,
   getGraphCatalog,
   getGraphBySlug,
-  getLeastRobustNode,
-  getNodeRobustnessRanking,
-  getNodeCounterSet,
   resetDatabase,
   updateEdge,
   updateNode,
@@ -69,6 +66,7 @@ export function DemoPage() {
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false)
   const [isResettingDatabase, setIsResettingDatabase] = useState(false)
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const [isInsightsLabOpen, setIsInsightsLabOpen] = useState(false)
   const [resetDatabaseError, setResetDatabaseError] = useState<string | null>(null)
   const [graphDataSource, setGraphDataSource] = useState<GraphDataSource>(() => getDefaultGraphDataSource())
   const installedStressGraphIds = useMemo(
@@ -226,65 +224,6 @@ export function DemoPage() {
     }
   }, [activeGraphSlug, graphDataSource])
 
-  const handleNodeCounterSet = useCallback(async (nodeId: string) => {
-    if (!activeGraphSlug) {
-      return
-    }
-
-    try {
-      const counterNodeIds = await getNodeCounterSet(activeGraphSlug, nodeId, graphDataSource)
-      console.log(counterNodeIds)
-    } catch {
-      setGraphError('Failed to get the minimal counter set from the server.')
-    }
-  }, [activeGraphSlug, graphDataSource])
-
-  const handleEvidenceImpactRanking = useCallback(async (nodeId: string) => {
-    if (!activeGraphSlug) {
-      return
-    }
-
-    try {
-      const ranking = await getEvidenceImpactRanking(activeGraphSlug, nodeId, graphDataSource)
-      const isEvidenceNode = (nodeId: string) => graph?.nodes.some((node) =>
-        node.id === nodeId && (node.kind === 'evidence' || node.kind === 'objection')
-      )
-
-      console.log({
-        supportingEvidence: ranking.supportingEvidence.filter((impact) => isEvidenceNode(impact.nodeId)),
-        counterEvidence: ranking.counterEvidence.filter((impact) => isEvidenceNode(impact.nodeId)),
-      })
-    } catch {
-      setGraphError('Failed to get the evidence impact ranking from the server.')
-    }
-  }, [activeGraphSlug, graph?.nodes, graphDataSource])
-
-  const handleLeastRobustNode = useCallback(async () => {
-    if (!activeGraphSlug) {
-      return
-    }
-
-    try {
-      const result = await getLeastRobustNode(activeGraphSlug, graphDataSource)
-      console.log(`${result.nodeTitle}: ${result.robustness}`)
-    } catch {
-      setGraphError('Failed to get the least robust node from the server.')
-    }
-  }, [activeGraphSlug, graphDataSource])
-
-  const handleNodeRobustnessRanking = useCallback(async () => {
-    if (!activeGraphSlug) {
-      return
-    }
-
-    try {
-      const ranking = await getNodeRobustnessRanking(activeGraphSlug, graphDataSource)
-      console.log(ranking.map(({ nodeId, robustness }) => ({ nodeId, robustness })))
-    } catch {
-      setGraphError('Failed to get the node robustness ranking from the server.')
-    }
-  }, [activeGraphSlug, graphDataSource])
-
   const handleAddSupportingNode = useCallback(async (
     parentId: string,
     data: Partial<GraphFixtureNode> = {},
@@ -402,6 +341,10 @@ export function DemoPage() {
     }
   }, [isResettingDatabase])
 
+  const handleGraphUpdatedFromInsightsLab = useCallback(() => {
+    setReloadKey((key) => key + 1)
+  }, [])
+
   const handleGraphDataSourceChange = useCallback((nextDataSource: GraphDataSource) => {
     if (graphDataSource === nextDataSource) {
       return
@@ -432,7 +375,7 @@ export function DemoPage() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isResetDialogOpen) {
+      if (event.defaultPrevented || isResetDialogOpen || isInsightsLabOpen) {
         return
       }
 
@@ -458,28 +401,11 @@ export function DemoPage() {
           void handleAddSupportingNode(selectedNodeId)
         }
       }
-      else if (event.key.toLowerCase() === 'i') {
-        if (selectedNodeId !== undefined) {
-          void handleNodeCounterSet(selectedNodeId)
-        }
-      }
-      else if (event.key.toLowerCase() === 'e') {
-        if (selectedNodeId !== undefined) {
-          void handleEvidenceImpactRanking(selectedNodeId)
-        }
-      }
-      else if (event.key.toLowerCase() === 'r') {
-        void handleLeastRobustNode()
-      }
-      else if (event.key.toLowerCase() === 'j') {
-        void handleNodeRobustnessRanking()
-      }
-
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, isGraphFullscreen, isResetDialogOpen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode, handleNodeCounterSet, handleEvidenceImpactRanking, handleLeastRobustNode, handleNodeRobustnessRanking])
+  }, [selectedNodeId, isGraphFullscreen, isResetDialogOpen, isInsightsLabOpen, dismissNodeDetails, handleDeleteNode, handleAddSupportingNode])
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId)
   const activeGraphSummary = graphDataSource === 'database'
@@ -640,6 +566,7 @@ export function DemoPage() {
               isResettingDatabase={isResettingDatabase}
               onDataSourceChange={handleGraphDataSourceChange}
               onGraphChange={handleGraphChange}
+              onOpenInsightsLab={() => setIsInsightsLabOpen(true)}
               onResetDatabase={handleOpenResetDialog}
             />
           ) : null}
@@ -655,6 +582,15 @@ export function DemoPage() {
         isSubmitting={isResettingDatabase}
         onCancel={handleCloseResetDialog}
         onConfirm={handleResetDatabase}
+      />
+
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource={graphDataSource}
+        installedStressGraphIds={installedStressGraphIds}
+        isOpen={isInsightsLabOpen}
+        onClose={() => setIsInsightsLabOpen(false)}
+        onGraphUpdated={handleGraphUpdatedFromInsightsLab}
       />
 
       <section className="demo-support-strip">
