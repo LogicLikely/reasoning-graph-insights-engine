@@ -83,6 +83,9 @@ export type BoundedNodeCounterSet = {
   counterNodeIds: string[] | null
   proofStatus: 'proven' | 'notProven'
   runNumber: number
+  status: 'completed' | 'timedOut'
+  stopReason: 'completed' | 'timeBudget'
+  timeBudgetMilliseconds: number
 }
 
 export async function getBoundedNodeCounterSet(

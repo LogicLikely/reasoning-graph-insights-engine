@@ -6,5 +6,11 @@ public sealed class BoundedMinimalCounterSetDto
 
     public string ProofStatus { get; set; } = string.Empty;
 
+    public string Status { get; set; } = string.Empty;
+
+    public string StopReason { get; set; } = string.Empty;
+
+    public double TimeBudgetMilliseconds { get; set; }
+
     public long RunNumber { get; set; }
 }

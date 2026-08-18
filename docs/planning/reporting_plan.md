@@ -1,74 +1,69 @@
-Nothing else is blocking. One code-specific correction: the greedy minimal-counter-set logic currently lives inside `GraphService`, so it needs a behavior-preserving extraction. E/R/J are already substantially separated. The first new capability will still be bounded brute force.
+# Performance reporting implementation plan
 
-I’m also assuming there is no separate elapsed-time limit: B searches its bounded universe until completion or normal request cancellation.
+> This document supersedes the original candidate-limited reporting plan. The
+> former 20-candidate cap, `candidateLimit` stop reason, key bindings, manual
+> warm-up/repetition protocol, and absence of an elapsed-time budget no longer
+> describe the current design. See
+> [Performance Reporting and Insights Lab](../performance_reporting.md) for the
+> complete user-facing behavior.
 
-## Implementation plan
+## Implemented foundation
 
-1. Extract minimal-counter-set foundations
-   - Introduce a shared solver contract and target-log-odds evaluator.
-   - Move the existing greedy behavior into its own solver without changing its mathematics.
-   - Remove its hot-loop console logging.
-   - Ensure greedy and brute force use the same candidate definition, threshold, and evaluator.
+1. Extract the legacy greedy minimal-counter-set behavior behind a shared
+   solver/evaluator contract without changing its likelihood mathematics.
+2. Record versioned performance runs in
+   `artifacts/performance/performance-runs.json`, including build, graph,
+   invocation, timing, resource, outcome, and operation-specific details.
+3. Instrument the greedy counter set, exhaustive counter set, evidence impact,
+   least-robust node, robustness ranking, and leaf-update operations.
+4. Provide the Insights Lab Run, History, and Trends UI with named benchmark
+   sets, sequential standard stress-suite execution, cancellation where the
+   backend can honor it, result detail views, metric/axis controls, and inline
+   interpretation guidance.
+5. Use the deterministic graph root for counter-set and evidence-impact runs.
+   Exclude pathological deep-chain graphs from the standard suite while
+   leaving them available for deliberate individual runs.
 
-2. Implement bounded brute force
-   - Hardcode the candidate limit at 20.
-   - Enumerate subsets in increasing cardinality.
-   - When more than 20 counters are reachable, select 20 deterministically using greedy priority with node ID tie-breaking.
-   - Report `notProven` whenever candidates were excluded.
-   - Capture subset evaluations, exhausted cardinalities, best set, threshold result, elapsed time, and cancellation.
-   - Keep the implementation in new solver files to minimize `BaysianFactorRework` conflicts.
+## Current exhaustive-reference design
 
-3. Add the B operation
-   - Preserve I as greedy.
-   - Add a dedicated backend bounded-brute-force operation.
-   - Bind B to that operation using the currently selected node.
-   - Avoid a configuration toggle or other frontend controls.
+1. Search the complete reachable counter-candidate universe in increasing
+   cardinality. Candidate ordering is deterministic, but there is no candidate
+   count knob or truncation.
+2. Apply one server-owned 120-second compute budget, beginning before problem
+   preparation. Request cancellation remains a separate outcome and wins if it
+   races the deadline.
+3. Return budget expiry as an HTTP-200 partial result with:
+   - outcome status `timedOut`;
+   - proof status `notProven`;
+   - stop reason `timeBudget`.
+4. Preserve enough frontier data to describe unfinished work honestly:
+   candidate count, subset evaluations, largest cardinality fully exhausted,
+   active-cardinality evaluations and total, total subset-space size,
+   preparation/search elapsed time, timeout stage, and best set/odds found.
+   Arbitrarily large combination counts are serialized as decimal strings.
+5. Retain any proof established by a just-completed subset evaluation. The time
+   budget prevents more work from starting; it does not erase a result that was
+   already computed.
+6. Keep progress and timing measurements out of `resultDigest`. They remain in
+   report details, while the digest identifies the semantic algorithm result.
 
-4. Add the reporting framework
-   - Add a common run record for build, graph, input, timing, resource, and outcome data.
-   - Log the actual build configuration—Debug or Release—without enforcing either.
-   - Capture in-memory computation and total backend operation separately.
-   - Capture CPU time, managed allocations, and GC deltas as best-effort measurements.
-   - Keep algorithm-specific fields inside `details`.
+## Benchmark protocol
 
-5. Add the JSON store
-   - Hardcode the repository-relative path:
+- Run the standard stress suite once for each branch/merge set being compared.
+- Prefer a Release backend and keep the machine otherwise idle. The Lab records
+  the actual build/environment but deliberately does not enforce them.
+- Do not add hidden warm-ups or repetitions. A single run is displayed as raw
+  `n=1`, not as an average.
+- Treat timed-out chart points as right-censored lower bounds, never as ordinary
+  two-minute completions. Use subset count and cardinality-frontier details to
+  compare how much exhaustive work each branch completed within the budget.
+- Keep stress-fixture likelihood calibration as a separate follow-up phase so
+  algorithm/reporting changes and dataset changes can be reviewed independently.
 
-     ```text
-     artifacts/performance/performance-runs.json
-     ```
+## Deferred
 
-   - Gitignore the generated results.
-   - Use one versioned JSON document containing a `runs` array.
-   - Assign sequential file-local run numbers.
-   - Write atomically after all performance timers have stopped.
-   - Record completed, failed, cancelled, and not-proven executions.
-
-6. Instrument every agreed operation
-   - I: greedy minimal counter set.
-   - B: bounded brute-force minimal counter set.
-   - E: evidence-impact ranking.
-   - R: least robust node.
-   - J: robustness ranking.
-   - Leaf update: recalculation plus load and persistence phases.
-
-   Instrumentation will use low-overhead counts derived from inputs and results. Detailed hot-loop counters will remain out of scope.
-
-7. Verify behavior and compatibility
-   - Add unit tests for greedy preservation, exact enumeration, deterministic truncation, proof status, cancellation, and candidate limits.
-   - Exercise the 11-node, 27-node, 96-node/no-counter, and over-20-candidate cases.
-   - Add storage tests using temporary test paths while production wiring remains hardcoded.
-   - Verify every operation writes a valid record with correctly separated timers.
-   - Check compilation and semantic compatibility with `BaysianFactorRework`.
-   - Ensure JSON writing itself never appears in the measured operation time.
-
-8. Document the manual benchmark protocol
-   - The user ensures runs do not overlap.
-   - Warm-up is one ordinary recorded keypress that is excluded during comparison.
-   - Then perform five measured repetitions and compare medians.
-   - Leaf state must be restored before each repeated leaf-update run.
-   - No automatic warm-up orchestration or benchmark runner will be added yet.
-
-Deferred intentionally: configuration UI, configurable candidate limits, automatic concurrency enforcement, automatic repetitions, elapsed-time budgets, peak-memory profiling, reporting UI, and the frontend test suite.
-
-No repository changes have been made yet.
+- Stress-fixture likelihood calibration for the intended greedy-versus-
+  exhaustive demonstration.
+- Hidden warm-up orchestration or repeated-run statistics.
+- User-configurable time budgets or candidate limits.
+- Peak/native-memory profiling and automatic cross-client concurrency control.

@@ -150,6 +150,9 @@ describe('graphService', () => {
       counterNodeIds: ['O1'],
       proofStatus: 'proven',
       runNumber: 12,
+      status: 'completed',
+      stopReason: 'completed',
+      timeBudgetMilliseconds: 120_000,
     }
     const postSpy = vi.fn().mockResolvedValue({ data: result })
 
@@ -206,6 +209,9 @@ describe('graphService', () => {
         counterNodeIds: ['O1'],
         proofStatus: 'proven',
         runNumber: 12,
+        status: 'completed',
+        stopReason: 'completed',
+        timeBudgetMilliseconds: 120_000,
       },
     })
     vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
@@ -255,6 +261,9 @@ describe('graphService', () => {
         counterNodeIds: ['O1'],
         proofStatus: 'proven',
         runNumber: 12,
+        status: 'completed',
+        stopReason: 'completed',
+        timeBudgetMilliseconds: 120_000,
       },
     })
     vi.doMock('./httpClient', () => ({ httpClient: { post: postSpy } }))
@@ -299,6 +308,9 @@ describe('graphService', () => {
         counterNodeIds: [],
         proofStatus: 'proven',
         runNumber: 12,
+        status: 'completed',
+        stopReason: 'completed',
+        timeBudgetMilliseconds: 120_000,
         supportingEvidence: [],
         counterEvidence: [],
       },

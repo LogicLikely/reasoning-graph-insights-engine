@@ -62,7 +62,7 @@ public sealed class GraphServicePerformanceReportingTests
     }
 
     [TestMethod]
-    public async Task GetBoundedMinimalCounterSetAsync_ReturnsStoredRunNumberAndCapturesNotProvenDetails()
+    public async Task GetBoundedMinimalCounterSetAsync_CapturesCompletedExhaustiveDetails()
     {
         var graph = CreateGraphWithTwentyOneCounters();
         var repository = RepositoryReturning(graph);
@@ -76,7 +76,12 @@ public sealed class GraphServicePerformanceReportingTests
 
         Assert.IsNotNull(result);
         Assert.AreEqual(1L, result.RunNumber);
-        Assert.AreEqual("notProven", result.ProofStatus);
+        Assert.AreEqual("proven", result.ProofStatus);
+        Assert.AreEqual("completed", result.Status);
+        Assert.AreEqual("completed", result.StopReason);
+        Assert.AreEqual(
+            BoundedBruteForceMinimalCounterSetSolver.TimeBudgetMilliseconds,
+            result.TimeBudgetMilliseconds);
         Assert.IsNotNull(result.CounterNodeIds);
         CollectionAssert.AreEqual(new[] { "O00", "O01" }, result.CounterNodeIds);
 
@@ -84,20 +89,26 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual(result.RunNumber, run.RunNumber);
         Assert.AreEqual(PerformanceAlgorithmNames.MinimalCounterSet, run.Algorithm.Name);
         Assert.AreEqual(
-            PerformanceAlgorithmImplementations.BoundedBruteForce,
+            PerformanceAlgorithmImplementations.TimeBoundedExhaustive,
             run.Algorithm.Implementation);
-        Assert.AreEqual(PerformanceRunStatuses.NotProven, run.Outcome.Status);
+        Assert.AreEqual(PerformanceRunStatuses.Completed, run.Outcome.Status);
         Assert.AreEqual(
-            BoundedBruteForceMinimalCounterSetSolver.CandidateLimit,
-            run.Invocation.Parameters["candidateLimit"]!.GetValue<int>());
+            BoundedBruteForceMinimalCounterSetSolver.TimeBudgetMilliseconds,
+            run.Invocation.Parameters["timeBudgetMilliseconds"]!.GetValue<double>());
         Assert.AreEqual(21, Detail<int>(run, "totalCandidateCount"));
-        Assert.AreEqual(20, Detail<int>(run, "searchedCandidateCount"));
-        Assert.AreEqual(1, Detail<int>(run, "excludedCandidateCount"));
-        Assert.AreEqual(22L, Detail<long>(run, "subsetEvaluations"));
+        Assert.AreEqual(21, Detail<int>(run, "searchedCandidateCount"));
+        Assert.AreEqual(0, Detail<int>(run, "excludedCandidateCount"));
+        Assert.AreEqual(23L, Detail<long>(run, "subsetEvaluations"));
         Assert.AreEqual(1, Detail<int>(run, "largestCardinalityFullyExhausted"));
+        Assert.AreEqual("2097152", Detail<string>(run, "totalPossibleSubsets"));
+        Assert.AreEqual(
+            BoundedBruteForceMinimalCounterSetSolver.TimeBudgetMilliseconds,
+            Detail<double>(run, "timeBudgetMilliseconds"));
+        Assert.IsNull(run.Details["activeCardinality"]);
+        Assert.IsNull(run.Details["timeoutStage"]);
         Assert.AreEqual(2, Detail<int>(run, "returnedSetSize"));
-        Assert.AreEqual("notProven", Detail<string>(run, "proofStatus"));
-        Assert.AreEqual("candidateLimit", Detail<string>(run, "stopReason"));
+        Assert.AreEqual("proven", Detail<string>(run, "proofStatus"));
+        Assert.AreEqual("completed", Detail<string>(run, "stopReason"));
         Assert.IsTrue(Detail<bool>(run, "thresholdReached"));
         CollectionAssert.AreEqual(
             new[] { "O00", "O01" },
@@ -107,7 +118,81 @@ public sealed class GraphServicePerformanceReportingTests
     }
 
     [TestMethod]
-    public async Task GetBoundedMinimalCounterSetAsync_ReportsTruncatedEmptySetAsProven()
+    public async Task GetBoundedMinimalCounterSetAsync_PersistsAndReturnsExpectedTimeout()
+    {
+        var graph = GraphWith([Node("R", kind: "root")], []);
+        var repository = RepositoryReturning(graph);
+        var store = new CapturingPerformanceRunStore();
+        var calculator = new GraphLikelihoodCalculator();
+        var timeProvider = new ManualTimeProvider();
+        var evaluator = new FixedMinimalCounterSetEvaluator(
+            candidateCount: 4,
+            initialTargetLogOdds: 0m,
+            contribution: 0.1m,
+            beforeContribution: () =>
+                timeProvider.Advance(TimeSpan.FromMilliseconds(3)));
+        var service = new GraphService(
+            repository.Object,
+            calculator,
+            new GreedyMinimalCounterSetSolver(evaluator),
+            new BoundedBruteForceMinimalCounterSetSolver(
+                evaluator,
+                timeProvider,
+                TimeSpan.FromMilliseconds(5)),
+            store);
+
+        var result = await service.GetBoundedMinimalCounterSetAsync(
+            graph.Slug,
+            "R",
+            "timeout-set",
+            CancellationToken.None);
+
+        Assert.IsNotNull(result);
+        Assert.IsNull(result.CounterNodeIds);
+        Assert.AreEqual("notProven", result.ProofStatus);
+        Assert.AreEqual("timedOut", result.Status);
+        Assert.AreEqual("timeBudget", result.StopReason);
+        Assert.AreEqual(5d, result.TimeBudgetMilliseconds);
+        Assert.AreEqual(1L, result.RunNumber);
+
+        var run = AssertSingleRun(store);
+        Assert.AreEqual("timeout-set", run.BenchmarkSetId);
+        Assert.AreEqual(
+            PerformanceAlgorithmImplementations.TimeBoundedExhaustive,
+            run.Algorithm.Implementation);
+        Assert.AreEqual(PerformanceRunStatuses.TimedOut, run.Outcome.Status);
+        Assert.AreEqual(0, run.Outcome.ResultCount);
+        Assert.IsNotNull(run.Outcome.ResultDigest);
+        Assert.AreEqual(
+            5d,
+            run.Invocation.Parameters["timeBudgetMilliseconds"]!.GetValue<double>());
+        Assert.AreEqual(4, Detail<int>(run, "totalCandidateCount"));
+        Assert.AreEqual(4, Detail<int>(run, "searchedCandidateCount"));
+        Assert.AreEqual(0, Detail<int>(run, "excludedCandidateCount"));
+        Assert.AreEqual(2, Detail<int>(run, "candidatesExamined"));
+        Assert.AreEqual(3L, Detail<long>(run, "subsetEvaluations"));
+        Assert.AreEqual(0, Detail<int>(run, "largestCardinalityFullyExhausted"));
+        Assert.AreEqual(1, Detail<int>(run, "activeCardinality"));
+        Assert.AreEqual(
+            2L,
+            Detail<long>(run, "subsetEvaluationsAtActiveCardinality"));
+        Assert.AreEqual(
+            "4",
+            Detail<string>(run, "totalSubsetsAtActiveCardinality"));
+        Assert.AreEqual("16", Detail<string>(run, "totalPossibleSubsets"));
+        Assert.AreEqual(5d, Detail<double>(run, "timeBudgetMilliseconds"));
+        Assert.AreEqual(0d, Detail<double>(run, "preparationElapsedMilliseconds"));
+        Assert.AreEqual(6d, Detail<double>(run, "searchElapsedMilliseconds"));
+        Assert.IsTrue(Detail<double>(run, "subsetEvaluationsPerSecond") > 0d);
+        Assert.AreEqual("search", Detail<string>(run, "timeoutStage"));
+        Assert.AreEqual("notProven", Detail<string>(run, "proofStatus"));
+        Assert.AreEqual("timeBudget", Detail<string>(run, "stopReason"));
+        Assert.IsFalse(Detail<bool>(run, "thresholdReached"));
+        AssertCommonTiming(run, expectLoad: true, expectPersist: false);
+    }
+
+    [TestMethod]
+    public async Task GetBoundedMinimalCounterSetAsync_ReportsEmptySetAsProven()
     {
         var graph = GraphWith([Node("R", kind: "root")], []);
         var repository = RepositoryReturning(graph);
@@ -130,6 +215,8 @@ public sealed class GraphServicePerformanceReportingTests
 
         Assert.IsNotNull(result);
         Assert.AreEqual("proven", result.ProofStatus);
+        Assert.AreEqual("completed", result.Status);
+        Assert.AreEqual("completed", result.StopReason);
         Assert.IsNotNull(result.CounterNodeIds);
         Assert.AreEqual(0, result.CounterNodeIds.Count);
 
@@ -741,13 +828,19 @@ public sealed class GraphServicePerformanceReportingTests
     {
         private readonly int _candidateCount;
         private readonly decimal _initialTargetLogOdds;
+        private readonly decimal _contribution;
+        private readonly Action? _beforeContribution;
 
         public FixedMinimalCounterSetEvaluator(
             int candidateCount,
-            decimal initialTargetLogOdds = 30m)
+            decimal initialTargetLogOdds = 30m,
+            decimal contribution = -1m,
+            Action? beforeContribution = null)
         {
             _candidateCount = candidateCount;
             _initialTargetLogOdds = initialTargetLogOdds;
+            _contribution = contribution;
+            _beforeContribution = beforeContribution;
         }
 
         public IMinimalCounterSetProblem CreateProblem(
@@ -759,19 +852,27 @@ public sealed class GraphServicePerformanceReportingTests
             cancellationToken.ThrowIfCancellationRequested();
             return new FixedMinimalCounterSetProblem(
                 _candidateCount,
-                _initialTargetLogOdds);
+                _initialTargetLogOdds,
+                _contribution,
+                _beforeContribution);
         }
     }
 
     private sealed class FixedMinimalCounterSetProblem : IMinimalCounterSetProblem
     {
         private readonly decimal _initialTargetLogOdds;
+        private readonly decimal _contribution;
+        private readonly Action? _beforeContribution;
 
         public FixedMinimalCounterSetProblem(
             int candidateCount,
-            decimal initialTargetLogOdds)
+            decimal initialTargetLogOdds,
+            decimal contribution,
+            Action? beforeContribution)
         {
             _initialTargetLogOdds = initialTargetLogOdds;
+            _contribution = contribution;
+            _beforeContribution = beforeContribution;
             Candidates = Enumerable.Range(0, candidateCount)
                 .Select(index => new MinimalCounterCandidate(
                     $"O{index:00}",
@@ -790,7 +891,42 @@ public sealed class GraphServicePerformanceReportingTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return -1m;
+            _beforeContribution?.Invoke();
+            return _contribution;
+        }
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private long _timestamp;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => _timestamp;
+
+        public override ITimer CreateTimer(
+            TimerCallback callback,
+            object? state,
+            TimeSpan dueTime,
+            TimeSpan period)
+        {
+            return new InertTimer();
+        }
+
+        public void Advance(TimeSpan duration)
+        {
+            _timestamp += duration.Ticks;
+        }
+
+        private sealed class InertTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+            public void Dispose()
+            {
+            }
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 }

@@ -89,7 +89,14 @@ describe('InsightsLabDialog', () => {
     window.localStorage.clear()
     serviceMocks.getPerformanceRuns.mockResolvedValue(emptyReport())
     serviceMocks.getNodeCounterSet.mockResolvedValue(['node-100'])
-    serviceMocks.getBoundedNodeCounterSet.mockResolvedValue({ runNumber: 1 })
+    serviceMocks.getBoundedNodeCounterSet.mockResolvedValue({
+      counterNodeIds: [],
+      proofStatus: 'proven',
+      runNumber: 1,
+      status: 'completed',
+      stopReason: 'completed',
+      timeBudgetMilliseconds: 120_000,
+    })
     serviceMocks.getEvidenceImpactRanking.mockResolvedValue({ supporting: [], counter: [] })
     serviceMocks.getGraphBySlug.mockResolvedValue(graph)
     serviceMocks.getGraphCatalog.mockResolvedValue([])
@@ -220,7 +227,7 @@ describe('InsightsLabDialog', () => {
     expect(screen.queryByText('Lab graph · lab-graph')).not.toBeInTheDocument()
   })
 
-  it('loads newest-first history and presents notProven as a completed qualified result', async () => {
+  it('loads newest-first history and explains a time-limited partial result', async () => {
     serviceMocks.getPerformanceRuns.mockResolvedValue({
       schemaVersion: 2,
       benchmarkSets: [benchmarkSet],
@@ -231,16 +238,25 @@ describe('InsightsLabDialog', () => {
           startedAtUtc: '2026-08-16T18:42:31.123Z',
           algorithm: {
             name: 'minimal-counter-set',
-            implementation: 'bounded-brute-force',
+            implementation: 'time-bounded-exhaustive',
           },
           graph: { slug: 'lab-graph' },
-          timing: { operationElapsedMilliseconds: 856.1 },
-          outcome: { status: 'notProven', resultCount: 2 },
+          invocation: { parameters: { timeBudgetMilliseconds: 120_000 } },
+          timing: { operationElapsedMilliseconds: 120_856.1 },
+          outcome: { status: 'timedOut', resultCount: 2, proofStatus: 'notProven' },
           details: {
             proofStatus: 'notProven',
+            stopReason: 'timeBudget',
             thresholdReached: false,
             returnedNodeIds: ['node-100', 'node-020'],
             returnedNodeIdsTruncated: false,
+            totalCandidateCount: 33,
+            subsetEvaluations: 4_194_304,
+            largestCardinalityFullyExhausted: 5,
+            activeCardinality: 6,
+            subsetEvaluationsAtActiveCardinality: 250_000,
+            totalSubsetsAtActiveCardinality: '1107568',
+            timeoutStage: 'search',
           },
         },
         {
@@ -277,18 +293,103 @@ describe('InsightsLabDialog', () => {
     expect(screen.queryByRole('region', { name: 'Performance run history' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Back to all runs' })).toHaveFocus()
     const report = screen.getByRole('article', { name: 'Report for run 2' })
-    expect(within(report).getAllByText('Completed').length).toBeGreaterThan(0)
+    expect(within(report).getAllByText('Timed out').length).toBeGreaterThan(0)
     expect(within(report).getAllByText('Not proven').length).toBeGreaterThan(0)
     expect(within(report).getByText(benchmarkSet.name)).toBeInTheDocument()
     expect(within(report).getByText(benchmarkSet.id)).toBeInTheDocument()
-    expect(within(report).getByText('Best set examined — threshold not reached')).toBeInTheDocument()
+    expect(within(report).getByText('Best set found before time limit — threshold not reached')).toBeInTheDocument()
     expect(within(report).queryByText('Returned node IDs')).not.toBeInTheDocument()
     expect(within(report).getAllByText('node-100').length).toBeGreaterThan(0)
+    const timeLimit = within(report).getByRole('region', { name: 'Exhaustive search time limit' })
+    expect(within(timeLimit).getByText('Search stopped at the 2-minute budget')).toBeInTheDocument()
+    expect(within(timeLimit).getByText('All sets through size 5')).toBeInTheDocument()
+    expect(within(timeLimit).getByText('Sets of size 6')).toBeInTheDocument()
+    expect(within(timeLimit).getByText('250,000 of 1,107,568 sets evaluated')).toBeInTheDocument()
+    expect(within(timeLimit).getByText(/expected partial benchmark result, not a failed request/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to all runs' }))
     expect(await screen.findByRole('region', { name: 'Performance run history' })).toBeInTheDocument()
     expect(screen.queryByRole('article', { name: 'Report for run 2' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'View run 2' })).toHaveFocus()
+  })
+
+  it('does not imply that a candidate set was evaluated when preparation uses the time budget', async () => {
+    serviceMocks.getPerformanceRuns.mockResolvedValue(report([{
+      runNumber: 3,
+      benchmarkSetId: benchmarkSet.id,
+      algorithm: {
+        name: 'minimal-counter-set',
+        implementation: 'time-bounded-exhaustive',
+      },
+      graph: { slug: 'lab-graph' },
+      invocation: { parameters: { timeBudgetMilliseconds: 120_000 } },
+      outcome: { status: 'timedOut', resultCount: 0, proofStatus: 'notProven' },
+      details: {
+        proofStatus: 'notProven',
+        stopReason: 'timeBudget',
+        timeoutStage: 'preparation',
+        thresholdReached: false,
+        subsetEvaluations: 0,
+        returnedNodeIds: [],
+      },
+    }]))
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: /History/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View run 3' }))
+
+    const reportArticle = screen.getByRole('article', { name: 'Report for run 3' })
+    expect(within(reportArticle).getByText('No candidate set evaluated before time limit')).toBeInTheDocument()
+    expect(within(reportArticle).queryByText(/Best set found/)).not.toBeInTheDocument()
+    expect(within(reportArticle).queryByText('No nodes (empty set)')).not.toBeInTheDocument()
+  })
+
+  it('retains the evaluated empty set when the time budget expires after problem preparation', async () => {
+    serviceMocks.getPerformanceRuns.mockResolvedValue(report([{
+      runNumber: 4,
+      benchmarkSetId: benchmarkSet.id,
+      algorithm: {
+        name: 'minimal-counter-set',
+        implementation: 'time-bounded-exhaustive',
+      },
+      graph: { slug: 'lab-graph' },
+      invocation: { parameters: { timeBudgetMilliseconds: 120_000 } },
+      outcome: { status: 'timedOut', resultCount: 0, proofStatus: 'notProven' },
+      details: {
+        proofStatus: 'notProven',
+        stopReason: 'timeBudget',
+        timeoutStage: 'preparation',
+        thresholdReached: false,
+        subsetEvaluations: 1,
+        largestCardinalityFullyExhausted: 0,
+        returnedNodeIds: [],
+      },
+    }]))
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: /History/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View run 4' }))
+
+    const reportArticle = screen.getByRole('article', { name: 'Report for run 4' })
+    expect(within(reportArticle).getByText('Best set found before time limit — threshold not reached')).toBeInTheDocument()
+    expect(within(reportArticle).getByText('No nodes (empty set)')).toBeInTheDocument()
+    expect(within(reportArticle).queryByText('No candidate set evaluated before time limit')).not.toBeInTheDocument()
   })
 
   it('uses a fresh watermark, runs against the deterministic root, and opens the matching report', async () => {
@@ -353,7 +454,7 @@ describe('InsightsLabDialog', () => {
     serviceMocks.getPerformanceRuns.mockResolvedValue(report([{
       runNumber: 1,
       benchmarkSetId: benchmarkSet.id,
-      algorithm: { name: 'minimal-counter-set', implementation: 'bounded-brute-force' },
+      algorithm: { name: 'minimal-counter-set', implementation: 'time-bounded-exhaustive' },
       graph: { slug: 'lab-graph' },
       outcome: { status: 'completed', resultCount: 0 },
       details: {
@@ -381,7 +482,7 @@ describe('InsightsLabDialog', () => {
 
   it.each([
     ['Minimal counter set', /most promising counters first/i],
-    ['Bounded minimal counter set', /at most 20 candidates/i],
+    ['Time-bounded exhaustive search', /every counter-set method must enumerate combinations/i],
     ['Evidence impact ranking', /not whether a piece of evidence is true/i],
     ['Least robust node', /returns the node with the largest change/i],
     ['Robustness ranking', /orders the results from least to most robust/i],
@@ -462,10 +563,10 @@ describe('InsightsLabDialog', () => {
 
   it.each([
     {
-      title: 'Bounded minimal counter set',
+      title: 'Time-bounded exhaustive search',
       service: 'getBoundedNodeCounterSet' as const,
       algorithm: 'minimal-counter-set',
-      implementation: 'bounded-brute-force',
+      implementation: 'time-bounded-exhaustive',
       baseArguments: ['lab-graph', 'node-002', 'database'],
       cancellable: true,
     },
@@ -540,6 +641,58 @@ describe('InsightsLabDialog', () => {
     if (cancellable) expect(call[baseArguments.length]).toBeInstanceOf(AbortSignal)
     else expect(call[baseArguments.length]).toBeUndefined()
     expect(call[baseArguments.length + 1]).toBe(benchmarkSet.id)
+  })
+
+  it('opens an HTTP-success timeout as a partial report instead of a failed run', async () => {
+    const timedOutRun = {
+      runNumber: 7,
+      benchmarkSetId: benchmarkSet.id,
+      algorithm: { name: 'minimal-counter-set', implementation: 'time-bounded-exhaustive' },
+      graph: { slug: 'lab-graph' },
+      invocation: {
+        dataSource: 'database',
+        targetNodeId: 'node-002',
+        parameters: { timeBudgetMilliseconds: 120_000 },
+      },
+      outcome: { status: 'timedOut', proofStatus: 'notProven' },
+      details: {
+        proofStatus: 'notProven',
+        stopReason: 'timeBudget',
+        largestCardinalityFullyExhausted: 4,
+        activeCardinality: 5,
+      },
+    }
+    serviceMocks.getBoundedNodeCounterSet.mockResolvedValueOnce({
+      counterNodeIds: null,
+      proofStatus: 'notProven',
+      runNumber: 7,
+      status: 'timedOut',
+      stopReason: 'timeBudget',
+      timeBudgetMilliseconds: 120_000,
+    })
+    serviceMocks.getPerformanceRuns
+      .mockResolvedValueOnce(emptyReport())
+      .mockResolvedValueOnce(emptyReport())
+      .mockResolvedValueOnce(report([timedOutRun]))
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+
+    fireEvent.click(within(operationCard(/^Time-bounded exhaustive search$/)).getByRole('button', {
+      name: 'Run Time-bounded exhaustive search',
+    }))
+
+    expect(await screen.findByText(/reached its two-minute compute budget/i)).toBeInTheDocument()
+    const reportArticle = screen.getByRole('article', { name: 'Report for run 7' })
+    expect(within(reportArticle).getAllByText('Timed out').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/did not complete successfully/i)).not.toBeInTheDocument()
   })
 
   it('offers best-effort cancellation only for cancellable operations and keeps the dialog open', async () => {
@@ -698,6 +851,43 @@ describe('InsightsLabDialog', () => {
     expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(2)
     expect(onGraphUpdated).toHaveBeenCalledOnce()
     expect(screen.getByRole('tab', { name: 'Run' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('continues the stress suite after an exhaustive search reaches its time budget', async () => {
+    serviceMocks.getBoundedNodeCounterSet.mockResolvedValueOnce({
+      counterNodeIds: null,
+      proofStatus: 'notProven',
+      runNumber: 2,
+      status: 'timedOut',
+      stopReason: 'timeBudget',
+      timeBudgetMilliseconds: 120_000,
+    })
+    serviceMocks.getGraphBySlug.mockResolvedValue({
+      ...graph,
+      slug: 'stress-balanced-1k',
+      nodes: [
+        { ...graph.nodes[0], id: 'n-00000' },
+        { ...graph.nodes[1], id: 'n-00999' },
+      ],
+    })
+
+    render(
+      <InsightsLabDialog
+        graph={graph}
+        graphDataSource="database"
+        installedStressGraphIds={['stress-balanced-1k']}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Run standard stress suite' }))
+
+    expect(await screen.findByText('Standard stress suite complete')).toBeInTheDocument()
+    expect(screen.getByText(/5 requests completed · 1 exhaustive search reached the time budget/)).toBeInTheDocument()
+    expect(screen.getByText(/6 of 6 attempted/)).toBeInTheDocument()
+    expect(serviceMocks.getEvidenceImpactRanking).toHaveBeenCalledOnce()
+    expect(screen.queryByText(/request failed/)).not.toBeInTheDocument()
   })
 
   it('stops the stress suite by interrupting a cancellable request and launches nothing else', async () => {
