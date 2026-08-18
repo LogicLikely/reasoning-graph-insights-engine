@@ -24,17 +24,29 @@ public sealed class GreedyMinimalCounterSetSolver : IMinimalCounterSetSolver
             nodeIds,
             cancellationToken);
         var candidates = problem.Candidates.ToArray();
+        var targetLogOdds = problem.InitialTargetLogOdds;
         var counterQueue = new PriorityQueue<
             MinimalCounterCandidate,
             MinimalCounterCandidate>(
                 MinimalCounterSetCandidateOrdering.PriorityComparer);
-        foreach (var candidate in candidates)
+        if (targetLogOdds > problem.ThresholdLogOdds)
         {
-            counterQueue.Enqueue(candidate, candidate);
+            foreach (var candidate in candidates)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var rankedCandidate = candidate with
+                {
+                    GreedyPriority = problem.GetGreedyPriority(
+                        candidate,
+                        cancellationToken)
+                };
+                counterQueue.Enqueue(rankedCandidate, rankedCandidate);
+            }
         }
 
-        var targetLogOdds = problem.InitialTargetLogOdds;
         var countersUsed = new List<string>();
+        IReadOnlyList<string> bestCounters = Array.Empty<string>();
+        var bestTargetLogOdds = targetLogOdds;
         var candidatesExamined = 0;
 
         while (counterQueue.Count > 0 &&
@@ -44,18 +56,31 @@ public sealed class GreedyMinimalCounterSetSolver : IMinimalCounterSetSolver
             var candidate = counterQueue.Dequeue();
             countersUsed.Add(candidate.NodeId);
             candidatesExamined++;
-            targetLogOdds += problem.GetTargetLogOddsContribution(
-                candidate.NodeId,
+            targetLogOdds = problem.CalculateTargetLogOdds(
+                countersUsed,
                 cancellationToken);
+            if (targetLogOdds < bestTargetLogOdds)
+            {
+                bestTargetLogOdds = targetLogOdds;
+                bestCounters = countersUsed.ToArray();
+            }
         }
+
+        var thresholdReached = targetLogOdds <= problem.ThresholdLogOdds;
+        var resultCounters = thresholdReached
+            ? countersUsed
+            : bestCounters;
+        var resultTargetLogOdds = thresholdReached
+            ? targetLogOdds
+            : bestTargetLogOdds;
 
         return new MinimalCounterSetResult
         {
-            CounterNodeIds = countersUsed,
-            ThresholdReached = targetLogOdds <= problem.ThresholdLogOdds,
+            CounterNodeIds = resultCounters,
+            ThresholdReached = thresholdReached,
             ThresholdLogOdds = problem.ThresholdLogOdds,
             InitialTargetLogOdds = problem.InitialTargetLogOdds,
-            FinalTargetLogOdds = targetLogOdds,
+            FinalTargetLogOdds = resultTargetLogOdds,
             TotalCandidateCount = candidates.Length,
             SearchedCandidateCount = candidates.Length,
             CandidatesExamined = candidatesExamined,

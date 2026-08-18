@@ -80,6 +80,54 @@ public sealed class MinimalCounterSetSolverTests
     }
 
     [TestMethod]
+    public void Solvers_EvaluateExactNonlinearCounterSubsets()
+    {
+        var problem = new ExactSubsetProblem();
+
+        var greedyResult = CreateGreedySolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+        var boundedResult = CreateBoundedSolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        // A and B look strongest in isolation, but their combined effect is
+        // deliberately non-additive. Greedy recalculates each growing prefix.
+        CollectionAssert.AreEqual(
+            new[] { "A", "B", "C" },
+            greedyResult.CounterNodeIds.ToArray());
+        Assert.AreEqual(-1.5m, greedyResult.FinalTargetLogOdds);
+
+        // Exhaustive search evaluates exact subsets and therefore proves that
+        // C alone is the minimum result. Summing singleton contributions would
+        // incorrectly accept A+B instead.
+        CollectionAssert.AreEqual(
+            new[] { "C" },
+            boundedResult.CounterNodeIds.ToArray());
+        Assert.AreEqual(-1.2m, boundedResult.FinalTargetLogOdds);
+        Assert.AreEqual(4L, boundedResult.SubsetEvaluations);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, boundedResult.ProofStatus);
+    }
+
+    [TestMethod]
+    public void GreedySolver_ReturnsBestExaminedPrefixWhenThresholdIsNotReached()
+    {
+        var result = CreateGreedySolver(new BestPrefixProblem()).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        Assert.IsFalse(result.ThresholdReached);
+        CollectionAssert.AreEqual(
+            new[] { "A" },
+            result.CounterNodeIds.ToArray());
+        Assert.AreEqual(-0.8m, result.FinalTargetLogOdds);
+        Assert.AreEqual(2, result.CandidatesExamined);
+    }
+
+    [TestMethod]
     public void BoundedSolver_EnumeratesInIncreasingCardinality()
     {
         var problem = new FakeProblem(
@@ -476,6 +524,108 @@ public sealed class MinimalCounterSetSolverTests
     }
 
     [TestMethod]
+    public void BayesianEvaluator_UsesBfImpactForBothSolvers()
+    {
+        decimal counterLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("H", "root", priorOdds: 0.2m),
+                Node(
+                    "weak",
+                    "objection",
+                    posteriorOdds: counterLogBayesFactor),
+                Node(
+                    "strong",
+                    "objection",
+                    posteriorOdds: counterLogBayesFactor)
+            ],
+            Edges =
+            [
+                ConditionalEdge(
+                    "weak-H",
+                    "weak",
+                    "H",
+                    probabilityGivenParent: 0.2m,
+                    probabilityGivenNotParent: 0.8m),
+                ConditionalEdge(
+                    "strong-H",
+                    "strong",
+                    "H",
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m)
+            ]
+        };
+        var evaluator = new BayesianMinimalCounterSetEvaluator(
+            new GraphPosteriorOddsCalculator());
+
+        var greedyResult = new GreedyMinimalCounterSetSolver(evaluator).Solve(
+            graph,
+            "H",
+            graph.Nodes.Select(node => node.Id));
+        var boundedResult =
+            new BoundedBruteForceMinimalCounterSetSolver(evaluator).Solve(
+                graph,
+                "H",
+                graph.Nodes.Select(node => node.Id));
+
+        CollectionAssert.AreEqual(
+            new[] { "strong" },
+            greedyResult.CounterNodeIds.ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "strong" },
+            boundedResult.CounterNodeIds.ToArray());
+        Assert.IsTrue(greedyResult.ThresholdReached);
+        Assert.IsTrue(boundedResult.ThresholdReached);
+        Assert.AreEqual(
+            greedyResult.FinalTargetLogOdds,
+            boundedResult.FinalTargetLogOdds);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, boundedResult.ProofStatus);
+    }
+
+    [TestMethod]
+    public void BayesianEvaluator_ExcludesDisconnectedAndNonBayesianCounterAliases()
+    {
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("H", "root"),
+                Node("reachable", "objection", posteriorOdds: 1m),
+                Node("disconnected", "objection", posteriorOdds: 1m),
+                Node("legacy-alias", "counter", posteriorOdds: 1m)
+            ],
+            Edges =
+            [
+                ConditionalEdge(
+                    "reachable-H",
+                    "reachable",
+                    "H",
+                    probabilityGivenParent: 0.2m,
+                    probabilityGivenNotParent: 0.8m),
+                ConditionalEdge(
+                    "legacy-alias-H",
+                    "legacy-alias",
+                    "H",
+                    probabilityGivenParent: 0.2m,
+                    probabilityGivenNotParent: 0.8m)
+            ]
+        };
+        var evaluator = new BayesianMinimalCounterSetEvaluator(
+            new GraphPosteriorOddsCalculator());
+
+        var problem = evaluator.CreateProblem(
+            graph,
+            "H",
+            graph.Nodes.Select(node => node.Id));
+
+        CollectionAssert.AreEqual(
+            new[] { "reachable" },
+            problem.Candidates.Select(candidate => candidate.NodeId).ToArray());
+    }
+
+    [TestMethod]
     public void LegacyEvaluator_ExcludesUnreachableCounters()
     {
         var graph = new Graph
@@ -634,6 +784,24 @@ public sealed class MinimalCounterSetSolverTests
         };
     }
 
+    private static GraphEdge ConditionalEdge(
+        string id,
+        string from,
+        string to,
+        decimal probabilityGivenParent,
+        decimal probabilityGivenNotParent)
+    {
+        return new GraphEdge
+        {
+            Id = id,
+            From = from,
+            To = to,
+            Kind = "counter",
+            ProbabilityGivenParent = probabilityGivenParent,
+            ProbabilityGivenNotParent = probabilityGivenNotParent
+        };
+    }
+
     private static Graph CreateSmallCounterGraph(int nodeCount, int counterCount)
     {
         var counterLogLikelihoodRatio = (decimal)Math.Log(0.1d);
@@ -686,6 +854,91 @@ public sealed class MinimalCounterSetSolverTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return problem;
+        }
+    }
+
+    private sealed class ExactSubsetProblem : IMinimalCounterSetProblem
+    {
+        public decimal ThresholdLogOdds => -1m;
+
+        public decimal InitialTargetLogOdds => 0m;
+
+        public IReadOnlyList<MinimalCounterCandidate> Candidates { get; } =
+        [
+            new MinimalCounterCandidate("A", 3m),
+            new MinimalCounterCandidate("B", 2m),
+            new MinimalCounterCandidate("C", 1m)
+        ];
+
+        public decimal CalculateTargetLogOdds(
+            IReadOnlyList<string> counterNodeIds,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return string.Join(",", counterNodeIds.Order(StringComparer.Ordinal)) switch
+            {
+                "A" => -0.6m,
+                "B" => -0.6m,
+                "C" => -1.2m,
+                "A,B" => 0.5m,
+                "A,C" => -1.3m,
+                "B,C" => -1.4m,
+                "A,B,C" => -1.5m,
+                _ => InitialTargetLogOdds
+            };
+        }
+
+        public decimal GetTargetLogOddsContribution(
+            string counterNodeId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return counterNodeId switch
+            {
+                "A" => -0.6m,
+                "B" => -0.6m,
+                "C" => -1.2m,
+                _ => throw new InvalidOperationException()
+            };
+        }
+    }
+
+    private sealed class BestPrefixProblem : IMinimalCounterSetProblem
+    {
+        public decimal ThresholdLogOdds => -1m;
+
+        public decimal InitialTargetLogOdds => 0m;
+
+        public IReadOnlyList<MinimalCounterCandidate> Candidates { get; } =
+        [
+            new MinimalCounterCandidate("A", 2m),
+            new MinimalCounterCandidate("B", 1m)
+        ];
+
+        public decimal CalculateTargetLogOdds(
+            IReadOnlyList<string> counterNodeIds,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return counterNodeIds.Count switch
+            {
+                1 => -0.8m,
+                2 => 0.2m,
+                _ => InitialTargetLogOdds
+            };
+        }
+
+        public decimal GetTargetLogOddsContribution(
+            string counterNodeId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return counterNodeId switch
+            {
+                "A" => -0.8m,
+                "B" => -0.2m,
+                _ => throw new InvalidOperationException()
+            };
         }
     }
 

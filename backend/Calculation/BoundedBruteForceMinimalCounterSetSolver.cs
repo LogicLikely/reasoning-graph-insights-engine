@@ -137,8 +137,7 @@ public sealed class BoundedBruteForceMinimalCounterSetSolver : IMinimalCounterSe
 
             timeoutStage = MinimalCounterSetTimeoutStage.Search;
             searchStarted = _timeProvider.GetTimestamp();
-            var contributions = new decimal[searchedCandidates.Length];
-            var contributionLoaded = new bool[searchedCandidates.Length];
+            var evaluatedCandidates = new bool[searchedCandidates.Length];
 
             for (var cardinality = 1;
                  cardinality <= searchedCandidates.Length;
@@ -159,28 +158,22 @@ public sealed class BoundedBruteForceMinimalCounterSetSolver : IMinimalCounterSe
                         budgetCancellation,
                         operationStarted);
 
-                    var targetLogOdds = problem.InitialTargetLogOdds;
-                    for (var position = 0; position < indices.Length; position++)
+                    var counterNodeIds = GetCounterNodeIds(
+                        searchedCandidates,
+                        indices);
+                    var targetLogOdds = problem.CalculateTargetLogOdds(
+                        counterNodeIds,
+                        linkedCancellation.Token);
+
+                    foreach (var candidateIndex in indices)
                     {
-                        var candidateIndex = indices[position];
-                        if (!contributionLoaded[candidateIndex])
+                        if (evaluatedCandidates[candidateIndex])
                         {
-                            contributions[candidateIndex] =
-                                problem.GetTargetLogOddsContribution(
-                                    searchedCandidates[candidateIndex].NodeId,
-                                    linkedCancellation.Token);
-                            contributionLoaded[candidateIndex] = true;
-                            candidatesExamined++;
+                            continue;
                         }
 
-                        targetLogOdds += contributions[candidateIndex];
-                        if (position < indices.Length - 1)
-                        {
-                            EnsureCanContinue(
-                                cancellationToken,
-                                budgetCancellation,
-                                operationStarted);
-                        }
+                        evaluatedCandidates[candidateIndex] = true;
+                        candidatesExamined++;
                     }
 
                     subsetEvaluations++;
@@ -222,7 +215,7 @@ public sealed class BoundedBruteForceMinimalCounterSetSolver : IMinimalCounterSe
                             subsetEvaluationsAtActiveCardinality: null,
                             totalSubsetsAtActiveCardinality: null,
                             totalPossibleSubsets,
-                            GetCounterNodeIds(searchedCandidates, indices),
+                            counterNodeIds,
                             targetLogOdds,
                             thresholdReached: true,
                             MinimalCounterSetProofStatus.Proven,

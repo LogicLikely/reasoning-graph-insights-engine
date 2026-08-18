@@ -9,8 +9,10 @@
 
 ## Implemented foundation
 
-1. Extract the legacy greedy minimal-counter-set behavior behind a shared
-   solver/evaluator contract without changing its likelihood mathematics.
+1. Run greedy and time-bounded exhaustive counter-set search behind a shared
+   solver/evaluator contract using the production Bayesian-factor objective.
+   Each combined subset is recalculated exactly rather than assembled from
+   independent legacy likelihood-ratio contributions.
 2. Record versioned performance runs in
    `artifacts/performance/performance-runs.json`, including build, graph,
    invocation, timing, resource, outcome, and operation-specific details.
@@ -23,10 +25,11 @@
 5. Use the deterministic graph root for counter-set and evidence-impact runs.
    Exclude pathological deep-chain graphs from the standard suite while
    leaving them available for deliberate individual runs.
-6. Add a 100-node balanced, wide, and shared-diamond tier and calibrate every
-   non-deep stress graph to the same counter-set workload: initial root log
-   odds `0.200`, per-objection contribution `-0.160`, and proven minimum
-   cardinality eight. Preserve topology, node kinds, and edge likelihoods.
+6. Add a 100-node balanced, wide, and shared-diamond tier. The checked-in
+   root/objection calibration targets the former additive likelihood-ratio
+   evaluator; Phase 2 will recalibrate and verify the production Bayesian
+   counter-set workload. Preserve topology and node kinds while that work is
+   pending.
 
 ## Current exhaustive-reference design
 
@@ -61,8 +64,8 @@
 - Treat timed-out chart points as right-censored lower bounds, never as ordinary
   two-minute completions. Use subset count and cardinality-frontier details to
   compare how much exhaustive work each branch completed within the budget.
-- Verify the checked-in stress-fixture calibration independently from the
-  reporting implementation before collecting each branch's one suite run.
+- Recalibrate and verify the stress fixtures through the production Bayesian
+  evaluator before treating new suite runs as demonstration data.
 
 ## Deferred
 

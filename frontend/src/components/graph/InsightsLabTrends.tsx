@@ -659,7 +659,15 @@ function formatWholeNumberDetail(value: string): string {
 }
 
 function solverProofLabel(run: TrendRun): string {
-  if (run.solverKind === 'greedy') return 'No minimum proof attempted'
+  if (run.solverKind === 'greedy') {
+    if (run.source.details?.thresholdReached === true) {
+      return 'Usable set found; minimum not proven'
+    }
+    if (run.source.details?.thresholdReached === false) {
+      return 'No qualifying set found'
+    }
+    return 'No minimum proof attempted'
+  }
   if (run.timedOut) return 'Not established (stopped)'
   const proofStatus = String(
     run.source.outcome?.proofStatus
@@ -1518,7 +1526,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
               <div>
                 <dt>What the solvers establish</dt>
                 <dd>
-                  Greedy quickly finds a usable counter set, but does not prove that it is the smallest one. The time-bounded exhaustive reference searches by set size to try to prove a minimum. This describes the current reference implementation, not a claim that every possible exact method must perform the same search.
+                  Greedy quickly searches for a usable counter set; when it finds one, it does not prove that it is the smallest. The time-bounded exhaustive reference searches by set size to try to prove a minimum. This describes the current reference implementation, not a claim that every possible exact method must perform the same search.
                 </dd>
               </div>
               <div>
@@ -1879,7 +1887,11 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
                             </td>
                             <td>{solverProofLabel(run)}</td>
                             <td>{formatIntegerDetail(candidateCount)}</td>
-                            <td>{formatIntegerDetail(subsetEvaluations)}</td>
+                            <td>
+                              {run.solverKind === 'exhaustive'
+                                ? formatIntegerDetail(subsetEvaluations)
+                                : '—'}
+                            </td>
                             <td className="insights-lab-trends__frontier-cell">{solverFrontierLabel(run)}</td>
                             <td>{run.solverKind === 'exhaustive' ? formatMaximumSubsetSpacePercent(run) : '—'}</td>
                             <td>#{run.runNumber}</td>

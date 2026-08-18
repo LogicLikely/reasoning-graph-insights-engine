@@ -485,8 +485,8 @@ describe('InsightsLabDialog', () => {
     ['Minimal counter set', /most promising counters first/i],
     ['Time-bounded exhaustive search', /every counter-set method must enumerate combinations/i],
     ['Evidence impact ranking', /not whether a piece of evidence is true/i],
-    ['Least robust node', /returns the node with the largest change/i],
-    ['Robustness ranking', /orders the results from least to most robust/i],
+    ['Least robust node', /removing each downstream piece.*one at a time/i],
+    ['Robustness ranking', /one-at-a-time downstream evidence test/i],
     ['Leaf update', /highest-ID node is treated as a likely leaf/i],
   ])('explains %s in a click-triggered information panel', async (title, expectedCopy) => {
     const onClose = vi.fn()

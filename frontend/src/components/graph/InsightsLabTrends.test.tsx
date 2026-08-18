@@ -53,7 +53,7 @@ function performanceRun({
     algorithm: {
       name: algorithmName,
       implementation,
-      calculationModel: 'graph-likelihood-calculator',
+      calculationModel: 'graph-posterior-odds-calculator',
     },
     graph: { slug, type: shape, nodeCount },
     timing: {
@@ -203,6 +203,7 @@ describe('InsightsLabTrends', () => {
       implementation: 'greedy',
       computeMilliseconds: 12,
     })
+    greedyOneThousand.details = { thresholdReached: true }
     const exhaustiveOneThousand = performanceRun({
       runNumber: 22,
       implementation: 'time-bounded-exhaustive',
@@ -224,6 +225,7 @@ describe('InsightsLabTrends', () => {
       nodeCount: 10_000,
       computeMilliseconds: 18,
     })
+    greedyTenThousand.details = { thresholdReached: false }
     const stoppedExhaustive = performanceRun({
       runNumber: 24,
       implementation: 'time-bounded-exhaustive',
@@ -283,6 +285,12 @@ describe('InsightsLabTrends', () => {
     expect(within(table).getByRole('row', {
       name: /Time-bounded exhaustive 1,000 .*No qualifying set exists \(proven\)/,
     })).toBeInTheDocument()
+    expect(within(table).getByRole('row', {
+      name: /Greedy 1,000 .*Usable set found; minimum not proven/,
+    })).toBeInTheDocument()
+    expect(within(table).getByRole('row', {
+      name: /Greedy 10,000 .*No qualifying set found/,
+    })).toBeInTheDocument()
     expect(stoppedRow).toHaveTextContent('33')
     expect(stoppedRow).toHaveTextContent('1,234,567')
     expect(stoppedRow).toHaveTextContent('fully exhausted through size 8; size 9: 234,567 of 1,307,504')
@@ -291,7 +299,7 @@ describe('InsightsLabTrends', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'How to read' }))
     const guide = screen.getByRole('region', { name: 'How to read this chart' })
-    expect(guide).toHaveTextContent(/Greedy quickly finds a usable counter set.*does not prove/i)
+    expect(guide).toHaveTextContent(/Greedy quickly searches for a usable counter set.*does not prove/i)
     expect(guide).toHaveTextContent(/current reference implementation.*not a claim/i)
     expect(guide).toHaveTextContent(/right-censored/i)
     expect(guide).toHaveTextContent(/% of maximum subset space/i)

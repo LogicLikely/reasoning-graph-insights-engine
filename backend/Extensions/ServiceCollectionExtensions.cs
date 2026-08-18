@@ -24,7 +24,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<GraphBayesFactorPruner>();
         services.AddSingleton<GraphBayesFactorCalculator>();
         services.AddSingleton<GraphPosteriorOddsCalculator>();
-        services.AddSingleton<IMinimalCounterSetEvaluator, LegacyMinimalCounterSetEvaluator>();
+        services.AddSingleton<IMinimalCounterSetEvaluator, BayesianMinimalCounterSetEvaluator>();
         services.AddSingleton<GreedyMinimalCounterSetSolver>();
         services.AddSingleton<BoundedBruteForceMinimalCounterSetSolver>();
         services.AddSingleton<IPerformanceRunStore>(serviceProvider =>

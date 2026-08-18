@@ -1,4 +1,3 @@
-using System.Net.Mime;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 
@@ -24,6 +23,8 @@ public sealed class GraphLikelihoodCalculator
 {
     private const decimal MinLogOdds = -100m;
     private const decimal MaxLogOdds = 100m;
+    private static readonly GraphPosteriorOddsCalculator PosteriorOddsCalculator =
+        new();
 
     public Dictionary<string, decimal> RecalculateAncestors(
         GraphCalculationContext context,
@@ -365,54 +366,17 @@ public sealed class GraphLikelihoodCalculator
                 : maximumLogPaths[id]!.Value);
     }
 
-    // Returns supporting and counter evidence ranked by their impact (difference in posterior odds when removed vs. present).
+    // Compatibility entry point for callers of the former LR implementation.
+    // The calculation itself now performs BF pruning and leave-one-out BF runs.
     public EvidenceImpactRankingDto GetEvidenceImpactRanking(
         Graph graph,
         string targetClaimId,
         CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var context = GraphCalculationContext.From(graph.Nodes, graph.Edges);
-
-        if (!context.NodesById.ContainsKey(targetClaimId))
-        {
-            throw new InvalidOperationException(
-                $"Target node '{targetClaimId}' does not exist in the calculation context.");
-        }
-
-        var evidenceLogLrs = GetDownstreamEvidenceLogLRs(context, targetClaimId);
-        var posteriorLogOddsWithAllEvidence = CalculateNodeLogPosteriorOdds(context, targetClaimId);
-        var probabilityWithAllEvidence = LogOddsToProbability(posteriorLogOddsWithAllEvidence);
-
-        EvidenceImpactDto ToImpact(KeyValuePair<string, decimal> entry)
-        {
-            var posteriorLogOddsWithoutEvidence = posteriorLogOddsWithAllEvidence - entry.Value;
-            var probabilityWithoutEvidence = LogOddsToProbability(posteriorLogOddsWithoutEvidence);
-
-            return new EvidenceImpactDto
-            {
-                NodeId = entry.Key,
-                LogLr = entry.Value,
-                ProbabilityDifference = probabilityWithAllEvidence - probabilityWithoutEvidence
-            };
-        }
-
-        return new EvidenceImpactRankingDto
-        {
-            SupportingEvidence = evidenceLogLrs
-                .Where(entry => entry.Value > 0m)
-                .Select(ToImpact)
-                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
-                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
-                .ToList(),
-            CounterEvidence = evidenceLogLrs
-                .Where(entry => entry.Value < 0m)
-                .Select(ToImpact)
-                .OrderByDescending(impact => Math.Abs(impact.ProbabilityDifference))
-                .ThenBy(impact => impact.NodeId, StringComparer.Ordinal)
-                .ToList()
-        };
+        return PosteriorOddsCalculator.GetEvidenceImpactRanking(
+            graph,
+            targetClaimId,
+            cancellationToken);
     }
 
     private static double LogOddsToProbability(decimal logOdds)

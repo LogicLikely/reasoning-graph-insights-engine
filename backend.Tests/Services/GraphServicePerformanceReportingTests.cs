@@ -17,9 +17,15 @@ public sealed class GraphServicePerformanceReportingTests
     {
         var graph = GraphWith(
             [
-                Node("R", 5m, "root"),
-                Node("O1", kind: "objection"),
-                Node("O2", kind: "objection")
+                Node("R", 0.2m, "root"),
+                Node(
+                    "O1",
+                    kind: "objection",
+                    posteriorOdds: (decimal)Math.Log(100d)),
+                Node(
+                    "O2",
+                    kind: "objection",
+                    posteriorOdds: (decimal)Math.Log(100d))
             ],
             [
                 Edge("E-O1-R", "O1", "R", "rebut", 0.1m),
@@ -42,7 +48,7 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual(1L, run.RunNumber);
         Assert.AreEqual(PerformanceAlgorithmNames.MinimalCounterSet, run.Algorithm.Name);
         Assert.AreEqual(PerformanceAlgorithmImplementations.Greedy, run.Algorithm.Implementation);
-        Assert.AreEqual("graph-likelihood-calculator", run.Algorithm.CalculationModel);
+        Assert.AreEqual("graph-posterior-odds-calculator", run.Algorithm.CalculationModel);
         Assert.AreEqual("database", run.Invocation.DataSource);
         Assert.AreEqual("R", run.Invocation.TargetNodeId);
         Assert.AreEqual(PerformanceRunStatuses.Completed, run.Outcome.Status);
@@ -91,6 +97,9 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual(
             PerformanceAlgorithmImplementations.TimeBoundedExhaustive,
             run.Algorithm.Implementation);
+        Assert.AreEqual(
+            "graph-posterior-odds-calculator",
+            run.Algorithm.CalculationModel);
         Assert.AreEqual(PerformanceRunStatuses.Completed, run.Outcome.Status);
         Assert.AreEqual(
             BoundedBruteForceMinimalCounterSetSolver.TimeBudgetMilliseconds,
@@ -160,6 +169,9 @@ public sealed class GraphServicePerformanceReportingTests
         Assert.AreEqual(
             PerformanceAlgorithmImplementations.TimeBoundedExhaustive,
             run.Algorithm.Implementation);
+        Assert.AreEqual(
+            "graph-posterior-odds-calculator",
+            run.Algorithm.CalculationModel);
         Assert.AreEqual(PerformanceRunStatuses.TimedOut, run.Outcome.Status);
         Assert.AreEqual(0, run.Outcome.ResultCount);
         Assert.IsNotNull(run.Outcome.ResultDigest);
@@ -375,8 +387,10 @@ public sealed class GraphServicePerformanceReportingTests
         var counterPreview = evidenceRun.Details["counterPreview"]!.AsArray();
         Assert.AreEqual(1, supportingPreview.Count);
         Assert.AreEqual("E1", supportingPreview[0]!["nodeId"]!.GetValue<string>());
+        Assert.IsNotNull(supportingPreview[0]!["targetLogOddsImpact"]);
         Assert.AreEqual(1, counterPreview.Count);
         Assert.AreEqual("O1", counterPreview[0]!["nodeId"]!.GetValue<string>());
+        Assert.IsNotNull(counterPreview[0]!["targetLogOddsImpact"]);
 
         var leastRobustRun = store.Runs[1];
         AssertCommonCalculationRun(
@@ -659,7 +673,7 @@ public sealed class GraphServicePerformanceReportingTests
     {
         Assert.AreEqual(algorithmName, run.Algorithm.Name);
         Assert.AreEqual(PerformanceAlgorithmImplementations.Current, run.Algorithm.Implementation);
-        Assert.AreEqual("graph-likelihood-calculator", run.Algorithm.CalculationModel);
+        Assert.AreEqual("graph-posterior-odds-calculator", run.Algorithm.CalculationModel);
         Assert.AreEqual("database", run.Invocation.DataSource);
         Assert.AreEqual(graph.Slug, run.Graph.Slug);
         Assert.AreEqual(graph.Nodes.Count, run.Graph.NodeCount);
@@ -738,7 +752,8 @@ public sealed class GraphServicePerformanceReportingTests
         IPerformanceRunStore store)
     {
         var calculator = new GraphLikelihoodCalculator();
-        var evaluator = new LegacyMinimalCounterSetEvaluator(calculator);
+        var evaluator = new BayesianMinimalCounterSetEvaluator(
+            new GraphPosteriorOddsCalculator());
         return new GraphService(
             repository,
             calculator,
@@ -762,14 +777,17 @@ public sealed class GraphServicePerformanceReportingTests
     {
         var nodes = new List<GraphNode>
         {
-            Node("R", 50m, "root")
+            Node("R", 3m, "root")
         };
         var edges = new List<GraphEdge>();
 
         for (var index = 0; index < 21; index++)
         {
             var nodeId = $"O{index:00}";
-            nodes.Add(Node(nodeId, kind: "objection"));
+            nodes.Add(Node(
+                nodeId,
+                kind: "objection",
+                posteriorOdds: (decimal)Math.Log(100d)));
             edges.Add(Edge($"E-{nodeId}-R", nodeId, "R", "rebut", 0.1m));
         }
 
@@ -793,7 +811,8 @@ public sealed class GraphServicePerformanceReportingTests
     private static GraphNode Node(
         string id,
         decimal logOdds = 0m,
-        string kind = "claim")
+        string kind = "claim",
+        decimal? posteriorOdds = null)
     {
         return new GraphNode
         {
@@ -802,7 +821,7 @@ public sealed class GraphServicePerformanceReportingTests
             Title = id,
             BodyText = id,
             PriorOdds = logOdds,
-            PosteriorOdds = logOdds
+            PosteriorOdds = posteriorOdds ?? logOdds
         };
     }
 

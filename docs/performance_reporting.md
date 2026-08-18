@@ -8,18 +8,20 @@ Open **Insights Lab** from the Graph Overview panel. The **Run** tab creates or 
 
 | Lab action | Recorded operation |
 | --- | --- |
-| Minimal counter set | Greedy minimal counter set for the benchmark target |
-| Time-bounded exhaustive search | Exhaustive minimum-cardinality counter-set search for the benchmark target, with a fixed server-owned time budget |
-| Evidence impact ranking | Evidence-impact ranking for the benchmark target |
-| Least robust node | Least robust node in the graph |
-| Robustness ranking | Full node-robustness ranking |
+| Minimal counter set | Greedy counter-set search using the target's Bayesian-factor-derived posterior odds |
+| Time-bounded exhaustive search | Exhaustive minimum-cardinality counter-set search against the same Bayesian-factor objective, with a fixed server-owned time budget |
+| Evidence impact ranking | Leave-one-evidence-out Bayesian-factor ranking for the benchmark target |
+| Least robust node | Node with the greatest Bayesian-factor-derived probability sensitivity to removing one downstream evidence or objection |
+| Robustness ranking | Full ranking by that one-at-a-time evidence-removal sensitivity |
 | Leaf update | Reapply the current `priorOdds` to the ordinal-highest node, then recalculate and persist that node and its ancestors |
 
 Minimal counter set, time-bounded exhaustive search, and evidence impact ranking always use the graph's deterministic root node, independent of the node selected on the canvas. Stress graphs use the shared root ID `n-00000`, which keeps the target stable across graph sizes, shapes, and benchmark sets. The two robustness operations use the entire active graph. Fixture graphs support all five read-only operations; Leaf update is database-only.
 
+The read-only analyses use the pruned Bayesian-factor/posterior-odds model. Evidence impact recalculates the target after removing each reachable evidence or objection node in turn. Robustness performs the same one-at-a-time removal experiment for every possible target, records the largest absolute probability change for each target, and reports `exp(-change)` as its robustness score. These values describe sensitivity inside the current model; they do not establish truth or evidence quality.
+
 The Lab deliberately chooses the ordinal-highest node for the leaf-update workload and tolerates that node not being a leaf. It reapplies the current value so the full update/recalculation/persistence path is measured without intentionally changing graph state. The report records whether the node was actually a leaf, the old and new values, affected-node count, maximum ancestor distance, and persisted-row count. Ordinary database edits that include `priorOdds` continue to create leaf-update records as well.
 
-The Lab offers best-effort request cancellation for the greedy, exhaustive, and robustness operations. Evidence-impact and leaf-update runs do not expose Cancel because their current backend work cannot be stopped reliably and safely mid-operation. Request cancellation is distinct from the exhaustive search's expected time-budget outcome.
+The Lab offers best-effort request cancellation for the greedy, exhaustive, and robustness operations. Evidence-impact and leaf-update runs do not currently expose Cancel. Request cancellation is distinct from the exhaustive search's expected time-budget outcome.
 
 ## Standard stress suite
 
@@ -29,33 +31,30 @@ The canonical matrix contains 100, 1,000, 10,000, and 100,000-node versions of e
 
 Each graph-and-operation combination is executed and recorded once. No hidden warm-up runs or repetitions are added. Consequently, fixed-order cold-start and cache effects can remain visible in the data; warm-up policy is intentionally deferred.
 
-The exhaustive operation has a two-minute compute budget per graph. With the nine 1K-and-larger balanced, wide, and shared-diamond graphs, its portion of a suite can therefore take up to about 18 minutes, plus the three completing 100-node searches, the other operations, and graph-loading overhead. A time-budget result is an expected completed request, so the suite records it and continues.
+The exhaustive operation has a two-minute compute budget per graph. Until the Bayesian workload is recalibrated, allow for any installed graph—including a 100-node graph—to consume that full budget. Nine installed graphs can therefore spend up to about 18 minutes in exhaustive search; all 12 can spend up to about 24 minutes, plus the other operations and graph-loading overhead. A time-budget result is an expected completed request, so the suite records it and continues.
 
-## Minimal-counter benchmark workload
+## Legacy minimal-counter seed calibration (pending Phase 2)
 
-The non-deep stress graphs preserve their original topology, node kinds, and near-neutral `1.001`/`0.999` edge likelihood ratios. During seeding, only root and objection priors are solved against a checked-in workload contract:
+The checked-in non-deep stress graphs currently preserve their original topology, node kinds, and near-neutral `1.001`/`0.999` edge likelihood ratios. Their root and objection values were calibrated for the former additive likelihood-ratio evaluator:
 
 - the root begins at log odds `0.200` (about 55% probability);
 - every objection contributes `-0.160` log odds at the root;
 - seven objections leave the target at `-0.920`, above the `-1` cutoff;
 - eight objections move it to `-1.080`, so the global minimum cardinality is eight.
 
-On the conditional-probability schema, the legacy path analytics derive each
-edge likelihood ratio as `P(child | parent) / P(child | not parent)`. Authored
-evidence posteriors remain unchanged. Calibrated stress-graph objections are a
-deliberate fixture-only exception to the usual neutral-prior convention: their
-prior and posterior are shifted together so the authored local Bayes-factor
-delta is preserved. The seed update touches only the root and objections.
+On the conditional-probability schema, those legacy path analytics derive each edge likelihood ratio as `P(child | parent) / P(child | not parent)`. Authored evidence posteriors remain unchanged. Calibrated stress-graph objections are a deliberate fixture-only exception to the usual neutral-prior convention: their prior and posterior are shifted together so the authored local Bayes-factor delta is preserved. The seed update touches only the root and objections.
 
-This gives every standard graph a usable greedy result while holding the logical counter-set problem constant. The candidate universe still grows with graph size: 10, 100, 1,000, and 10,000 objections. The 100-node exhaustive runs can prove the eight-node minimum after 969 subset evaluations; the larger tiers expose the combinatorial search boundary under the fixed time budget.
+That calibration does not yet guarantee the same eight-counter result through the production Bayesian-factor path. Bayesian pruning and nonlinear edge transforms can change both individual counter impact and interaction among counters. Consequently, the former claims that every standard graph has a usable eight-node greedy result and that each 100-node exhaustive run proves it after 969 subset evaluations are legacy reference expectations, not current production guarantees.
 
-The executable calibration check builds all three 100-node shapes in memory, runs both solvers, verifies the proven eight-node result, and prints the complete standard workload matrix without writing performance records:
+The existing executable calibration check builds all three 100-node shapes in memory and verifies the legacy evaluator/solver contract without writing performance records:
 
 ```bash
 dotnet test backend.Tests/backend.Tests.csproj \
   --filter FullyQualifiedName~StressGraphBenchmarkContractTests \
   --logger "console;verbosity=detailed"
 ```
+
+Phase 2 will recalibrate the reset data through the same Bayesian evaluator used by the service and replace this legacy-only check with a service-representative workload contract before new comparison runs are treated as demonstration data. Until then, the command above is useful for detecting changes to the old calibration only; it does not validate production Bayesian counter-set behavior.
 
 If one request fails, the suite continues with the remaining combinations and lists the affected graph and operation in its final summary. The corresponding backend report appears in History when reporting reached the persistence stage.
 
@@ -122,7 +121,7 @@ Graph size always uses a logarithmic X-axis. The Y-axis can use linear spacing f
 
 ## Time-bounded exhaustive proof semantics
 
-The exhaustive reference operation searches every reachable counter candidate; it no longer truncates the candidate universe. Candidates are ordered deterministically by greedy priority and then node ID, and subsets are considered in increasing cardinality. The backend owns one fixed 120,000 ms compute budget. The budget starts before problem preparation and has no Lab control.
+The exhaustive reference operation searches every reachable objection candidate against the same Bayesian-factor target calculation used by the greedy operation; it does not truncate the candidate universe. Subsets are considered in increasing cardinality, with a stable node-ID order inside each cardinality. The backend owns one fixed 120,000 ms compute budget. The budget starts before problem preparation and has no Lab control.
 
 - If a threshold-crossing subset is found, all smaller cardinalities have already been exhausted, so the returned set has proven minimum cardinality (`proofStatus: proven`, `stopReason: completed`).
 - If the initial target already meets the threshold, the empty set is globally minimal and is immediately proven.
@@ -149,7 +148,7 @@ For each algorithm and graph combination:
    Release is recommended, not required. The report records the configuration that actually ran, so Debug results remain identifiable.
 
 2. Select or create the intended benchmark set in the Lab.
-3. Execute each measured operation one at a time, or use **Run standard stress suite** for the installed balanced, wide, and shared-diamond stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up. With all 12 standard graphs installed, allow roughly 18 minutes for the nine 1K-and-larger exhaustive attempts if they all consume their full two-minute budget; the three 100-node exhaustive runs are designed to complete.
+3. Execute each measured operation one at a time, or use **Run standard stress suite** for the installed balanced, wide, and shared-diamond stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up. Before Phase 2 recalibrates and validates the Bayesian workload, budget up to two minutes of exhaustive search for every installed graph (up to about 24 minutes for all 12 graphs).
 4. If repetitions are useful, keep the graph, canonical target, and inputs unchanged. Trends retains the raw runs and plots the selected metric's median with the sample count.
 
 The Lab's same-value leaf update does not require restoration. If benchmarking an ordinary value-changing likelihood edit instead, restore the leaf to the same starting likelihood before every measured edit. A restoration performed through the application creates another recorded run and must be excluded from the comparison.
