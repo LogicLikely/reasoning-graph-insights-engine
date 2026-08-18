@@ -23,6 +23,10 @@
 5. Use the deterministic graph root for counter-set and evidence-impact runs.
    Exclude pathological deep-chain graphs from the standard suite while
    leaving them available for deliberate individual runs.
+6. Add a 100-node balanced, wide, and shared-diamond tier and calibrate every
+   non-deep stress graph to the same counter-set workload: initial root log
+   odds `0.200`, per-objection contribution `-0.160`, and proven minimum
+   cardinality eight. Preserve topology, node kinds, and edge likelihoods.
 
 ## Current exhaustive-reference design
 
@@ -57,13 +61,11 @@
 - Treat timed-out chart points as right-censored lower bounds, never as ordinary
   two-minute completions. Use subset count and cardinality-frontier details to
   compare how much exhaustive work each branch completed within the budget.
-- Keep stress-fixture likelihood calibration as a separate follow-up phase so
-  algorithm/reporting changes and dataset changes can be reviewed independently.
+- Verify the checked-in stress-fixture calibration independently from the
+  reporting implementation before collecting each branch's one suite run.
 
 ## Deferred
 
-- Stress-fixture likelihood calibration for the intended greedy-versus-
-  exhaustive demonstration.
 - Hidden warm-up orchestration or repeated-run statistics.
 - User-configurable time budgets or candidate limits.
 - Peak/native-memory profiling and automatic cross-client concurrency control.

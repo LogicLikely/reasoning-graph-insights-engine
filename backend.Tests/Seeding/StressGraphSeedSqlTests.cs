@@ -4,6 +4,31 @@ namespace backend.Tests.Seeding;
 public class StressGraphSeedSqlTests
 {
     [TestMethod]
+    public void Sql_CalibratesEveryNonDeepRootAndObjectionFromNamedParameters()
+    {
+        var sql = ReadSeedSql();
+
+        StringAssert.Contains(sql, "@InitialTargetLogOdds");
+        StringAssert.Contains(sql, "@EffectiveCounterContributionLogOdds");
+        StringAssert.Contains(sql, "), counter_paths_to_root AS (");
+        StringAssert.Contains(sql, "), calibrated_nodes AS (");
+        StringAssert.Contains(sql, "LEFT JOIN contributions");
+        StringAssert.Contains(sql, "LEFT JOIN counter_paths_to_root");
+        StringAssert.Contains(
+            sql,
+            "COALESCE(contributions.total_log_likelihood, 0)");
+        StringAssert.Contains(
+            sql,
+            "AND @Shape IN ('balanced', 'wide', 'shared-diamond')");
+        StringAssert.Contains(
+            sql,
+            "prior_odds = calibrated_nodes.calibrated_prior_odds");
+        StringAssert.Contains(
+            sql,
+            "posterior_odds = calibrated_nodes.calibrated_posterior_odds");
+    }
+
+    [TestMethod]
     public void Sql_MapsCorpusFieldsAndCyclesEveryTenThousandNodes()
     {
         var sql = File.ReadAllText(Path.Combine(

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GraphFixture } from '../../fixtures/sampleGraph'
+import { STRESS_GRAPH_OPTIONS } from '../../services/stressGraphs'
 import { InsightsLabDialog } from './InsightsLabDialog'
 
 const serviceMocks = vi.hoisted(() => ({
@@ -748,6 +749,9 @@ describe('InsightsLabDialog', () => {
 
   it('runs every operation sequentially for each installed standard stress graph and refreshes history', async () => {
     const sequence: string[] = []
+    const standardGraphOptions = STRESS_GRAPH_OPTIONS.filter(
+      ({ id }) => !id.startsWith('stress-deep-'),
+    )
     let releaseFirstRun!: () => void
     const firstRun = new Promise<void>((resolve) => {
       releaseFirstRun = resolve
@@ -780,12 +784,19 @@ describe('InsightsLabDialog', () => {
     })
     serviceMocks.getGraphBySlug.mockImplementation(async (slug: string) => {
       sequence.push(`${slug}:load`)
+      const highestNodeId = slug.endsWith('-100k')
+        ? 'n-99999'
+        : slug.endsWith('-10k')
+          ? 'n-09999'
+          : slug.endsWith('-1k')
+            ? 'n-00999'
+            : 'n-00099'
       return {
         ...graph,
         slug,
         nodes: [
           { ...graph.nodes[0], id: 'n-00000' },
-          { ...graph.nodes[1], id: 'n-00999', priorOdds: 4.5 },
+          { ...graph.nodes[1], id: highestNodeId, priorOdds: 4.5 },
         ],
       }
     })
@@ -798,7 +809,7 @@ describe('InsightsLabDialog', () => {
       <InsightsLabDialog
         graph={{ ...graph, slug: 'stress-balanced-1k' }}
         graphDataSource="database"
-        installedStressGraphIds={['stress-wide-1k', 'stress-deep-1k', 'stress-balanced-1k']}
+        installedStressGraphIds={STRESS_GRAPH_OPTIONS.map(({ id }) => id)}
         isOpen
         onClose={vi.fn()}
         onGraphUpdated={onGraphUpdated}
@@ -806,43 +817,41 @@ describe('InsightsLabDialog', () => {
     )
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
 
-    expect(screen.getByText(/2 installed standard database stress graphs \(12 planned runs\)/)).toBeInTheDocument()
+    expect(screen.getByText(/12 installed standard database stress graphs \(72 planned runs\)/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Run standard stress suite' }))
-    expect(await screen.findByText(/1 of 12 · Balanced tree \(1,000 nodes\) · Minimal counter set/)).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 72 · Balanced tree \(100 nodes\) · Minimal counter set/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Stop suite' })).toBeInTheDocument()
     releaseFirstRun()
 
     expect(await screen.findByText('Standard stress suite complete')).toBeInTheDocument()
-    expect(screen.getByText(/12 requests completed/)).toBeInTheDocument()
+    expect(screen.getByText(/72 requests completed/)).toBeInTheDocument()
     expect(screen.getByText('Standard stress suite complete').closest('[role="status"]')).toHaveFocus()
-    expect(sequence).toEqual([
-      'stress-balanced-1k:minimal',
-      'stress-balanced-1k:bounded',
-      'stress-balanced-1k:evidence',
-      'stress-balanced-1k:least',
-      'stress-balanced-1k:ranking',
-      'stress-balanced-1k:load',
-      'stress-balanced-1k:leaf',
-      'stress-wide-1k:minimal',
-      'stress-wide-1k:bounded',
-      'stress-wide-1k:evidence',
-      'stress-wide-1k:least',
-      'stress-wide-1k:ranking',
-      'stress-wide-1k:load',
-      'stress-wide-1k:leaf',
-    ])
+    expect(sequence).toEqual(standardGraphOptions.flatMap(({ id }) => [
+      `${id}:minimal`,
+      `${id}:bounded`,
+      `${id}:evidence`,
+      `${id}:least`,
+      `${id}:ranking`,
+      `${id}:load`,
+      `${id}:leaf`,
+    ]))
     expect(serviceMocks.getNodeCounterSet.mock.calls.map((call) => call.slice(0, 3))).toEqual([
-      ['stress-balanced-1k', 'n-00000', 'database'],
-      ['stress-wide-1k', 'n-00000', 'database'],
+      ...standardGraphOptions.map(({ id }) => [id, 'n-00000', 'database']),
     ])
-    expect(serviceMocks.getGraphBySlug.mock.calls).toEqual([
-      ['stress-balanced-1k', 'database'],
-      ['stress-wide-1k', 'database'],
-    ])
+    expect(serviceMocks.getGraphBySlug.mock.calls).toEqual(
+      standardGraphOptions.map(({ id }) => [id, 'database']),
+    )
     expect(serviceMocks.updateNode).toHaveBeenNthCalledWith(
       1,
-      'stress-balanced-1k',
-      'n-00999',
+      'stress-balanced-100',
+      'n-00099',
+      { priorOdds: 4.5 },
+      benchmarkSet.id,
+    )
+    expect(serviceMocks.updateNode).toHaveBeenNthCalledWith(
+      12,
+      'stress-shared-diamond-100k',
+      'n-99999',
       { priorOdds: 4.5 },
       benchmarkSet.id,
     )

@@ -148,6 +148,55 @@ async function selectMetric(label: string) {
 }
 
 describe('InsightsLabTrends', () => {
+  it('recognizes the 100-node tier and orders it before the larger graph sizes', () => {
+    render(
+      <InsightsLabTrends
+        benchmarkSets={benchmarkSets}
+        runs={[
+          performanceRun({
+            runNumber: 1,
+            implementation: 'greedy',
+            slug: 'stress-balanced-100',
+            shape: '',
+            nodeCount: 100,
+            computeMilliseconds: 4,
+          }),
+          performanceRun({
+            runNumber: 2,
+            implementation: 'time-bounded-exhaustive',
+            slug: 'stress-balanced-100',
+            shape: '',
+            nodeCount: 100,
+            computeMilliseconds: 40,
+          }),
+          performanceRun({ runNumber: 3, implementation: 'greedy' }),
+          performanceRun({
+            runNumber: 4,
+            implementation: 'time-bounded-exhaustive',
+            computeMilliseconds: 120_000,
+            status: 'timedOut',
+          }),
+        ]}
+      />,
+    )
+
+    const graphSizes = screen.getByRole('group', { name: 'Graph sizes' })
+    expect(within(graphSizes).getAllByRole('checkbox').map((checkbox) => (
+      checkbox.parentElement?.textContent
+    ))).toEqual(['100 nodes', '1,000 nodes'])
+
+    const chart = screen.getByRole('img')
+    expect(within(chart).getByText(
+      'Greedy, 100 nodes: 4 ms, raw run #1',
+      { selector: 'title' },
+    )).toBeInTheDocument()
+    expect(within(chart).getByText(
+      'Time-bounded exhaustive, 100 nodes: 40 ms, raw run #2',
+      { selector: 'title' },
+    )).toBeInTheDocument()
+    expect(screen.getByText('Each point is one raw run; no averaging is applied.')).toBeInTheDocument()
+  })
+
   it('compares greedy and exhaustive raw runs and renders a timeout as a right-censored lower bound', () => {
     const greedyOneThousand = performanceRun({
       runNumber: 21,

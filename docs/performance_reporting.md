@@ -25,9 +25,30 @@ The Lab offers best-effort request cancellation for the greedy, exhaustive, and 
 
 **Run standard stress suite** executes all six operations against every currently installed balanced, wide, and shared-diamond database stress graph. Deep-chain graphs are intentionally excluded because their pathological depth can make operations extremely slow or terminate the backend; they remain available for deliberate individual runs. Included graphs follow the canonical order shown by the database-reset UI, and operations run sequentially, graph by graph, with Leaf update last. Every request uses the benchmark set selected when the suite starts. The suite does not render each graph and never overlaps its own requests.
 
+The canonical matrix contains 100, 1,000, 10,000, and 100,000-node versions of each included shape. With all optional graphs installed, that is 12 graphs and 72 recorded operations. The 100-node graphs are generated from the same deterministic node and edge rules as the larger tiers; their derived likelihoods are recalculated for the smaller graph rather than copied from a larger stored graph.
+
 Each graph-and-operation combination is executed and recorded once. No hidden warm-up runs or repetitions are added. Consequently, fixed-order cold-start and cache effects can remain visible in the data; warm-up policy is intentionally deferred.
 
-The exhaustive operation has a two-minute compute budget per graph. With the nine standard balanced, wide, and shared-diamond graphs, its portion of a suite can therefore take up to about 18 minutes, plus the other operations and graph-loading overhead. A time-budget result is an expected completed request, so the suite records it and continues.
+The exhaustive operation has a two-minute compute budget per graph. With the nine 1K-and-larger balanced, wide, and shared-diamond graphs, its portion of a suite can therefore take up to about 18 minutes, plus the three completing 100-node searches, the other operations, and graph-loading overhead. A time-budget result is an expected completed request, so the suite records it and continues.
+
+## Minimal-counter benchmark workload
+
+The non-deep stress graphs preserve their original topology, node kinds, and near-neutral `1.001`/`0.999` edge likelihood ratios. During seeding, only root and objection priors are solved against a checked-in workload contract:
+
+- the root begins at log odds `0.200` (about 55% probability);
+- every objection contributes `-0.160` log odds at the root;
+- seven objections leave the target at `-0.920`, above the `-1` cutoff;
+- eight objections move it to `-1.080`, so the global minimum cardinality is eight.
+
+This gives every standard graph a usable greedy result while holding the logical counter-set problem constant. The candidate universe still grows with graph size: 10, 100, 1,000, and 10,000 objections. The 100-node exhaustive runs can prove the eight-node minimum after 969 subset evaluations; the larger tiers expose the combinatorial search boundary under the fixed time budget.
+
+The executable calibration check builds all three 100-node shapes in memory, runs both solvers, verifies the proven eight-node result, and prints the complete standard workload matrix without writing performance records:
+
+```bash
+dotnet test backend.Tests/backend.Tests.csproj \
+  --filter FullyQualifiedName~StressGraphBenchmarkContractTests \
+  --logger "console;verbosity=detailed"
+```
 
 If one request fails, the suite continues with the remaining combinations and lists the affected graph and operation in its final summary. The corresponding backend report appears in History when reporting reached the persistence stage.
 
@@ -121,7 +142,7 @@ For each algorithm and graph combination:
    Release is recommended, not required. The report records the configuration that actually ran, so Debug results remain identifiable.
 
 2. Select or create the intended benchmark set in the Lab.
-3. Execute each measured operation one at a time, or use **Run standard stress suite** for the installed balanced, wide, and shared-diamond stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up. Allow roughly 18 minutes for the nine exhaustive attempts if they all consume their full two-minute budget.
+3. Execute each measured operation one at a time, or use **Run standard stress suite** for the installed balanced, wide, and shared-diamond stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up. With all 12 standard graphs installed, allow roughly 18 minutes for the nine 1K-and-larger exhaustive attempts if they all consume their full two-minute budget; the three 100-node exhaustive runs are designed to complete.
 4. If repetitions are useful, keep the graph, canonical target, and inputs unchanged. Trends retains the raw runs and plots the selected metric's median with the sample count.
 
 The Lab's same-value leaf update does not require restoration. If benchmarking an ordinary value-changing likelihood edit instead, restore the leaf to the same starting likelihood before every measured edit. A restoration performed through the application creates another recorded run and must be excluded from the comparison.

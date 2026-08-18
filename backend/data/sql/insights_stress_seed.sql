@@ -1,7 +1,8 @@
 --
 -- Parameterized deterministic stress-graph generator.
 -- Expected Dapper parameters: GraphId, Slug, Title, Description, Shape,
--- NodeCount, CorpusJson, CorpusEntryCount.
+-- NodeCount, InitialTargetLogOdds, EffectiveCounterContributionLogOdds,
+-- CorpusJson, CorpusEntryCount.
 -- This script assumes insights_seed.sql has already rebuilt the base schema.
 --
 
@@ -477,6 +478,7 @@ WITH RECURSIVE active_paths AS (
 ), strongest_paths AS (
     SELECT
         ancestor_node_id,
+        active_node_id,
         CASE
             WHEN abs(minimum_path) > abs(maximum_path) THEN minimum_path
             ELSE maximum_path
@@ -488,22 +490,64 @@ WITH RECURSIVE active_paths AS (
         sum(path_log_likelihood) AS total_log_likelihood
     FROM strongest_paths
     GROUP BY ancestor_node_id
+), counter_paths_to_root AS (
+    SELECT
+        active_node_id,
+        path_log_likelihood
+    FROM strongest_paths
+    WHERE ancestor_node_id = 'n-00000'
+), calibrated_nodes AS (
+    -- Preserve topology and edge likelihood ratios while solving the two node
+    -- priors that define the minimal-counter-set benchmark. Every objection's
+    -- recalculated contribution at the root is identical, including leaf
+    -- objections that have no downstream contribution row.
+    SELECT
+        node.id,
+        CASE
+            WHEN node.id = 'n-00000' THEN
+                @InitialTargetLogOdds -
+                COALESCE(contributions.total_log_likelihood, 0)
+            WHEN node.kind = 'objection' THEN
+                @EffectiveCounterContributionLogOdds -
+                COALESCE(counter_paths_to_root.path_log_likelihood, 0) -
+                COALESCE(contributions.total_log_likelihood, 0)
+            ELSE node.prior_odds
+        END AS calibrated_prior_odds,
+        CASE
+            WHEN node.id = 'n-00000' THEN @InitialTargetLogOdds
+            WHEN node.kind = 'objection' THEN
+                @EffectiveCounterContributionLogOdds -
+                COALESCE(counter_paths_to_root.path_log_likelihood, 0)
+            ELSE greatest(
+                -100::double precision,
+                least(
+                    100::double precision,
+                    node.prior_odds +
+                    COALESCE(contributions.total_log_likelihood, 0)
+                )
+            )
+        END AS calibrated_posterior_odds
+    FROM public.nodes AS node
+    INNER JOIN public.graphs AS graph ON graph.id = node.graph_id
+    LEFT JOIN contributions
+        ON contributions.ancestor_node_id = node.id
+    LEFT JOIN counter_paths_to_root
+        ON counter_paths_to_root.active_node_id = node.id
+    WHERE graph.slug = @Slug
+      AND @Shape IN ('balanced', 'wide', 'shared-diamond')
 )
 UPDATE public.nodes AS node
 SET
-    posterior_odds = greatest(
-        -100::double precision,
-        least(
-            100::double precision,
-            node.prior_odds + COALESCE(contributions.total_log_likelihood, 0)
-        )
-    ),
+    prior_odds = calibrated_nodes.calibrated_prior_odds,
+    posterior_odds = calibrated_nodes.calibrated_posterior_odds,
     updated_at = TIMESTAMPTZ '2026-08-15 00:00:00+00'
-FROM public.graphs AS graph
-LEFT JOIN contributions ON true
-WHERE graph.slug = @Slug
-  AND node.graph_id = graph.id
-  AND contributions.ancestor_node_id = node.id;
+FROM calibrated_nodes
+WHERE node.id = calibrated_nodes.id
+  AND node.graph_id = (
+      SELECT id
+      FROM public.graphs
+      WHERE slug = @Slug
+  );
 
 SELECT pg_catalog.setval(
     pg_catalog.pg_get_serial_sequence('public.graphs', 'id'),

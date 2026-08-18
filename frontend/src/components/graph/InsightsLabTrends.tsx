@@ -213,7 +213,7 @@ function getShapeId(run: PerformanceRunRecord): string | undefined {
 
   const slug = run.graph?.slug
   if (!slug) return undefined
-  return slug.replace(/^stress-/, '').replace(/-(?:1k|10k|100k)$/i, '')
+  return slug.replace(/^stress-/, '').replace(/-(?:100|1k|10k|100k)$/i, '')
 }
 
 function getShapeLabel(shapeId: string): string {

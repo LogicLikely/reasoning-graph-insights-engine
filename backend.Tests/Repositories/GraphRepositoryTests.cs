@@ -406,8 +406,10 @@ public class GraphRepositoryTests
             var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
             var selected = new[]
             {
-                StressGraphSeedCatalog.All[0],
-                StressGraphSeedCatalog.All[11]
+                StressGraphSeedCatalog.All.Single(spec =>
+                    spec.Id == StressGraphSeedIds.Balanced1K),
+                StressGraphSeedCatalog.All.Single(spec =>
+                    spec.Id == StressGraphSeedIds.SharedDiamond100K)
             };
 
             await repository.ResetDatabaseAsync(selected, CancellationToken.None);
@@ -418,6 +420,12 @@ public class GraphRepositoryTests
             Assert.AreEqual(StressGraphSeedIds.Balanced1K, connection.ExecutedCommands[1].Parameters["Slug"]);
             Assert.AreEqual("balanced", connection.ExecutedCommands[1].Parameters["Shape"]);
             Assert.AreEqual(1_000, connection.ExecutedCommands[1].Parameters["NodeCount"]);
+            Assert.AreEqual(
+                StressGraphBenchmarkContract.InitialTargetLogOdds,
+                connection.ExecutedCommands[1].Parameters["InitialTargetLogOdds"]);
+            Assert.AreEqual(
+                StressGraphBenchmarkContract.EffectiveCounterContributionLogOdds,
+                connection.ExecutedCommands[1].Parameters["EffectiveCounterContributionLogOdds"]);
             Assert.AreEqual(10_000, connection.ExecutedCommands[1].Parameters["CorpusEntryCount"]);
             Assert.AreEqual(ValidStressCorpusJson.Value, connection.ExecutedCommands[1].Parameters["CorpusJson"]);
             Assert.AreEqual(14, connection.ExecutedCommands[2].Parameters["GraphId"]);
@@ -585,7 +593,9 @@ public class GraphRepositoryTests
         {
             File.WriteAllText(
                 Path.Combine(sqlDirectory, "insights_stress_seed.sql"),
-                "STRESS @GraphId @Slug @Title @Description @Shape @NodeCount @CorpusJson @CorpusEntryCount");
+                "STRESS @GraphId @Slug @Title @Description @Shape @NodeCount " +
+                "@InitialTargetLogOdds @EffectiveCounterContributionLogOdds " +
+                "@CorpusJson @CorpusEntryCount");
         }
 
         if (includeStressCorpus)
