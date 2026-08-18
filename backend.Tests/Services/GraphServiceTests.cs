@@ -251,6 +251,125 @@ public class GraphServiceTests
     }
 
     [TestMethod]
+    public async Task GetMinimalCounterSetAsync_UsesBfImpactToSelectStrongestCounterFirst()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        decimal counterLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = GraphWith(
+            [
+                Node("H", priorOdds: 0.2m),
+                Node("weak", kind: "objection", posteriorOdds: counterLogBayesFactor),
+                Node("strong", kind: "objection", posteriorOdds: counterLogBayesFactor)
+            ],
+            [
+                Edge(
+                    "E-weak-H",
+                    "weak",
+                    "H",
+                    "counter",
+                    0.25m,
+                    probabilityGivenParent: 0.2m,
+                    probabilityGivenNotParent: 0.8m),
+                Edge(
+                    "E-strong-H",
+                    "strong",
+                    "H",
+                    "counter",
+                    0.000000001m,
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m)
+            ]);
+
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .GetMinimalCounterSetAsync("sample-medium", "H", CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { "strong" }, result);
+    }
+
+    [TestMethod]
+    public async Task GetMinimalCounterSetAsync_AddsRankedCountersUntilBfLogOddsCrossThreshold()
+    {
+        var repositoryMock = new Mock<IGraphRepository>();
+        var graph = GraphWith(
+            [
+                Node("H", priorOdds: 0.4m),
+                Node("third", kind: "objection", posteriorOdds: 0.6m),
+                Node("second", kind: "objection", posteriorOdds: 0.7m),
+                Node("first", kind: "objection", posteriorOdds: 0.8m)
+            ],
+            [
+                Edge("E-third-H", "third", "H", "counter", 0.000000001m,
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m),
+                Edge("E-second-H", "second", "H", "counter", 0.000000001m,
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m),
+                Edge("E-first-H", "first", "H", "counter", 0.000000001m,
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m)
+            ]);
+
+        repositoryMock
+            .Setup(repository => repository.GetBySlugAsync(
+                "sample-medium",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(graph);
+
+        var result = await CreateService(repositoryMock.Object)
+            .GetMinimalCounterSetAsync("sample-medium", "H", CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { "first", "second" }, result);
+    }
+
+    [TestMethod]
+    public void GetNodeRobustnessRanking_UsesBfProbabilityImpactOfRemovingEvidence()
+    {
+        decimal evidenceLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = GraphWith(
+            [
+                Node("H", priorOdds: 0m, posteriorOdds: -90m),
+                Node(
+                    "E",
+                    kind: "evidence",
+                    posteriorOdds: evidenceLogBayesFactor)
+            ],
+            [
+                Edge(
+                    "E-E-H",
+                    "E",
+                    "H",
+                    "support",
+                    4m,
+                    probabilityGivenParent: 0.8m,
+                    probabilityGivenNotParent: 0.2m)
+            ]);
+
+        var result = CreateService(new Mock<IGraphRepository>().Object)
+            .GetNodeRobustnessRanking(graph);
+
+        decimal expectedTargetLogOdds = TransformLogBayesFactor(
+            evidenceLogBayesFactor,
+            0.8m,
+            0.2m);
+        double targetProbability =
+            1d / (1d + Math.Exp(-(double)expectedTargetLogOdds));
+        decimal expectedRobustness =
+            (decimal)Math.Exp(-Math.Abs(targetProbability - 0.5d));
+
+        CollectionAssert.AreEqual(
+            new[] { "H", "E" },
+            result.Select(entry => entry.NodeId).ToArray());
+        Assert.IsTrue(Approximately(result[0].Robustness, expectedRobustness));
+        Assert.AreEqual(1m, result[1].Robustness);
+    }
+
+    [TestMethod]
     public async Task AddNodeAsync_RootClaimResetsStalePosteriorToPrior()
     {
         var repositoryMock = new Mock<IGraphRepository>();
@@ -1001,16 +1120,16 @@ public class GraphServiceTests
         var graph = GraphWith(
             [
                 Node("R"),
-                Node("E1", kind: "evidence"),
-                Node("E2", kind: "evidence"),
-                Node("O1", kind: "objection"),
-                Node("O2", kind: "objection")
+                Node("E1", kind: "evidence", posteriorOdds: (decimal)Math.Log(2d)),
+                Node("E2", kind: "evidence", posteriorOdds: (decimal)Math.Log(4d)),
+                Node("O1", kind: "objection", posteriorOdds: (decimal)Math.Log(2d)),
+                Node("O2", kind: "objection", posteriorOdds: (decimal)Math.Log(4d))
             ],
             [
-                Edge("E-E1-R", "E1", "R", "support", 2m),
-                Edge("E-E2-R", "E2", "R", "support", 3m),
-                Edge("E-O1-R", "O1", "R", "rebut", 0.25m),
-                Edge("E-O2-R", "O2", "R", "rebut", 0.1m)
+                Edge("E-E1-R", "E1", "R", "support", 1m, 0.8m, 0.2m),
+                Edge("E-E2-R", "E2", "R", "support", 1m, 0.8m, 0.2m),
+                Edge("E-O1-R", "O1", "R", "rebut", 1m, 0.2m, 0.8m),
+                Edge("E-O2-R", "O2", "R", "rebut", 1m, 0.2m, 0.8m)
             ]);
 
         repositoryMock
@@ -1029,8 +1148,12 @@ public class GraphServiceTests
             result.CounterEvidence.Select(impact => impact.NodeId).ToArray());
         Assert.IsTrue(result.SupportingEvidence.All(impact => impact.ProbabilityDifference > 0d));
         Assert.IsTrue(result.CounterEvidence.All(impact => impact.ProbabilityDifference < 0d));
-        Assert.IsTrue(Approximately(result.SupportingEvidence[0].LogLr, (decimal)Math.Log(3d)));
-        Assert.IsTrue(Approximately(result.CounterEvidence[0].LogLr, (decimal)Math.Log(0.1d)));
+        decimal strongestImpact = TransformLogBayesFactor(
+            (decimal)Math.Log(4d),
+            0.8m,
+            0.2m);
+        Assert.IsTrue(Approximately(result.SupportingEvidence[0].LogLr, strongestImpact));
+        Assert.IsTrue(Approximately(result.CounterEvidence[0].LogLr, -strongestImpact));
     }
 
     [TestMethod]
@@ -1041,25 +1164,25 @@ public class GraphServiceTests
                 Node("A"),
                 Node("B1"),
                 Node("B2"),
-                Node("C1", kind: "evidence"),
-                Node("C2", kind: "objection"),
-                Node("C3", kind: "evidence")
+                Node("C1", kind: "evidence", posteriorOdds: (decimal)Math.Log(2d)),
+                Node("C2", kind: "objection", posteriorOdds: (decimal)Math.Log(3d)),
+                Node("C3", kind: "evidence", posteriorOdds: (decimal)Math.Log(4d))
             ],
             [
-                Edge("E-B1-A", "B1", "A", "support", 1.3m),
-                Edge("E-B2-A", "B2", "A", "support", 1.1m),
-                Edge("E-C1-B1", "C1", "B1", "support", 1.2m),
-                Edge("E-C2-B1", "C2", "B1", "objection", 0.01m),
-                Edge("E-C2-B2", "C2", "B2", "objection", 0.1m),
-                Edge("E-C3-B2", "C3", "B2", "support", 1.5m)
+                Edge("E-B1-A", "B1", "A", "support", 1m, 0.7m, 0.3m),
+                Edge("E-B2-A", "B2", "A", "support", 1m, 0.6m, 0.4m),
+                Edge("E-C1-B1", "C1", "B1", "support", 1m, 0.8m, 0.2m),
+                Edge("E-C2-B1", "C2", "B1", "objection", 1m, 0.2m, 0.8m),
+                Edge("E-C2-B2", "C2", "B2", "objection", 1m, 0.3m, 0.7m),
+                Edge("E-C3-B2", "C3", "B2", "support", 1m, 0.75m, 0.25m)
             ]);
 
-        var calculator = new GraphLikelihoodCalculator();
+        var calculator = new GraphPosteriorOddsCalculator();
 
         var result = calculator.GetEvidenceImpactRanking(graph, "A", CancellationToken.None);
 
         CollectionAssert.AreEqual(
-            new[] { "C3", "C1" },
+            new[] { "C1", "C3" },
             result.SupportingEvidence.Select(impact => impact.NodeId).ToArray());
         CollectionAssert.AreEqual(
             new[] { "C2" },
@@ -1070,18 +1193,54 @@ public class GraphServiceTests
         var counter = result.CounterEvidence.Single();
 
         Assert.AreEqual(2, result.SupportingEvidence.Count);
-        Assert.IsTrue(Approximately(c3.LogLr, (decimal)Math.Log(1.65d)));
-        Assert.IsTrue(Approximately(c1.LogLr, (decimal)Math.Log(1.56d)));
-        Assert.IsTrue(Approximately(counter.LogLr, (decimal)Math.Log(0.013d)));
+        decimal c1AtB1 = TransformLogBayesFactor((decimal)Math.Log(2d), 0.8m, 0.2m);
+        decimal c2AtB1 = TransformLogBayesFactor((decimal)Math.Log(3d), 0.2m, 0.8m);
+        decimal b1WithBoth = TransformLogBayesFactor(c1AtB1 + c2AtB1, 0.7m, 0.3m);
+        decimal b1WithoutC1 = TransformLogBayesFactor(c2AtB1, 0.7m, 0.3m);
+        decimal b1WithoutC2 = TransformLogBayesFactor(c1AtB1, 0.7m, 0.3m);
+        decimal c3AtB2 = TransformLogBayesFactor((decimal)Math.Log(4d), 0.75m, 0.25m);
+        decimal b2WithC3 = TransformLogBayesFactor(c3AtB2, 0.6m, 0.4m);
+
+        Assert.IsTrue(Approximately(c3.LogLr, b2WithC3));
+        Assert.IsTrue(Approximately(c1.LogLr, b1WithBoth - b1WithoutC1));
+        Assert.IsTrue(Approximately(counter.LogLr, b1WithBoth - b1WithoutC2));
         Assert.IsTrue(result.SupportingEvidence.All(impact => impact.ProbabilityDifference > 0d));
         Assert.IsTrue(counter.ProbabilityDifference < 0d);
+    }
+
+    [TestMethod]
+    public void GetEvidenceImpactRanking_GroupsByNodeKindRatherThanImpactDirection()
+    {
+        decimal leafLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = GraphWith(
+            [
+                Node("H"),
+                Node("E", kind: "evidence", posteriorOdds: leafLogBayesFactor),
+                Node("O", kind: "objection", posteriorOdds: leafLogBayesFactor)
+            ],
+            [
+                Edge("E-E-H", "E", "H", "rebut", 1m, 0.2m, 0.8m),
+                Edge("E-O-H", "O", "H", "support", 1m, 0.8m, 0.2m)
+            ]);
+
+        var result = new GraphPosteriorOddsCalculator()
+            .GetEvidenceImpactRanking(graph, "H", CancellationToken.None);
+
+        CollectionAssert.AreEqual(
+            new[] { "E" },
+            result.SupportingEvidence.Select(impact => impact.NodeId).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "O" },
+            result.CounterEvidence.Select(impact => impact.NodeId).ToArray());
+        Assert.IsTrue(result.SupportingEvidence.Single().ProbabilityDifference < 0d);
+        Assert.IsTrue(result.CounterEvidence.Single().ProbabilityDifference > 0d);
     }
 
     [TestMethod]
     public void GetEvidenceImpactRanking_ThrowsWhenTargetDoesNotExist()
     {
         var graph = GraphWith([Node("A")], []);
-        var calculator = new GraphLikelihoodCalculator();
+        var calculator = new GraphPosteriorOddsCalculator();
 
         var exception = Assert.ThrowsException<InvalidOperationException>(() =>
             calculator.GetEvidenceImpactRanking(graph, "missing", CancellationToken.None));
@@ -1093,7 +1252,7 @@ public class GraphServiceTests
     public void GetEvidenceImpactRanking_ThrowsWhenCancelled()
     {
         var graph = GraphWith([Node("A")], []);
-        var calculator = new GraphLikelihoodCalculator();
+        var calculator = new GraphPosteriorOddsCalculator();
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
