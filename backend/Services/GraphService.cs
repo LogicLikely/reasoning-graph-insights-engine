@@ -1093,13 +1093,13 @@ public class GraphService : IGraphService
         CancellationToken cancellationToken)
     {
         var invocation = CreateTargetInvocation(dataSource, targetNodeId);
-        invocation.Parameters["candidateLimit"] =
-            BoundedBruteForceMinimalCounterSetSolver.CandidateLimit;
+        invocation.Parameters["timeBudgetMilliseconds"] =
+            _boundedMinimalCounterSetSolver.ConfiguredTimeBudgetMilliseconds;
 
         var reported = await ExecuteReportedCalculationAsync(
             graph,
             CreateMinimalCounterSetAlgorithm(
-                PerformanceAlgorithmImplementations.BoundedBruteForce),
+                PerformanceAlgorithmImplementations.TimeBoundedExhaustive),
             invocation,
             operationStartedAtUtc,
             operationStopwatch,
@@ -1111,8 +1111,8 @@ public class GraphService : IGraphService
                 cancellationToken),
             CreateMinimalCounterSetDetails,
             result => result.CounterNodeIds.Count,
-            result => result.ProofStatus == MinimalCounterSetProofStatus.NotProven
-                ? PerformanceRunStatuses.NotProven
+            result => result.StopReason == MinimalCounterSetStopReason.TimeBudget
+                ? PerformanceRunStatuses.TimedOut
                 : PerformanceRunStatuses.Completed,
             benchmarkSetId,
             cancellationToken);
@@ -1123,6 +1123,11 @@ public class GraphService : IGraphService
                 ? reported.Result.CounterNodeIds.ToList()
                 : null,
             ProofStatus = ToProofStatusValue(reported.Result.ProofStatus),
+            Status = reported.StoredRun.Outcome.Status,
+            StopReason = ToStopReasonValue(reported.Result.StopReason),
+            TimeBudgetMilliseconds =
+                reported.Result.TimeBudgetMilliseconds ??
+                _boundedMinimalCounterSetSolver.ConfiguredTimeBudgetMilliseconds,
             RunNumber = reported.StoredRun.RunNumber
         };
     }
@@ -1500,17 +1505,35 @@ public class GraphService : IGraphService
     {
         return new JsonObject
         {
-            ["totalCandidateCount"] = result.TotalCandidateCount,
-            ["searchedCandidateCount"] = result.SearchedCandidateCount,
-            ["excludedCandidateCount"] = result.ExcludedCandidateCount,
+            ["totalCandidateCount"] = JsonValue.Create(result.TotalCandidateCount),
+            ["searchedCandidateCount"] = JsonValue.Create(result.SearchedCandidateCount),
+            ["excludedCandidateCount"] = JsonValue.Create(result.ExcludedCandidateCount),
             ["candidatesExamined"] = result.CandidatesExamined,
             ["subsetEvaluations"] = result.SubsetEvaluations,
             ["largestCardinalityFullyExhausted"] =
-                result.LargestCardinalityFullyExhausted,
+                JsonValue.Create(result.LargestCardinalityFullyExhausted),
+            ["activeCardinality"] = JsonValue.Create(result.ActiveCardinality),
+            ["subsetEvaluationsAtActiveCardinality"] =
+                JsonValue.Create(result.SubsetEvaluationsAtActiveCardinality),
+            ["totalSubsetsAtActiveCardinality"] =
+                result.TotalSubsetsAtActiveCardinality,
+            ["totalPossibleSubsets"] = result.TotalPossibleSubsets,
+            ["timeBudgetMilliseconds"] =
+                JsonValue.Create(result.TimeBudgetMilliseconds),
+            ["preparationElapsedMilliseconds"] =
+                JsonValue.Create(result.PreparationElapsedMilliseconds),
+            ["searchElapsedMilliseconds"] =
+                JsonValue.Create(result.SearchElapsedMilliseconds),
+            ["subsetEvaluationsPerSecond"] =
+                JsonValue.Create(result.SubsetEvaluationsPerSecond),
+            ["timeoutStage"] = ToTimeoutStageValue(result.TimeoutStage),
             ["returnedSetSize"] = result.CounterNodeIds.Count,
-            ["thresholdLogOdds"] = result.ThresholdLogOdds,
-            ["initialTargetLogOdds"] = result.InitialTargetLogOdds,
-            ["finalTargetLogOdds"] = result.FinalTargetLogOdds,
+            ["bestSetSize"] = result.CounterNodeIds.Count,
+            ["thresholdLogOdds"] = JsonValue.Create(result.ThresholdLogOdds),
+            ["initialTargetLogOdds"] =
+                JsonValue.Create(result.InitialTargetLogOdds),
+            ["finalTargetLogOdds"] = JsonValue.Create(result.FinalTargetLogOdds),
+            ["bestTargetLogOdds"] = JsonValue.Create(result.FinalTargetLogOdds),
             ["thresholdReached"] = result.ThresholdReached,
             ["proofStatus"] = ToProofStatusValue(result.ProofStatus),
             ["stopReason"] = ToStopReasonValue(result.StopReason),
@@ -1520,6 +1543,13 @@ public class GraphService : IGraphService
                     .Select(nodeId => JsonValue.Create(nodeId))
                     .ToArray()),
             ["returnedNodeIdsTruncated"] =
+                result.CounterNodeIds.Count > MinimalCounterSetPreviewLimit,
+            ["bestNodeIds"] = new JsonArray(
+                result.CounterNodeIds
+                    .Take(MinimalCounterSetPreviewLimit)
+                    .Select(nodeId => JsonValue.Create(nodeId))
+                    .ToArray()),
+            ["bestNodeIdsTruncated"] =
                 result.CounterNodeIds.Count > MinimalCounterSetPreviewLimit
         };
     }
@@ -1660,8 +1690,19 @@ public class GraphService : IGraphService
     {
         return stopReason switch
         {
-            MinimalCounterSetStopReason.CandidateLimit => "candidateLimit",
+            MinimalCounterSetStopReason.TimeBudget => "timeBudget",
             _ => "completed"
+        };
+    }
+
+    private static string? ToTimeoutStageValue(
+        MinimalCounterSetTimeoutStage? timeoutStage)
+    {
+        return timeoutStage switch
+        {
+            MinimalCounterSetTimeoutStage.Preparation => "preparation",
+            MinimalCounterSetTimeoutStage.Search => "search",
+            _ => null
         };
     }
 

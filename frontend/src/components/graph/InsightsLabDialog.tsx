@@ -52,6 +52,7 @@ type SuiteSummary = {
   status: 'completed' | 'stopped' | 'empty'
   total: number
   completed: number
+  timedOut: number
   failed: number
   interrupted: number
   graphCount: number
@@ -71,6 +72,11 @@ type OperationDefinition = {
   cancellable?: boolean
 }
 
+type OperationInvocationResult = {
+  runNumber?: number
+  status?: 'completed' | 'timedOut'
+}
+
 const OPERATIONS: readonly OperationDefinition[] = [
   {
     id: 'minimal',
@@ -85,12 +91,12 @@ const OPERATIONS: readonly OperationDefinition[] = [
   },
   {
     id: 'bounded',
-    title: 'Bounded minimal counter set',
-    description: 'Run the exact bounded search for the graph root.',
-    explanation: 'Tries counterargument combinations from smallest to largest to find the fewest that would lower the graph root below the confidence cutoff.',
-    caveat: 'The search considers at most 20 candidates. If more eligible counters exist, the result may be useful without being proven globally minimal.',
+    title: 'Time-bounded exhaustive search',
+    description: 'Search combinations drawn from every eligible counter, with a fixed two-minute compute budget.',
+    explanation: 'Tests counterargument combinations from smallest to largest. When it finds a qualifying set, every smaller size has already been exhausted, so the returned size is proven minimal.',
+    caveat: 'This is the Lab\'s exhaustive reference implementation, not a claim that every counter-set method must enumerate combinations. If the server\'s two-minute budget expires, the partial result shows how far this implementation searched without claiming minimum-set proof.',
     algorithmName: 'minimal-counter-set',
-    implementation: 'bounded-brute-force',
+    implementation: 'time-bounded-exhaustive',
     requiresTarget: true,
     cancellable: true,
   },
@@ -186,7 +192,7 @@ async function invokeOperation({
   operation: OperationDefinition
   signal?: AbortSignal
   targetNodeId?: string
-}): Promise<number | undefined> {
+}): Promise<OperationInvocationResult> {
   switch (operation.id) {
     case 'minimal':
       await getNodeCounterSet(
@@ -196,7 +202,7 @@ async function invokeOperation({
         signal,
         benchmarkSetId,
       )
-      return undefined
+      return {}
     case 'bounded': {
       const result = await getBoundedNodeCounterSet(
         graphSlug,
@@ -205,7 +211,7 @@ async function invokeOperation({
         signal,
         benchmarkSetId,
       )
-      return result.runNumber
+      return { runNumber: result.runNumber, status: result.status }
     }
     case 'evidence':
       await getEvidenceImpactRanking(
@@ -215,7 +221,7 @@ async function invokeOperation({
         signal,
         benchmarkSetId,
       )
-      return undefined
+      return {}
     case 'least':
       await getLeastRobustNode(
         graphSlug,
@@ -223,7 +229,7 @@ async function invokeOperation({
         signal,
         benchmarkSetId,
       )
-      return undefined
+      return {}
     case 'ranking':
       await getNodeRobustnessRanking(
         graphSlug,
@@ -231,7 +237,7 @@ async function invokeOperation({
         signal,
         benchmarkSetId,
       )
-      return undefined
+      return {}
     case 'leaf':
       await updateNode(
         graphSlug,
@@ -239,7 +245,7 @@ async function invokeOperation({
         { priorOdds: leafTargetNode!.priorOdds },
         benchmarkSetId,
       )
-      return undefined
+      return {}
   }
 }
 
@@ -268,9 +274,13 @@ function sentenceCase(value?: string): string {
 function operationLabel(run: PerformanceRunRecord): string {
   const name = run.algorithm?.name
   if (name === 'minimal-counter-set') {
-    return run.algorithm?.implementation === 'bounded-brute-force'
-      ? 'Bounded minimal counter set'
-      : 'Minimal counter set'
+    if (run.algorithm?.implementation === 'time-bounded-exhaustive') {
+      return 'Time-bounded exhaustive search'
+    }
+    if (run.algorithm?.implementation === 'bounded-brute-force') {
+      return 'Bounded minimal counter set'
+    }
+    return 'Minimal counter set'
   }
   return ({
     'evidence-impact-ranking': 'Evidence impact ranking',
@@ -313,9 +323,9 @@ function proofStatus(run: PerformanceRunRecord): string | undefined {
 }
 
 function executionStatus(run: PerformanceRunRecord): string {
-  return run.outcome?.status === 'notProven'
-    ? 'Completed'
-    : sentenceCase(run.outcome?.status)
+  if (run.outcome?.status === 'notProven') return 'Completed'
+  if (run.outcome?.status === 'timedOut') return 'Timed out'
+  return sentenceCase(run.outcome?.status)
 }
 
 function presentedOutcome(run: PerformanceRunRecord): Record<string, unknown> | undefined {
@@ -610,6 +620,7 @@ function OpenInsightsLabDialog({
     abortControllerRef.current = controller
     let watermark = -1
     let exactRunNumber: number | undefined
+    let invocationStatus: 'completed' | 'timedOut' | undefined
     let launchFailure: unknown
     let requestStarted = false
     let requestCompleted = false
@@ -624,7 +635,7 @@ function OpenInsightsLabDialog({
 
       try {
         requestStarted = true
-        exactRunNumber = await invokeOperation({
+        const invocationResult = await invokeOperation({
           benchmarkSetId,
           dataSource: graphDataSource,
           graphSlug: graph.slug,
@@ -633,6 +644,8 @@ function OpenInsightsLabDialog({
           signal: controller?.signal,
           targetNodeId,
         })
+        exactRunNumber = invocationResult.runNumber
+        invocationStatus = invocationResult.status
         if (operation.id === 'leaf') onGraphUpdated?.()
         requestCompleted = true
       } catch (error) {
@@ -685,6 +698,8 @@ function OpenInsightsLabDialog({
         }
       } else if (!matchingRun) {
         setRunError('The run finished, but its report could not be matched in history.')
+      } else if (invocationStatus === 'timedOut' || matchingRun.outcome?.status === 'timedOut') {
+        setRunNotice('The exhaustive search reached its two-minute compute budget. Its partial report is shown below.')
       }
     } catch {
       if (controller?.signal.aborted) {
@@ -726,6 +741,7 @@ function OpenInsightsLabDialog({
 
     const suiteWatermark = runs.reduce((maximum, run) => Math.max(maximum, run.runNumber), -1)
     let completed = 0
+    let timedOut = 0
     let failed = 0
     let interrupted = 0
     let processed = 0
@@ -756,6 +772,7 @@ function OpenInsightsLabDialog({
           status: 'empty',
           total,
           completed,
+          timedOut,
           failed,
           interrupted,
           graphCount,
@@ -802,7 +819,7 @@ function OpenInsightsLabDialog({
               countItem = true
             }
 
-            await invokeOperation({
+            const invocationResult = await invokeOperation({
               benchmarkSetId,
               dataSource: 'database',
               graphSlug: graphOption.id,
@@ -811,7 +828,8 @@ function OpenInsightsLabDialog({
               signal: controller?.signal,
               targetNodeId: operation.requiresTarget ? CANONICAL_STRESS_TARGET_ID : undefined,
             })
-            completed += 1
+            if (invocationResult.status === 'timedOut') timedOut += 1
+            else completed += 1
             if (operation.id === 'leaf' && graph?.slug === graphOption.id) {
               didUpdateActiveGraph = true
             }
@@ -847,6 +865,7 @@ function OpenInsightsLabDialog({
         status: stopped ? 'stopped' : 'completed',
         total,
         completed,
+        timedOut,
         failed,
         interrupted,
         graphCount,
@@ -1135,6 +1154,7 @@ function OpenInsightsLabDialog({
                     : `${knownInstalledStandardStressGraphs.length} installed standard database stress ${knownInstalledStandardStressGraphs.length === 1 ? 'graph' : 'graphs'} (${knownInstalledStandardStressGraphs.length * OPERATIONS.length} planned ${knownInstalledStandardStressGraphs.length * OPERATIONS.length === 1 ? 'run' : 'runs'})`}.
                 </p>
                 <small>Deep-chain graphs are excluded; manual deep-chain runs can be extremely slow or terminate the backend. No warm-up runs are included.</small>
+                <small>The exhaustive reference search can use its full two-minute server compute budget on each graph; reaching that budget is recorded as an expected partial result and the suite continues.</small>
               </div>
               <button
                 disabled={isBusy
@@ -1167,9 +1187,10 @@ function OpenInsightsLabDialog({
                 ) : (
                   <span>
                     {suiteSummary.completed} {suiteSummary.completed === 1 ? 'request' : 'requests'} completed
+                    {suiteSummary.timedOut > 0 ? ` · ${suiteSummary.timedOut} exhaustive ${suiteSummary.timedOut === 1 ? 'search' : 'searches'} reached the time budget` : ''}
                     {suiteSummary.failed > 0 ? ` · ${suiteSummary.failed} ${suiteSummary.failed === 1 ? 'request' : 'requests'} failed` : ''}
                     {suiteSummary.interrupted > 0 ? ` · ${suiteSummary.interrupted} request interrupted` : ''}
-                    {` · ${suiteSummary.completed + suiteSummary.failed + suiteSummary.interrupted} of ${suiteSummary.total} attempted across ${suiteSummary.graphCount} ${suiteSummary.graphCount === 1 ? 'graph' : 'graphs'}.`}
+                    {` · ${suiteSummary.completed + suiteSummary.timedOut + suiteSummary.failed + suiteSummary.interrupted} of ${suiteSummary.total} attempted across ${suiteSummary.graphCount} ${suiteSummary.graphCount === 1 ? 'graph' : 'graphs'}.`}
                   </span>
                 )}
                 {suiteSummary.failures.length > 0 ? (
@@ -1358,6 +1379,7 @@ function RunReport({
         <strong>{setName}</strong>
         {run.benchmarkSetId ? <code>{run.benchmarkSetId}</code> : null}
       </p>
+      <TimeBudgetSummary run={run} />
       <ResultPreview run={run} />
       <ReportSection title="Algorithm" value={run.algorithm} />
       <ReportSection title="Graph" value={run.graph} />
@@ -1371,6 +1393,90 @@ function RunReport({
   )
 }
 
+function numericDetail(
+  details: Record<string, unknown>,
+  name: string,
+): number | undefined {
+  const value = details[name]
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function displayDetail(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value.toLocaleString()
+  if (typeof value === 'string' && value.trim()) {
+    if (/^\d+$/.test(value)) return BigInt(value).toLocaleString()
+    return value
+  }
+  return undefined
+}
+
+function formatBudget(milliseconds?: number): string {
+  if (milliseconds === undefined) return 'fixed compute-time'
+  if (milliseconds >= 60_000 && milliseconds % 60_000 === 0) {
+    const minutes = milliseconds / 60_000
+    return `${minutes}-minute`
+  }
+  return `${formatMilliseconds(milliseconds)} compute-time`
+}
+
+function TimeBudgetSummary({ run }: { run: PerformanceRunRecord }) {
+  const details = run.details ?? {}
+  if (run.outcome?.status !== 'timedOut' && details.stopReason !== 'timeBudget') return null
+
+  const parameters = run.invocation?.parameters
+  const budget = parameters && typeof parameters === 'object'
+    ? numericDetail(parameters, 'timeBudgetMilliseconds')
+    : undefined
+  const largestCompleted = numericDetail(details, 'largestCardinalityFullyExhausted')
+  const activeCardinality = numericDetail(details, 'activeCardinality')
+  const evaluatedAtActive = displayDetail(details.subsetEvaluationsAtActiveCardinality)
+  const totalAtActive = displayDetail(details.totalSubsetsAtActiveCardinality)
+  const subsetEvaluations = displayDetail(details.subsetEvaluations)
+  const totalCandidates = displayDetail(details.totalCandidateCount)
+  const timeoutStage = typeof details.timeoutStage === 'string'
+    ? sentenceCase(details.timeoutStage)
+    : undefined
+
+  const frontierItems = [
+    largestCompleted === undefined
+      ? undefined
+      : ['Fully exhausted', `All sets through size ${largestCompleted}`],
+    activeCardinality === undefined
+      ? undefined
+      : ['Stopped while testing', `Sets of size ${activeCardinality}`],
+    evaluatedAtActive === undefined
+      ? undefined
+      : ['At active size', totalAtActive ? `${evaluatedAtActive} of ${totalAtActive} sets evaluated` : `${evaluatedAtActive} sets evaluated`],
+    subsetEvaluations === undefined
+      ? undefined
+      : ['Total subset evaluations', subsetEvaluations],
+    totalCandidates === undefined
+      ? undefined
+      : ['Eligible counters', totalCandidates],
+    timeoutStage === undefined
+      ? undefined
+      : ['Budget expired during', timeoutStage],
+  ].filter((entry): entry is string[] => entry !== undefined)
+
+  return (
+    <section aria-label="Exhaustive search time limit" className="insights-lab-dialog__timeout-summary">
+      <div>
+        <strong>Search stopped at the {formatBudget(budget)} budget</strong>
+        <p>
+          This is an expected partial benchmark result, not a failed request. The search did not
+          establish minimum-set proof before the server deadline, so its elapsed time is a lower
+          bound on how long this exhaustive implementation would need to finish.
+        </p>
+      </div>
+      {frontierItems.length > 0 ? (
+        <dl>{frontierItems.map(([label, value]) => (
+          <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+        ))}</dl>
+      ) : null}
+    </section>
+  )
+}
+
 function firstArray(details: Record<string, unknown>, names: readonly string[]): unknown[] | undefined {
   for (const name of names) if (Array.isArray(details[name])) return details[name] as unknown[]
   return undefined
@@ -1378,10 +1484,29 @@ function firstArray(details: Record<string, unknown>, names: readonly string[]):
 
 function ResultPreview({ run }: { run: PerformanceRunRecord }) {
   const details = run.details ?? {}
-  const sections: { title: string, items: unknown[] }[] = []
+  const sections: { title: string, items: unknown[], emptyLabel?: string }[] = []
   if (run.algorithm?.name === 'minimal-counter-set') {
     const items = firstArray(details, ['returnedNodeIds'])
-    if (items) sections.push({ title: 'Returned node IDs', items })
+    const stoppedDuringPreparation = (
+      (run.outcome?.status === 'timedOut' || details.stopReason === 'timeBudget')
+      && details.timeoutStage === 'preparation'
+      && numericDetail(details, 'subsetEvaluations') === 0
+    )
+    if (items) sections.push({
+      title: stoppedDuringPreparation
+        ? 'Exhaustive search result'
+        : details.thresholdReached === false
+        ? run.outcome?.status === 'timedOut' || details.stopReason === 'timeBudget'
+          ? 'Best set found before time limit — threshold not reached'
+          : 'Best set examined — threshold not reached'
+        : 'Returned node IDs',
+      items,
+      emptyLabel: stoppedDuringPreparation
+        ? 'No candidate set evaluated before time limit'
+        : details.thresholdReached === false
+          ? 'No nodes (empty set)'
+          : 'None (empty set)',
+    })
   } else if (run.algorithm?.name === 'evidence-impact-ranking') {
     const supporting = firstArray(details, ['supportingPreview', 'topSupportingResults'])
     const counter = firstArray(details, ['counterPreview', 'topCounterResults'])
@@ -1399,7 +1524,12 @@ function ResultPreview({ run }: { run: PerformanceRunRecord }) {
     <section className="insights-lab-dialog__preview">
       <h4>Result preview</h4>
       <div>{sections.map((section) => (
-        <div key={section.title}><strong>{section.title}</strong><ol>{section.items.map((item, index) => <li key={index}><StructuredValue value={item} /></li>)}</ol></div>
+        <div key={section.title}>
+          <strong>{section.title}</strong>
+          {section.items.length === 0
+            ? <span>{section.emptyLabel ?? 'None'}</span>
+            : <ol>{section.items.map((item, index) => <li key={index}><StructuredValue value={item} /></li>)}</ol>}
+        </div>
       ))}</div>
       {details.returnedNodeIdsTruncated === true ? <small>Preview truncated.</small> : null}
     </section>

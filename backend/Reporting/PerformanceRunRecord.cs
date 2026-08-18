@@ -159,6 +159,6 @@ public static class PerformanceAlgorithmNames
 public static class PerformanceAlgorithmImplementations
 {
     public const string Greedy = "greedy";
-    public const string BoundedBruteForce = "bounded-brute-force";
+    public const string TimeBoundedExhaustive = "time-bounded-exhaustive";
     public const string Current = "current";
 }

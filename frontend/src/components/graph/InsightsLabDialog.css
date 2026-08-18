@@ -602,6 +602,11 @@
   color: #76540b;
 }
 
+.insights-lab-dialog__statuses span[data-status='timedOut'] {
+  background: #fff4d5;
+  color: #76540b;
+}
+
 .insights-lab-dialog__statuses span[data-status='failed'],
 .insights-lab-dialog__statuses span[data-status='cancelled'] {
   background: #fff0f0;
@@ -609,11 +614,56 @@
 }
 
 .insights-lab-dialog__preview,
-.insights-lab-dialog__report-section {
+.insights-lab-dialog__report-section,
+.insights-lab-dialog__timeout-summary {
   padding: 0.85rem;
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   background: rgba(233, 240, 232, 0.32);
+}
+
+.insights-lab-dialog__timeout-summary {
+  display: grid;
+  gap: 0.75rem;
+  border-color: rgba(156, 112, 17, 0.32);
+  background: #fff9e9;
+}
+
+.insights-lab-dialog__timeout-summary > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.insights-lab-dialog__timeout-summary strong {
+  color: #76540b;
+}
+
+.insights-lab-dialog__timeout-summary p {
+  color: var(--color-text);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.insights-lab-dialog__timeout-summary dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.insights-lab-dialog__timeout-summary dt {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.insights-lab-dialog__timeout-summary dd {
+  margin: 0.12rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .insights-lab-dialog__preview h4,
@@ -721,6 +771,7 @@
   .insights-lab-dialog__benchmark-sets,
   .insights-lab-dialog__context,
   .insights-lab-dialog__preview > div,
+  .insights-lab-dialog__timeout-summary dl,
   .insights-lab-dialog__report-section > dl {
     grid-template-columns: 1fr;
   }

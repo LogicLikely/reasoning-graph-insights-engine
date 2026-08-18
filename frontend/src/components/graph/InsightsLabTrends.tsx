@@ -8,15 +8,17 @@ export interface InsightsLabTrendsProps {
   benchmarkSets: readonly BenchmarkSet[]
 }
 
-type TrendMode = 'within' | 'across'
-type TrendMetricId = 'compute' | 'operation' | 'cpu' | 'allocations'
+type TrendMode = 'solvers' | 'within' | 'across'
+type TrendMetricId = 'compute' | 'operation' | 'cpu' | 'allocations' | 'subsets'
 type YAxisScale = 'linear' | 'logarithmic'
+type CounterSetSolverKind = 'greedy' | 'exhaustive'
 
 type TrendMetricDefinition = {
   id: TrendMetricId
   label: string
   axisLabel: string
-  unitKind: 'milliseconds' | 'bytes'
+  unitKind: 'milliseconds' | 'bytes' | 'count'
+  boundedOnly?: boolean
   explanation: string
   significance: string
   readValue: (run: PerformanceRunRecord) => number | null | undefined
@@ -26,12 +28,16 @@ type TrendRun = {
   runNumber: number
   algorithmId: string
   algorithmLabel: string
+  bounded: boolean
   benchmarkSetId: string
   benchmarkSetName: string
   shapeId: string
   shapeLabel: string
   nodeCount: number
   metricValues: Partial<Record<TrendMetricId, number>>
+  solverKind?: CounterSetSolverKind
+  timedOut: boolean
+  source: PerformanceRunRecord
 }
 
 type SelectedMetricTrendRun = TrendRun & {
@@ -39,6 +45,7 @@ type SelectedMetricTrendRun = TrendRun & {
 }
 
 type TrendPoint = {
+  id: string
   benchmarkSetId: string
   benchmarkSetName: string
   shapeLabel: string
@@ -46,6 +53,9 @@ type TrendPoint = {
   metricValue: number
   sampleCount: number
   runNumbers: number[]
+  timedOut: boolean
+  timeBudgetMilliseconds?: number
+  sourceRuns: TrendRun[]
 }
 
 type TrendSeries = {
@@ -62,6 +72,8 @@ type MetricPresentation = {
 }
 
 const MAX_WITHIN_SHAPES = 4
+const TIME_BOUNDED_EXHAUSTIVE_IMPLEMENTATION = 'time-bounded-exhaustive'
+const LEGACY_BOUNDED_IMPLEMENTATIONS = new Set(['bounded-brute-force', 'exact-bounded'])
 const CHART_WIDTH = 920
 const CHART_HEIGHT = 360
 const PLOT_LEFT = 82
@@ -110,6 +122,19 @@ const TREND_METRICS: readonly TrendMetricDefinition[] = [
     significance: 'Lower values mean less allocation pressure. This is allocation traffic, not retained or peak memory.',
     readValue: (run) => run.resources?.allocatedBytes,
   },
+  {
+    id: 'subsets',
+    label: 'Subset evaluations',
+    axisLabel: 'Subset evaluations',
+    unitKind: 'count',
+    boundedOnly: true,
+    explanation: 'The number of candidate subsets the time-bounded exhaustive reference evaluated during its search.',
+    significance: 'Lower counts mean less combinatorial search work. A count of one usually means the empty set was evaluated before any candidate nodes were added.',
+    readValue: (run) => {
+      const value = run.details?.subsetEvaluations
+      return typeof value === 'number' ? value : undefined
+    },
+  },
 ] as const
 
 const SERIES_COLORS = [
@@ -148,9 +173,13 @@ function getAlgorithmLabel(run: PerformanceRunRecord): string {
   const implementation = run.algorithm?.implementation
 
   if (name === 'minimal-counter-set') {
-    return implementation === 'bounded-brute-force'
-      ? 'Bounded minimal counter set'
-      : 'Minimal counter set'
+    if (implementation === TIME_BOUNDED_EXHAUSTIVE_IMPLEMENTATION) {
+      return 'Time-bounded exhaustive search'
+    }
+    if (implementation && LEGACY_BOUNDED_IMPLEMENTATIONS.has(implementation)) {
+      return 'Legacy bounded minimal counter set'
+    }
+    return 'Minimal counter set'
   }
 
   const knownLabel = ({
@@ -167,13 +196,24 @@ function getAlgorithmLabel(run: PerformanceRunRecord): string {
     : baseLabel
 }
 
+function isBoundedMinimalCounterSet(run: PerformanceRunRecord): boolean {
+  return run.algorithm?.name === 'minimal-counter-set'
+    && run.algorithm?.implementation === TIME_BOUNDED_EXHAUSTIVE_IMPLEMENTATION
+}
+
+function getCounterSetSolverKind(run: PerformanceRunRecord): CounterSetSolverKind | undefined {
+  if (run.algorithm?.name !== 'minimal-counter-set') return undefined
+  if (isBoundedMinimalCounterSet(run)) return 'exhaustive'
+  return run.algorithm?.implementation === 'greedy' ? 'greedy' : undefined
+}
+
 function getShapeId(run: PerformanceRunRecord): string | undefined {
   const explicitType = run.graph?.type?.trim()
   if (explicitType) return explicitType
 
   const slug = run.graph?.slug
   if (!slug) return undefined
-  return slug.replace(/^stress-/, '').replace(/-(?:1k|10k|100k)$/i, '')
+  return slug.replace(/^stress-/, '').replace(/-(?:100|1k|10k|100k)$/i, '')
 }
 
 function getShapeLabel(shapeId: string): string {
@@ -196,7 +236,50 @@ function getBenchmarkSetLabel(
 
 function isIncludedOutcome(run: PerformanceRunRecord): boolean {
   const status = run.outcome?.status?.replace(/[-_\s]/g, '').toLowerCase()
-  return status === 'completed' || status === 'notproven'
+  return status === 'completed' || status === 'notproven' || status === 'timedout'
+}
+
+function isTimedOutOutcome(run: PerformanceRunRecord): boolean {
+  const status = run.outcome?.status?.replace(/[-_\s]/g, '').toLowerCase()
+  const stopReason = String(run.details?.stopReason ?? '').replace(/[-_\s]/g, '').toLowerCase()
+  return status === 'timedout' || stopReason === 'timebudget' || stopReason === 'timelimit'
+}
+
+function readNumber(source: Record<string, unknown> | undefined, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = source?.[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return undefined
+}
+
+function readString(source: Record<string, unknown> | undefined, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = source?.[key]
+    if (typeof value === 'string' && value.trim() !== '') return value
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  return undefined
+}
+
+function getTimeBudgetMilliseconds(run: PerformanceRunRecord): number | undefined {
+  return readNumber(
+    run.invocation?.parameters,
+    'timeBudgetMilliseconds',
+    'timeBudgetMs',
+    'timeoutMilliseconds',
+    'timeoutMs',
+  ) ?? readNumber(
+    run.details,
+    'timeBudgetMilliseconds',
+    'timeBudgetMs',
+    'timeoutMilliseconds',
+    'timeoutMs',
+  )
 }
 
 function compareShapes(left: string, right: string): number {
@@ -218,6 +301,25 @@ function median(values: readonly number[]): number {
 
 function formatNodeCount(value: number): string {
   return value.toLocaleString()
+}
+
+function formatDurationLimit(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.round(milliseconds / 1000))
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function formatStoppedMetricValue(
+  point: TrendPoint,
+  metric: TrendMetricDefinition,
+  presentation: MetricPresentation,
+): string {
+  if (metric.id === 'compute') {
+    return `${formatDurationLimit(point.metricValue)} · stopped`
+  }
+  return `${presentation.formatValue(point.metricValue)} · at stop`
 }
 
 function formatAxisNumber(value: number): string {
@@ -269,6 +371,17 @@ function metricPresentation(
       axisLabel: `${metric.axisLabel} (ms)`,
       divisor: 1,
       formatValue: (value) => `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ms`,
+      formatAxisValue: formatAxisNumber,
+    }
+  }
+
+  if (metric.unitKind === 'count') {
+    return {
+      axisLabel: `${metric.axisLabel} (count)`,
+      divisor: 1,
+      formatValue: (value) => (
+        `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${value === 1 ? 'evaluation' : 'evaluations'}`
+      ),
       formatAxisValue: formatAxisNumber,
     }
   }
@@ -342,6 +455,78 @@ function SeriesMarker({ index, x, y, size = 5 }: SeriesMarkerProps) {
   }
 }
 
+function CensoredMarker({ index, x, y, size = 5 }: SeriesMarkerProps) {
+  const color = SERIES_COLORS[index % SERIES_COLORS.length]
+  const arrowTop = y - size - 10
+  return (
+    <g className="insights-lab-trends__censored-marker">
+      <circle
+        cx={x}
+        cy={y}
+        fill="var(--insights-trend-point-fill)"
+        r={size + 1}
+        stroke={color}
+        strokeDasharray="2 2"
+        strokeWidth="2.5"
+        vectorEffect="non-scaling-stroke"
+      />
+      <line
+        stroke={color}
+        strokeWidth="2.5"
+        vectorEffect="non-scaling-stroke"
+        x1={x}
+        x2={x}
+        y1={y - size}
+        y2={arrowTop}
+      />
+      <polyline
+        fill="none"
+        points={`${x - 4},${arrowTop + 4} ${x},${arrowTop} ${x + 4},${arrowTop + 4}`}
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.5"
+        vectorEffect="non-scaling-stroke"
+      />
+    </g>
+  )
+}
+
+function StoppedMarker({ index, x, y, size = 5 }: SeriesMarkerProps) {
+  const color = SERIES_COLORS[index % SERIES_COLORS.length]
+  return (
+    <g className="insights-lab-trends__stopped-marker">
+      <circle
+        cx={x}
+        cy={y}
+        fill="var(--insights-trend-point-fill)"
+        r={size + 1}
+        stroke={color}
+        strokeWidth="2.5"
+        vectorEffect="non-scaling-stroke"
+      />
+      <line stroke={color} strokeWidth="2" x1={x - 3} x2={x + 3} y1={y - 3} y2={y + 3} />
+      <line stroke={color} strokeWidth="2" x1={x + 3} x2={x - 3} y1={y - 3} y2={y + 3} />
+    </g>
+  )
+}
+
+function rawPoint(run: SelectedMetricTrendRun): TrendPoint {
+  return {
+    id: `run-${run.runNumber}`,
+    benchmarkSetId: run.benchmarkSetId,
+    benchmarkSetName: run.benchmarkSetName,
+    shapeLabel: run.shapeLabel,
+    nodeCount: run.nodeCount,
+    metricValue: run.metricValue,
+    sampleCount: 1,
+    runNumbers: [run.runNumber],
+    timedOut: run.timedOut,
+    timeBudgetMilliseconds: getTimeBudgetMilliseconds(run.source),
+    sourceRuns: [run],
+  }
+}
+
 function aggregateSeries(
   runs: readonly SelectedMetricTrendRun[],
   seriesDefinitions: readonly { id: string; label: string }[],
@@ -358,18 +543,171 @@ function aggregateSeries(
 
     const points = [...grouped.entries()]
       .sort(([left], [right]) => left - right)
-      .map(([nodeCount, matches]) => ({
-        benchmarkSetId: matches[0].benchmarkSetId,
-        benchmarkSetName: matches[0].benchmarkSetName,
-        shapeLabel: matches[0].shapeLabel,
-        nodeCount,
-        metricValue: median(matches.map(({ metricValue }) => metricValue)),
-        sampleCount: matches.length,
-        runNumbers: matches.map(({ runNumber }) => runNumber).sort((left, right) => left - right),
-      }))
+      .flatMap(([nodeCount, matches]) => {
+        const completedMatches = matches.filter((match) => !match.timedOut)
+        const timedOutMatches = matches.filter((match) => match.timedOut)
+        const completedPoint: TrendPoint[] = completedMatches.length === 0
+          ? []
+          : [{
+              id: `${definition.id}-${nodeCount}-completed`,
+              benchmarkSetId: completedMatches[0].benchmarkSetId,
+              benchmarkSetName: completedMatches[0].benchmarkSetName,
+              shapeLabel: completedMatches[0].shapeLabel,
+              nodeCount,
+              metricValue: median(completedMatches.map(({ metricValue }) => metricValue)),
+              sampleCount: completedMatches.length,
+              runNumbers: completedMatches
+                .map(({ runNumber }) => runNumber)
+                .sort((left, right) => left - right),
+              timedOut: false,
+              sourceRuns: completedMatches,
+            }]
+
+        // A stopped observation is a lower bound, not another completed sample.
+        // Keep each one raw so it can never disappear into a median.
+        return [...completedPoint, ...timedOutMatches.map(rawPoint)]
+      })
 
     return points.length > 0 ? [{ ...definition, points }] : []
   })
+}
+
+function rawSolverSeries(runs: readonly SelectedMetricTrendRun[]): TrendSeries[] {
+  const definitions: readonly { id: CounterSetSolverKind; label: string }[] = [
+    { id: 'greedy', label: 'Greedy' },
+    { id: 'exhaustive', label: 'Time-bounded exhaustive' },
+  ]
+
+  return definitions.flatMap((definition) => {
+    const points = runs
+      .filter((run) => run.solverKind === definition.id)
+      .sort((left, right) => left.nodeCount - right.nodeCount || left.runNumber - right.runNumber)
+      .map(rawPoint)
+    return points.length > 0 ? [{ ...definition, points }] : []
+  })
+}
+
+function parseWholeNumber(value: unknown): bigint | undefined {
+  if (typeof value === 'bigint' && value >= 0n) return value
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+    return BigInt(value)
+  }
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim().replaceAll(',', '')
+  return /^\d+$/.test(normalized) ? BigInt(normalized) : undefined
+}
+
+function wholeSubsetSpace(run: TrendRun): bigint | undefined {
+  const explicit = parseWholeNumber(
+    readString(run.source.details, 'totalPossibleSubsets', 'maximumSubsetCount', 'subsetSpaceSize'),
+  )
+  if (explicit !== undefined) return explicit
+
+  const candidateCount = readNumber(
+    run.source.details,
+    'totalCandidateCount',
+    'candidateCountTotal',
+    'candidateCount',
+  )
+  return candidateCount !== undefined
+    && Number.isSafeInteger(candidateCount)
+    && candidateCount >= 0
+    && candidateCount <= 1_000_000
+    ? 1n << BigInt(candidateCount)
+    : undefined
+}
+
+function approximateLog10(value: bigint): number {
+  if (value <= 0n) return Number.NEGATIVE_INFINITY
+  const digits = value.toString()
+  const leadingDigits = digits.slice(0, Math.min(15, digits.length))
+  return Math.log10(Number(leadingDigits)) + digits.length - leadingDigits.length
+}
+
+function formatMaximumSubsetSpacePercent(run: TrendRun): string {
+  const evaluated = parseWholeNumber(
+    readString(run.source.details, 'subsetEvaluations', 'subsetsEvaluated'),
+  )
+  const maximum = wholeSubsetSpace(run)
+  if (evaluated === undefined || maximum === undefined || maximum === 0n) return '—'
+  if (evaluated === 0n) return '0%'
+  if (evaluated >= maximum) return '100%'
+
+  const millionthsOfPercent = (evaluated * 100_000_000n) / maximum
+  if (millionthsOfPercent > 0n) {
+    const percent = Number(millionthsOfPercent) / 1_000_000
+    return `${percent.toLocaleString(undefined, { maximumFractionDigits: 6 })}%`
+  }
+
+  const exponent = Math.floor(approximateLog10(evaluated) - approximateLog10(maximum) + 2)
+  const mantissa = 10 ** (
+    approximateLog10(evaluated) - approximateLog10(maximum) + 2 - exponent
+  )
+  return `${mantissa.toFixed(2)}e${exponent}%`
+}
+
+function formatIntegerDetail(value: number | undefined): string {
+  return value === undefined ? '—' : Math.trunc(value).toLocaleString()
+}
+
+function formatWholeNumberDetail(value: string): string {
+  const parsed = parseWholeNumber(value)
+  if (parsed === undefined) return value
+  const digits = parsed.toString()
+  if (digits.length <= 18) return parsed.toLocaleString()
+  return `${digits[0]}.${digits.slice(1, 6)}e+${digits.length - 1}`
+}
+
+function solverProofLabel(run: TrendRun): string {
+  if (run.solverKind === 'greedy') return 'No minimum proof attempted'
+  if (run.timedOut) return 'Not established (stopped)'
+  const proofStatus = String(
+    run.source.outcome?.proofStatus
+      ?? run.source.details?.proofStatus
+      ?? '',
+  ).replace(/[-_]/g, ' ').trim()
+  if (proofStatus.toLowerCase() === 'proven') {
+    return run.source.details?.thresholdReached === false
+      ? 'No qualifying set exists (proven)'
+      : 'Minimum size proven'
+  }
+  return proofStatus ? sentenceCase(proofStatus) : 'See run details'
+}
+
+function solverFrontierLabel(run: TrendRun): string {
+  if (run.solverKind !== 'exhaustive') return '—'
+  const details = run.source.details
+  const largestFinished = readNumber(
+    details,
+    'largestCardinalityFullyExhausted',
+    'largestFullyExhaustedCardinality',
+  )
+  const active = readNumber(details, 'activeCardinality', 'currentCardinality')
+  const evaluatedAtActive = readNumber(
+    details,
+    'subsetEvaluationsAtActiveCardinality',
+    'subsetsEvaluatedAtActiveCardinality',
+  )
+  const activeTotal = readString(
+    details,
+    'totalSubsetsAtActiveCardinality',
+    'subsetsAtActiveCardinality',
+  )
+  const parts: string[] = []
+  if (largestFinished !== undefined) {
+    parts.push(`fully exhausted through size ${Math.trunc(largestFinished).toLocaleString()}`)
+  }
+  if (active !== undefined) {
+    const activeProgress = evaluatedAtActive === undefined
+      ? `working on size ${Math.trunc(active).toLocaleString()}`
+      : `size ${Math.trunc(active).toLocaleString()}: ${formatIntegerDetail(evaluatedAtActive)}${activeTotal ? ` of ${formatWholeNumberDetail(activeTotal)}` : ''}`
+    parts.push(activeProgress)
+  }
+  if (parts.length === 0 && run.timedOut) {
+    const stage = readString(details, 'timeoutStage', 'stoppedStage')
+    return stage ? `stopped during ${sentenceCase(stage).toLowerCase()}` : 'stopped before a frontier was recorded'
+  }
+  return parts.length > 0 ? parts.join('; ') : '—'
 }
 
 interface TrendChartProps {
@@ -397,7 +735,17 @@ function TrendChart({
   const plotHeight = CHART_HEIGHT - PLOT_TOP - PLOT_BOTTOM
   const minimumLog = Math.log10(Math.max(nodeCounts[0] ?? 1, 1))
   const maximumLog = Math.log10(Math.max(nodeCounts[nodeCounts.length - 1] ?? 1, 1))
-  const displayedValues = points.map(({ metricValue }) => metricValue / presentation.divisor)
+  const timeBudgetValues = metric.id === 'compute'
+    ? [...new Set(points.flatMap((point) => (
+        point.timedOut && validMetricValue(point.timeBudgetMilliseconds)
+          ? [point.timeBudgetMilliseconds]
+          : []
+      )))]
+    : []
+  const displayedValues = [
+    ...points.map(({ metricValue }) => metricValue / presentation.divisor),
+    ...timeBudgetValues.map((value) => value / presentation.divisor),
+  ]
   const rawMaximum = Math.max(...displayedValues, 0)
   const linearMaximum = niceMaximum(rawMaximum * 1.08)
   const linearTicks = Array.from({ length: 5 }, (_, index) => (linearMaximum * index) / 4)
@@ -483,6 +831,12 @@ function TrendChart({
     return PLOT_TOP + plotHeight - normalizedValue * plotHeight
   }
   const yAxisScaleLabel = yAxisScale === 'linear' ? 'linear' : 'logarithmic'
+  const firstStoppedSeriesIndex = Math.max(
+    0,
+    series.findIndex(({ points: seriesPoints }) => (
+      seriesPoints.some(({ timedOut }) => timedOut)
+    )),
+  )
 
   return (
     <figure className="insights-lab-trends__figure">
@@ -512,6 +866,20 @@ function TrendChart({
             <span>{item.label}</span>
           </li>
         ))}
+        {points.some(({ timedOut }) => timedOut) ? (
+          <li>
+            <svg aria-hidden="true" height="22" viewBox="0 0 34 22" width="34">
+              {metric.id === 'compute'
+                ? <CensoredMarker index={firstStoppedSeriesIndex} size={4} x={17} y={15} />
+                : <StoppedMarker index={firstStoppedSeriesIndex} size={4} x={17} y={11} />}
+            </svg>
+            <span>
+              {metric.id === 'compute'
+                ? 'Stopped before minimum was proven'
+                : 'Partial value from a stopped run'}
+            </span>
+          </li>
+        ) : null}
       </ul>
       <div
         aria-label="Trend chart"
@@ -529,6 +897,11 @@ function TrendChart({
           <title id={`${idPrefix}-chart-title`}>{title}</title>
           <desc id={`${idPrefix}-chart-description`}>
             {description}. Points show {metric.label.toLowerCase()} by graph size on a {yAxisScaleLabel} Y-axis.
+            {points.some(({ timedOut }) => timedOut)
+              ? metric.id === 'compute'
+                ? ' Arrow markers are stopped, right-censored observations and show only a lower bound.'
+                : ' Crossed markers are partial measurements captured when a run stopped.'
+              : ''}
             {yAxisScale === 'logarithmic' && allValuesAreZero
               ? ' All selected values are zero, so logarithmic spacing is not applicable.'
               : ''}
@@ -575,6 +948,30 @@ function TrendChart({
             )
           })}
 
+
+          {timeBudgetValues.map((budget) => {
+            const y = yForMetricValue(budget)
+            return (
+              <g key={`budget-${budget}`}>
+                <line
+                  className="insights-lab-trends__budget-line"
+                  x1={PLOT_LEFT}
+                  x2={CHART_WIDTH - PLOT_RIGHT}
+                  y1={y}
+                  y2={y}
+                />
+                <text
+                  className="insights-lab-trends__budget-label"
+                  textAnchor="end"
+                  x={CHART_WIDTH - PLOT_RIGHT - 5}
+                  y={y - 6}
+                >
+                  {formatDurationLimit(budget)} time budget
+                </text>
+              </g>
+            )
+          })}
+
           <line
             className="insights-lab-trends__axis-line"
             x1={PLOT_LEFT}
@@ -614,27 +1011,65 @@ function TrendChart({
               x: xForNodeCount(point.nodeCount),
               y: yForMetricValue(point.metricValue),
             }))
-            const pointList = chartPoints.map(({ x, y }) => `${x},${y}`).join(' ')
             const color = SERIES_COLORS[seriesIndex % SERIES_COLORS.length]
+            const duplicateNodeCounts = new Set(
+              chartPoints
+                .filter((point, index, allPoints) => (
+                  allPoints.some((candidate, candidateIndex) => (
+                    candidateIndex !== index && candidate.nodeCount === point.nodeCount
+                  ))
+                ))
+                .map(({ nodeCount }) => nodeCount),
+            )
             return (
               <g key={item.id}>
-                {chartPoints.length > 1 && (
-                  <polyline
-                    className="insights-lab-trends__series-line"
-                    fill="none"
-                    points={pointList}
-                    stroke={color}
-                    strokeDasharray={SERIES_DASHES[seriesIndex % SERIES_DASHES.length]}
-                    strokeWidth="2.5"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                )}
+                {chartPoints.slice(1).map((point, pointIndex) => {
+                  const previous = chartPoints[pointIndex]
+                  if (
+                    previous.timedOut
+                    || point.timedOut
+                    || duplicateNodeCounts.has(previous.nodeCount)
+                    || duplicateNodeCounts.has(point.nodeCount)
+                  ) return null
+                  return (
+                    <line
+                      className="insights-lab-trends__series-line"
+                      key={`${previous.id}-${point.id}`}
+                      stroke={color}
+                      strokeDasharray={SERIES_DASHES[seriesIndex % SERIES_DASHES.length]}
+                      strokeWidth="2.5"
+                      vectorEffect="non-scaling-stroke"
+                      x1={previous.x}
+                      x2={point.x}
+                      y1={previous.y}
+                      y2={point.y}
+                    />
+                  )
+                })}
                 {chartPoints.map((point) => (
-                  <g key={point.nodeCount}>
+                  <g key={point.id}>
                     <title>
-                      {`${item.label}, ${formatNodeCount(point.nodeCount)} nodes: ${presentation.formatValue(point.metricValue)}${point.sampleCount > 1 ? ` median, n=${point.sampleCount}` : ', n=1'}`}
+                      {point.timedOut
+                        ? `${item.label}, ${formatNodeCount(point.nodeCount)} nodes: ${formatStoppedMetricValue(point, metric, presentation)}; minimum not proven, run #${point.runNumbers[0]}`
+                        : `${item.label}, ${formatNodeCount(point.nodeCount)} nodes: ${presentation.formatValue(point.metricValue)}${point.sampleCount > 1 ? ` median, n=${point.sampleCount}` : `, raw run #${point.runNumbers[0]}`}`}
                     </title>
-                    <SeriesMarker index={seriesIndex} x={point.x} y={point.y} />
+                    {point.timedOut ? (
+                      <>
+                        {metric.id === 'compute'
+                          ? <CensoredMarker index={seriesIndex} x={point.x} y={point.y} />
+                          : <StoppedMarker index={seriesIndex} x={point.x} y={point.y} />}
+                        <text
+                          className="insights-lab-trends__stopped-label"
+                          textAnchor={point.x > CHART_WIDTH - PLOT_RIGHT - 90 ? 'end' : 'start'}
+                          x={point.x + (point.x > CHART_WIDTH - PLOT_RIGHT - 90 ? -9 : 9)}
+                          y={point.y < PLOT_TOP + 32 ? point.y + 22 : point.y - 18}
+                        >
+                          {formatStoppedMetricValue(point, metric, presentation)}
+                        </text>
+                      </>
+                    ) : (
+                      <SeriesMarker index={seriesIndex} x={point.x} y={point.y} />
+                    )}
                   </g>
                 ))}
               </g>
@@ -649,9 +1084,9 @@ function TrendChart({
 export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProps) {
   const idPrefix = useId().replace(/:/g, '')
   const howToReadButtonRef = useRef<HTMLButtonElement>(null)
-  const [mode, setMode] = useState<TrendMode>('within')
+  const [mode, setMode] = useState<TrendMode>('solvers')
   const [requestedMetricId, setRequestedMetricId] = useState<TrendMetricId>('compute')
-  const [yAxisScale, setYAxisScale] = useState<YAxisScale>('linear')
+  const [yAxisScale, setYAxisScale] = useState<YAxisScale>('logarithmic')
   const [requestedAlgorithmId, setRequestedAlgorithmId] = useState('')
   const [requestedWithinSetId, setRequestedWithinSetId] = useState('')
   const [requestedWithinShapeIds, setRequestedWithinShapeIds] = useState<string[]>([])
@@ -701,35 +1136,41 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
       runNumber: run.runNumber,
       algorithmId: algorithmIdForRun,
       algorithmLabel: getAlgorithmLabel(run),
+      bounded: isBoundedMinimalCounterSet(run),
       benchmarkSetId: benchmarkSet.id,
       benchmarkSetName: getBenchmarkSetLabel(benchmarkSet, benchmarkSets),
       shapeId,
       shapeLabel: getShapeLabel(shapeId),
       nodeCount,
       metricValues,
+      solverKind: getCounterSetSolverKind(run),
+      timedOut: isTimedOutOutcome(run),
+      source: run,
     }]
   }), [benchmarkSets, benchmarkSetsById, runs])
 
-  const availableMetricIds = useMemo(() => new Set(
-    TREND_METRICS
-      .filter((metric) => trendRuns.some((run) => validMetricValue(run.metricValues[metric.id])))
-      .map(({ id }) => id),
-  ), [trendRuns])
-  const metricId = availableMetricIds.has(requestedMetricId)
-    ? requestedMetricId
-    : TREND_METRICS.find(({ id }) => availableMetricIds.has(id))?.id ?? 'compute'
-  const metric = metricDefinition(metricId)
+  const solverComparisonSetOptions = useMemo(() => benchmarkSets.filter((benchmarkSet) => {
+    const matchingRuns = trendRuns.filter((run) => run.benchmarkSetId === benchmarkSet.id)
+    const shapeIds = new Set(matchingRuns.map(({ shapeId }) => shapeId))
+    return [...shapeIds].some((shapeId) => (
+      matchingRuns.some((run) => run.shapeId === shapeId && run.solverKind === 'greedy')
+      && matchingRuns.some((run) => run.shapeId === shapeId && run.solverKind === 'exhaustive')
+    ))
+  }), [benchmarkSets, trendRuns])
 
-  const selectedMetricRuns = useMemo<SelectedMetricTrendRun[]>(() => trendRuns.flatMap((run) => {
-    const metricValue = run.metricValues[metricId]
-    return validMetricValue(metricValue) ? [{ ...run, metricValue }] : []
-  }), [metricId, trendRuns])
+  const hasSolverComparison = solverComparisonSetOptions.length > 0
+  const activeMode: TrendMode = mode === 'solvers' && !hasSolverComparison ? 'within' : mode
 
   const algorithmOptions = useMemo(() => {
-    const options = new Map<string, string>()
-    for (const run of trendRuns) options.set(run.algorithmId, run.algorithmLabel)
+    const options = new Map<string, { label: string; bounded: boolean }>()
+    for (const run of trendRuns) {
+      options.set(run.algorithmId, {
+        label: run.algorithmLabel,
+        bounded: run.bounded,
+      })
+    }
     return [...options.entries()]
-      .map(([id, label]) => ({ id, label }))
+      .map(([id, option]) => ({ id, ...option }))
       .sort((left, right) => left.label.localeCompare(right.label))
   }, [trendRuns])
 
@@ -737,10 +1178,63 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     ? requestedAlgorithmId
     : algorithmOptions[0]?.id ?? ''
 
-  const algorithmRuns = useMemo(
-    () => selectedMetricRuns.filter((run) => run.algorithmId === algorithmId),
-    [algorithmId, selectedMetricRuns],
+  const selectedAlgorithmOption = algorithmOptions.find(({ id }) => id === algorithmId)
+  const selectedAlgorithmIsBounded = selectedAlgorithmOption?.bounded ?? false
+
+  const selectedAlgorithmRuns = useMemo(
+    () => trendRuns.filter((run) => run.algorithmId === algorithmId),
+    [algorithmId, trendRuns],
   )
+
+  const availableMetricIds = useMemo(() => new Set(
+    TREND_METRICS
+      .filter((candidateMetric) => (
+        (!candidateMetric.boundedOnly || selectedAlgorithmIsBounded)
+        && selectedAlgorithmRuns.some((run) => (
+          validMetricValue(run.metricValues[candidateMetric.id])
+        ))
+      ))
+      .map(({ id }) => id),
+  ), [selectedAlgorithmIsBounded, selectedAlgorithmRuns])
+  const availableMetrics = useMemo(() => TREND_METRICS.filter((candidateMetric) => (
+    !candidateMetric.boundedOnly || selectedAlgorithmIsBounded
+  )), [selectedAlgorithmIsBounded])
+  const metricId = useMemo(() => (
+    activeMode === 'solvers'
+      ? 'compute'
+      : availableMetricIds.has(requestedMetricId)
+      ? requestedMetricId
+      : availableMetrics.find(({ id }) => availableMetricIds.has(id))?.id ?? 'compute'
+  ), [activeMode, availableMetricIds, availableMetrics, requestedMetricId])
+  const metric = metricDefinition(metricId)
+
+  const algorithmRuns = useMemo<SelectedMetricTrendRun[]>(() => (
+    selectedAlgorithmRuns.flatMap((run) => {
+      const metricValue = run.metricValues[metricId]
+      return validMetricValue(metricValue) ? [{ ...run, metricValue }] : []
+    })
+  ), [metricId, selectedAlgorithmRuns])
+
+  const solverComparisonSetId = solverComparisonSetOptions.some(({ id }) => id === requestedWithinSetId)
+    ? requestedWithinSetId
+    : solverComparisonSetOptions[0]?.id ?? ''
+
+  const solverShapeOptions = useMemo(() => [...new Set(
+    trendRuns
+      .filter((run) => run.benchmarkSetId === solverComparisonSetId && run.solverKind)
+      .map(({ shapeId }) => shapeId)
+      .filter((shapeId) => {
+        const matches = trendRuns.filter((run) => (
+          run.benchmarkSetId === solverComparisonSetId && run.shapeId === shapeId
+        ))
+        return matches.some((run) => run.solverKind === 'greedy')
+          && matches.some((run) => run.solverKind === 'exhaustive')
+      }),
+  )].sort(compareShapes), [solverComparisonSetId, trendRuns])
+
+  const solverShapeId = solverShapeOptions.includes(requestedAcrossShapeId)
+    ? requestedAcrossShapeId
+    : solverShapeOptions[0] ?? ''
 
   const withinSetOptions = useMemo(() => benchmarkSets.filter((benchmarkSet) => (
     algorithmRuns.some((run) => run.benchmarkSetId === benchmarkSet.id)
@@ -784,7 +1278,14 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     : acrossSetOptions.map(({ id }) => id)
 
   const nodeSizeOptions = useMemo(() => {
-    const availableRuns = mode === 'within'
+    const availableRuns = activeMode === 'solvers'
+      ? trendRuns.filter((run) => (
+          run.benchmarkSetId === solverComparisonSetId
+          && run.shapeId === solverShapeId
+          && run.solverKind
+          && validMetricValue(run.metricValues.compute)
+        ))
+      : activeMode === 'within'
       ? algorithmRuns.filter((run) => (
           run.benchmarkSetId === withinSetId && withinShapeIds.includes(run.shapeId)
         ))
@@ -797,7 +1298,10 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     acrossSetIds,
     acrossShapeId,
     algorithmRuns,
-    mode,
+    activeMode,
+    solverComparisonSetId,
+    solverShapeId,
+    trendRuns,
     withinSetId,
     withinShapeIds,
   ])
@@ -808,12 +1312,26 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     ? validRequestedNodeCounts
     : nodeSizeOptions
 
-  const selectedAlgorithmLabel = algorithmOptions.find(({ id }) => id === algorithmId)?.label ?? 'Algorithm'
+  const selectedAlgorithmLabel = selectedAlgorithmOption?.label ?? 'Algorithm'
   const selectedWithinSet = withinSetOptions.find(({ id }) => id === withinSetId)
   const selectedAcrossShapeLabel = acrossShapeId ? getShapeLabel(acrossShapeId) : 'Graph shape'
 
   const series = useMemo<TrendSeries[]>(() => {
-    if (mode === 'within') {
+    if (activeMode === 'solvers') {
+      const selectedRuns = trendRuns.flatMap<SelectedMetricTrendRun>((run) => {
+        const metricValue = run.metricValues.compute
+        return run.benchmarkSetId === solverComparisonSetId
+          && run.shapeId === solverShapeId
+          && run.solverKind
+          && selectedNodeCounts.includes(run.nodeCount)
+          && validMetricValue(metricValue)
+          ? [{ ...run, metricValue }]
+          : []
+      })
+      return rawSolverSeries(selectedRuns)
+    }
+
+    if (activeMode === 'within') {
       const selectedRuns = algorithmRuns.filter((run) => (
         run.benchmarkSetId === withinSetId
         && withinShapeIds.includes(run.shapeId)
@@ -847,10 +1365,13 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     acrossShapeId,
     algorithmRuns,
     benchmarkSets,
-    mode,
+    activeMode,
     selectedNodeCounts,
     withinSetId,
     withinShapeIds,
+    solverComparisonSetId,
+    solverShapeId,
+    trendRuns,
   ])
 
   const tableRows = useMemo(() => series
@@ -865,27 +1386,45 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
     () => metricPresentation(metric, series),
     [metric, series],
   )
+  const selectedSolverRuns = useMemo(() => (
+    activeMode === 'solvers'
+      ? series.flatMap(({ points }) => points.flatMap(({ sourceRuns }) => sourceRuns))
+      : []
+  ), [activeMode, series])
+  const solverDuplicateGroupCount = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const run of selectedSolverRuns) {
+      const key = `${run.solverKind ?? 'unknown'}-${run.nodeCount}`
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return [...counts.values()].filter((count) => count > 1).length
+  }, [selectedSolverRuns])
 
   if (trendRuns.length === 0) {
     return (
       <section aria-labelledby={`${idPrefix}-heading`} className="insights-lab-trends insights-lab-trends--empty">
         <h3 id={`${idPrefix}-heading`}>Historical trends</h3>
         <p>
-          Trends need completed stress-graph runs assigned to a benchmark set. Select a benchmark set on the Run tab, then record a stress-graph run.
+          Trends need recorded stress-graph runs assigned to a benchmark set. Completed runs and time-bounded attempts can both contribute. Select a benchmark set on the Run tab, then record a stress-graph run.
         </p>
       </section>
     )
   }
 
-  const chartTitle = mode === 'within'
-    ? `${selectedAlgorithmLabel} by graph shape`
-    : `${selectedAlgorithmLabel} across benchmark sets`
+  const selectedSolverSet = solverComparisonSetOptions.find(({ id }) => id === solverComparisonSetId)
+  const chartTitle = activeMode === 'solvers'
+    ? 'Greedy vs time-bounded exhaustive search'
+    : activeMode === 'within'
+      ? `${selectedAlgorithmLabel} by graph shape`
+      : `${selectedAlgorithmLabel} across benchmark sets`
   const graphSizeDescription = selectedNodeCounts.length === nodeSizeOptions.length
     ? 'all available graph sizes'
     : `${selectedNodeCounts.map(formatNodeCount).join(', ')} nodes`
-  const chartDescription = mode === 'within'
-    ? `${selectedWithinSet ? getBenchmarkSetLabel(selectedWithinSet, benchmarkSets) : 'Selected benchmark set'} · ${graphSizeDescription} · median ${metric.label.toLowerCase()} for repeated runs`
-    : `${selectedAcrossShapeLabel} · ${graphSizeDescription} · median ${metric.label.toLowerCase()} for repeated runs`
+  const chartDescription = activeMode === 'solvers'
+    ? `${selectedSolverSet ? getBenchmarkSetLabel(selectedSolverSet, benchmarkSets) : 'Selected benchmark set'} · ${getShapeLabel(solverShapeId)} · ${graphSizeDescription} · one raw run per point`
+    : activeMode === 'within'
+      ? `${selectedWithinSet ? getBenchmarkSetLabel(selectedWithinSet, benchmarkSets) : 'Selected benchmark set'} · ${graphSizeDescription} · median ${metric.label.toLowerCase()} for repeated runs`
+      : `${selectedAcrossShapeLabel} · ${graphSizeDescription} · median ${metric.label.toLowerCase()} for repeated runs`
 
   return (
     <section
@@ -969,9 +1508,33 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
           <div>
             <dt>Lines and points</dt>
             <dd>
-              A line represents a graph shape within one set, or a benchmark set in the across-set view. Lines connect measured sizes to guide the eye; they do not measure the sizes between them. One run is shown raw; repeated matching runs are represented by their median and sample count.
+              {activeMode === 'solvers'
+                ? 'Each point is one recorded run. Lines connect completed measurements only to guide the eye; they do not measure the sizes between them, and no observations are averaged.'
+                : 'A line represents a graph shape within one set, or a benchmark set in the across-set view. Lines connect completed measured sizes to guide the eye; they do not measure the sizes between them. One completed run is shown raw; repeated matching completed runs are represented by their median and sample count.'}
             </dd>
           </div>
+          {activeMode === 'solvers' ? (
+            <>
+              <div>
+                <dt>What the solvers establish</dt>
+                <dd>
+                  Greedy quickly finds a usable counter set, but does not prove that it is the smallest one. The time-bounded exhaustive reference searches by set size to try to prove a minimum. This describes the current reference implementation, not a claim that every possible exact method must perform the same search.
+                </dd>
+              </div>
+              <div>
+                <dt>Stopped observations</dt>
+                <dd>
+                  An open arrow marker is right-censored: the exhaustive search reached its fixed time budget before proving a minimum. Its plotted time is a lower bound, so it is not connected or combined with completed observations.
+                </dd>
+              </div>
+              <div>
+                <dt>Search frontier</dt>
+                <dd>
+                  The data table shows the largest set size fully exhausted and progress within the active size. “% of maximum subset space” compares evaluated subsets with every possible subset; it is workload context, not a completion estimate.
+                </dd>
+              </div>
+            </>
+          ) : null}
           <div>
             <dt>{metric.label}</dt>
             <dd>{metric.explanation} {metric.significance}</dd>
@@ -991,12 +1554,27 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
         </dl>
       </section>
 
-      <div className="insights-lab-trends__controls">
+      <div className={`insights-lab-trends__controls${activeMode === 'solvers' ? ' insights-lab-trends__controls--solvers' : ''}`}>
         <fieldset className="insights-lab-trends__mode">
           <legend>Comparison</legend>
           <label>
             <input
-              checked={mode === 'within'}
+              checked={activeMode === 'solvers'}
+              disabled={!hasSolverComparison}
+              name={`${idPrefix}-mode`}
+              onChange={() => {
+                setMode('solvers')
+                setRequestedNodeCounts([])
+                setRequestedMetricId('compute')
+                setYAxisScale('logarithmic')
+              }}
+              type="radio"
+            />
+            <span>Compare counter-set solvers</span>
+          </label>
+          <label>
+            <input
+              checked={activeMode === 'within'}
               name={`${idPrefix}-mode`}
               onChange={() => {
                 setMode('within')
@@ -1008,7 +1586,7 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
           </label>
           <label>
             <input
-              checked={mode === 'across'}
+              checked={activeMode === 'across'}
               name={`${idPrefix}-mode`}
               onChange={() => {
                 setMode('across')
@@ -1020,132 +1598,174 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
           </label>
         </fieldset>
 
-        <label className="insights-lab-trends__select">
-          <span>Algorithm</span>
-          <select
-            onChange={(event) => {
-              setRequestedAlgorithmId(event.target.value)
-              setRequestedWithinSetId('')
-              setRequestedWithinShapeIds([])
-              setRequestedAcrossShapeId('')
-              setRequestedAcrossSetIds([])
-              setRequestedNodeCounts([])
-            }}
-            value={algorithmId}
-          >
-            {algorithmOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="insights-lab-trends__select">
-          <span>Metric</span>
-          <select
-            onChange={(event) => {
-              setRequestedMetricId(event.target.value as TrendMetricId)
-              setRequestedNodeCounts([])
-            }}
-            value={metricId}
-          >
-            {TREND_METRICS.map((option) => (
-              <option
-                disabled={!availableMetricIds.has(option.id)}
-                key={option.id}
-                value={option.id}
-              >
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {mode === 'within' ? (
+        {activeMode === 'solvers' ? (
           <>
             <label className="insights-lab-trends__select">
               <span>Benchmark set</span>
               <select
                 onChange={(event) => {
                   setRequestedWithinSetId(event.target.value)
-                  setRequestedWithinShapeIds([])
+                  setRequestedAcrossShapeId('')
                   setRequestedNodeCounts([])
                 }}
-                value={withinSetId}
+                value={solverComparisonSetId}
               >
-                {withinSetOptions.map((benchmarkSet) => (
+                {solverComparisonSetOptions.map((benchmarkSet) => (
                   <option key={benchmarkSet.id} value={benchmarkSet.id}>
                     {getBenchmarkSetLabel(benchmarkSet, benchmarkSets)}
                   </option>
                 ))}
               </select>
             </label>
-            <fieldset className="insights-lab-trends__checks">
-              <legend>Graph shapes <span>(up to {MAX_WITHIN_SHAPES})</span></legend>
-              <div>
-                {withinShapeOptions.map((shapeId) => {
-                  const checked = withinShapeIds.includes(shapeId)
-                  const atLimit = withinShapeIds.length >= MAX_WITHIN_SHAPES
-                  return (
-                    <label key={shapeId}>
-                      <input
-                        checked={checked}
-                        disabled={(checked && withinShapeIds.length === 1) || (!checked && atLimit)}
-                        onChange={(event) => {
-                          setRequestedWithinShapeIds(
-                            event.target.checked
-                              ? [...withinShapeIds, shapeId].slice(0, MAX_WITHIN_SHAPES)
-                              : withinShapeIds.filter((selected) => selected !== shapeId),
-                          )
-                        }}
-                        type="checkbox"
-                      />
-                      <span>{getShapeLabel(shapeId)}</span>
-                    </label>
-                  )
-                })}
-              </div>
-            </fieldset>
-          </>
-        ) : (
-          <>
             <label className="insights-lab-trends__select">
               <span>Graph shape</span>
               <select
                 onChange={(event) => {
                   setRequestedAcrossShapeId(event.target.value)
-                  setRequestedAcrossSetIds([])
                   setRequestedNodeCounts([])
                 }}
-                value={acrossShapeId}
+                value={solverShapeId}
               >
-                {acrossShapeOptions.map((shapeId) => (
+                {solverShapeOptions.map((shapeId) => (
                   <option key={shapeId} value={shapeId}>{getShapeLabel(shapeId)}</option>
                 ))}
               </select>
             </label>
-            <fieldset className="insights-lab-trends__checks">
-              <legend>Benchmark sets</legend>
-              <div>
-                {acrossSetOptions.map((benchmarkSet) => {
-                  const checked = acrossSetIds.includes(benchmarkSet.id)
-                  return (
-                    <label key={benchmarkSet.id}>
-                      <input
-                        checked={checked}
-                        disabled={checked && acrossSetIds.length === 1}
-                        onChange={(event) => setRequestedAcrossSetIds(
-                          event.target.checked
-                            ? [...acrossSetIds, benchmarkSet.id]
-                            : acrossSetIds.filter((selected) => selected !== benchmarkSet.id),
-                        )}
-                        type="checkbox"
-                      />
-                      <span>{getBenchmarkSetLabel(benchmarkSet, benchmarkSets)}</span>
-                    </label>
-                  )
-                })}
-              </div>
-            </fieldset>
+            <div className="insights-lab-trends__static-value">
+              <span>Metric</span>
+              <strong>Compute time</strong>
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="insights-lab-trends__select">
+              <span>Algorithm</span>
+              <select
+                onChange={(event) => {
+                  setRequestedAlgorithmId(event.target.value)
+                  setRequestedWithinSetId('')
+                  setRequestedWithinShapeIds([])
+                  setRequestedAcrossShapeId('')
+                  setRequestedAcrossSetIds([])
+                  setRequestedNodeCounts([])
+                }}
+                value={algorithmId}
+              >
+                {algorithmOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="insights-lab-trends__select">
+              <span>Metric</span>
+              <select
+                onChange={(event) => {
+                  setRequestedMetricId(event.target.value as TrendMetricId)
+                  setRequestedNodeCounts([])
+                }}
+                value={metricId}
+              >
+                {availableMetrics.map((option) => (
+                  <option
+                    disabled={!availableMetricIds.has(option.id)}
+                    key={option.id}
+                    value={option.id}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {activeMode === 'within' ? (
+              <>
+                <label className="insights-lab-trends__select">
+                  <span>Benchmark set</span>
+                  <select
+                    onChange={(event) => {
+                      setRequestedWithinSetId(event.target.value)
+                      setRequestedWithinShapeIds([])
+                      setRequestedNodeCounts([])
+                    }}
+                    value={withinSetId}
+                  >
+                    {withinSetOptions.map((benchmarkSet) => (
+                      <option key={benchmarkSet.id} value={benchmarkSet.id}>
+                        {getBenchmarkSetLabel(benchmarkSet, benchmarkSets)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <fieldset className="insights-lab-trends__checks">
+                  <legend>Graph shapes <span>(up to {MAX_WITHIN_SHAPES})</span></legend>
+                  <div>
+                    {withinShapeOptions.map((shapeId) => {
+                      const checked = withinShapeIds.includes(shapeId)
+                      const atLimit = withinShapeIds.length >= MAX_WITHIN_SHAPES
+                      return (
+                        <label key={shapeId}>
+                          <input
+                            checked={checked}
+                            disabled={(checked && withinShapeIds.length === 1) || (!checked && atLimit)}
+                            onChange={(event) => {
+                              setRequestedWithinShapeIds(
+                                event.target.checked
+                                  ? [...withinShapeIds, shapeId].slice(0, MAX_WITHIN_SHAPES)
+                                  : withinShapeIds.filter((selected) => selected !== shapeId),
+                              )
+                            }}
+                            type="checkbox"
+                          />
+                          <span>{getShapeLabel(shapeId)}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </fieldset>
+              </>
+            ) : (
+              <>
+                <label className="insights-lab-trends__select">
+                  <span>Graph shape</span>
+                  <select
+                    onChange={(event) => {
+                      setRequestedAcrossShapeId(event.target.value)
+                      setRequestedAcrossSetIds([])
+                      setRequestedNodeCounts([])
+                    }}
+                    value={acrossShapeId}
+                  >
+                    {acrossShapeOptions.map((shapeId) => (
+                      <option key={shapeId} value={shapeId}>{getShapeLabel(shapeId)}</option>
+                    ))}
+                  </select>
+                </label>
+                <fieldset className="insights-lab-trends__checks">
+                  <legend>Benchmark sets</legend>
+                  <div>
+                    {acrossSetOptions.map((benchmarkSet) => {
+                      const checked = acrossSetIds.includes(benchmarkSet.id)
+                      return (
+                        <label key={benchmarkSet.id}>
+                          <input
+                            checked={checked}
+                            disabled={checked && acrossSetIds.length === 1}
+                            onChange={(event) => setRequestedAcrossSetIds(
+                              event.target.checked
+                                ? [...acrossSetIds, benchmarkSet.id]
+                                : acrossSetIds.filter((selected) => selected !== benchmarkSet.id),
+                            )}
+                            type="checkbox"
+                          />
+                          <span>{getBenchmarkSetLabel(benchmarkSet, benchmarkSets)}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </fieldset>
+              </>
+            )}
           </>
         )}
 
@@ -1194,42 +1814,116 @@ export function InsightsLabTrends({ runs, benchmarkSets }: InsightsLabTrendsProp
             >
               {showData ? 'Hide data' : 'View data'}
             </button>
-            <span>n=1 shows the raw run; repeats show the median.</span>
+            <span>
+              {activeMode === 'solvers'
+                ? 'Each point is one raw run; no averaging is applied.'
+                : 'n=1 shows the raw run; completed repeats show the median.'}
+            </span>
           </div>
+          {activeMode === 'solvers' && solverDuplicateGroupCount > 0 ? (
+            <p className="insights-lab-trends__duplicate-note" role="status">
+              {solverDuplicateGroupCount} solver/size {solverDuplicateGroupCount === 1 ? 'selection has' : 'selections have'} duplicate runs. Every observation is shown separately; none are averaged.
+            </p>
+          ) : null}
           {showData && (
-            <div className="insights-lab-trends__table-wrap" id={`${idPrefix}-data-table`}>
-              <table>
-                <caption>
-                  {metric.id === 'compute'
-                    ? 'Compute-time values plotted above'
-                    : `${metric.label} values plotted above`}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Benchmark set</th>
-                    <th scope="col">Graph shape</th>
-                    <th scope="col">Nodes</th>
-                    <th scope="col">{metric.label}</th>
-                    <th scope="col">Samples</th>
-                    <th scope="col">Runs</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableRows.map((row) => (
-                    <tr key={`${row.benchmarkSetId}-${row.shapeLabel}-${row.nodeCount}`}>
-                      <td>{row.benchmarkSetName}</td>
-                      <td>{row.shapeLabel}</td>
-                      <td>{formatNodeCount(row.nodeCount)}</td>
-                      <td>
-                        {presentation.formatValue(row.metricValue)}
-                        {row.sampleCount > 1 && <span> median</span>}
-                      </td>
-                      <td>{row.sampleCount}</td>
-                      <td>{row.runNumbers.map((runNumber) => `#${runNumber}`).join(', ')}</td>
+            <div
+              aria-label="Trend data"
+              className="insights-lab-trends__table-wrap"
+              id={`${idPrefix}-data-table`}
+              role="region"
+              tabIndex={0}
+            >
+              {activeMode === 'solvers' ? (
+                <table>
+                  <caption>Raw greedy and exhaustive observations plotted above</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Solver</th>
+                      <th scope="col">Nodes</th>
+                      <th scope="col">Compute time</th>
+                      <th scope="col">Minimum proof</th>
+                      <th scope="col">Candidates</th>
+                      <th scope="col">Subset evaluations</th>
+                      <th scope="col">Search frontier</th>
+                      <th scope="col">% of maximum subset space</th>
+                      <th scope="col">Run</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {[...selectedSolverRuns]
+                      .sort((left, right) => (
+                        left.nodeCount - right.nodeCount
+                        || (left.solverKind ?? '').localeCompare(right.solverKind ?? '')
+                        || left.runNumber - right.runNumber
+                      ))
+                      .map((run) => {
+                        const candidateCount = readNumber(
+                          run.source.details,
+                          'totalCandidateCount',
+                          'candidateCountTotal',
+                          'candidateCount',
+                        )
+                        const subsetEvaluations = readNumber(
+                          run.source.details,
+                          'subsetEvaluations',
+                          'subsetsEvaluated',
+                        )
+                        return (
+                          <tr key={`solver-run-${run.runNumber}`}>
+                            <td>{run.solverKind === 'exhaustive' ? 'Time-bounded exhaustive' : 'Greedy'}</td>
+                            <td>{formatNodeCount(run.nodeCount)}</td>
+                            <td>
+                              {run.timedOut
+                                ? `${formatDurationLimit(run.metricValues.compute ?? 0)} · stopped`
+                                : presentation.formatValue(run.metricValues.compute ?? 0)}
+                            </td>
+                            <td>{solverProofLabel(run)}</td>
+                            <td>{formatIntegerDetail(candidateCount)}</td>
+                            <td>{formatIntegerDetail(subsetEvaluations)}</td>
+                            <td className="insights-lab-trends__frontier-cell">{solverFrontierLabel(run)}</td>
+                            <td>{run.solverKind === 'exhaustive' ? formatMaximumSubsetSpacePercent(run) : '—'}</td>
+                            <td>#{run.runNumber}</td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              ) : (
+                <table>
+                  <caption>
+                    {metric.id === 'compute'
+                      ? 'Compute-time values plotted above'
+                      : `${metric.label} values plotted above`}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Benchmark set</th>
+                      <th scope="col">Graph shape</th>
+                      <th scope="col">Nodes</th>
+                      <th scope="col">{metric.label}</th>
+                      <th scope="col">Samples</th>
+                      <th scope="col">Runs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.benchmarkSetName}</td>
+                        <td>{row.shapeLabel}</td>
+                        <td>{formatNodeCount(row.nodeCount)}</td>
+                        <td>
+                          {row.timedOut
+                            ? formatStoppedMetricValue(row, metric, presentation)
+                            : presentation.formatValue(row.metricValue)}
+                          {!row.timedOut && row.sampleCount > 1 && <span> median</span>}
+                        </td>
+                        <td>{row.sampleCount}</td>
+                        <td>{row.runNumbers.map((runNumber) => `#${runNumber}`).join(', ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
         </>

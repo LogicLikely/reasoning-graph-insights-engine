@@ -1,6 +1,7 @@
 using Backend.Calculation;
 using Backend.Calculation.MinimalCounterSets;
 using Backend.Models.Domain;
+using Backend.Reporting;
 
 namespace backend.Tests.Calculation;
 
@@ -109,7 +110,7 @@ public sealed class MinimalCounterSetSolverTests
     }
 
     [TestMethod]
-    public void BoundedSolver_TruncatesDeterministicallyAndReportsNotProven()
+    public void BoundedSolver_SearchesBeyondHistoricalCandidateLimitAndProvesResult()
     {
         var candidates = Enumerable.Range(0, 21)
             .Reverse()
@@ -117,7 +118,7 @@ public sealed class MinimalCounterSetSolverTests
             .ToArray();
         var contributions = candidates.ToDictionary(
             candidate => candidate.NodeId,
-            candidate => candidate.NodeId == "C00" ? -2m : 0m,
+            candidate => candidate.NodeId == "C20" ? -2m : 0m,
             StringComparer.Ordinal);
         var problem = new FakeProblem(0m, -1m, candidates, contributions);
 
@@ -126,16 +127,17 @@ public sealed class MinimalCounterSetSolverTests
             "target",
             Array.Empty<string>());
 
-        Assert.AreEqual(20, BoundedBruteForceMinimalCounterSetSolver.CandidateLimit);
         Assert.AreEqual(21, result.TotalCandidateCount);
-        Assert.AreEqual(20, result.SearchedCandidateCount);
-        Assert.AreEqual(1, result.ExcludedCandidateCount);
-        Assert.AreEqual(1, result.CandidatesExamined);
+        Assert.AreEqual(21, result.SearchedCandidateCount);
+        Assert.AreEqual(0, result.ExcludedCandidateCount);
+        Assert.AreEqual(21, result.CandidatesExamined);
+        Assert.AreEqual(22L, result.SubsetEvaluations);
         CollectionAssert.AreEqual(
-            new[] { "C00" },
+            new[] { "C20" },
             result.CounterNodeIds.ToArray());
-        Assert.AreEqual(MinimalCounterSetProofStatus.NotProven, result.ProofStatus);
-        Assert.AreEqual(MinimalCounterSetStopReason.CandidateLimit, result.StopReason);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetStopReason.Completed, result.StopReason);
+        Assert.AreEqual("2097152", result.TotalPossibleSubsets);
     }
 
     [TestMethod]
@@ -172,11 +174,9 @@ public sealed class MinimalCounterSetSolverTests
 
     [TestMethod]
     [Timeout(10_000)]
-    public void BoundedSolver_ExhaustsExactlyAllSubsetsAtCandidateLimit()
+    public void BoundedSolver_ExhaustsExactlyAllSubsetsInCandidateUniverse()
     {
-        var candidates = Enumerable.Range(
-                0,
-                BoundedBruteForceMinimalCounterSetSolver.CandidateLimit)
+        var candidates = Enumerable.Range(0, 8)
             .Select(index => new MinimalCounterCandidate($"C{index:00}", 1m))
             .ToArray();
         var problem = new FakeProblem(
@@ -201,7 +201,7 @@ public sealed class MinimalCounterSetSolverTests
     }
 
     [TestMethod]
-    public void BoundedSolver_ReportsTruncatedEmptySetAsNotProven()
+    public void BoundedSolver_ProvesEmptySetIsMinimalWithMoreThanTwentyCandidates()
     {
         var candidates = Enumerable.Range(0, 21)
             .Select(index => new MinimalCounterCandidate($"C{index:00}", 1m))
@@ -221,8 +221,180 @@ public sealed class MinimalCounterSetSolverTests
         Assert.AreEqual(1L, result.SubsetEvaluations);
         Assert.AreEqual(0, result.LargestCardinalityFullyExhausted);
         Assert.AreEqual(0, result.CounterNodeIds.Count);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetStopReason.Completed, result.StopReason);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_TimeBudgetReturnsSearchFrontierWithoutWaiting()
+    {
+        var timeProvider = new ManualTimeProvider();
+        var candidates = Enumerable.Range(0, 4)
+            .Select(index => new MinimalCounterCandidate($"C{index}", 1m))
+            .ToArray();
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates,
+            candidates.ToDictionary(candidate => candidate.NodeId, _ => 0.1m),
+            beforeContribution: () =>
+                timeProvider.Advance(TimeSpan.FromMilliseconds(3)));
+
+        var result = CreateBoundedSolver(
+            problem,
+            timeProvider,
+            TimeSpan.FromMilliseconds(5)).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>());
+
+        Assert.AreEqual(MinimalCounterSetStopReason.TimeBudget, result.StopReason);
         Assert.AreEqual(MinimalCounterSetProofStatus.NotProven, result.ProofStatus);
-        Assert.AreEqual(MinimalCounterSetStopReason.CandidateLimit, result.StopReason);
+        Assert.AreEqual(MinimalCounterSetTimeoutStage.Search, result.TimeoutStage);
+        Assert.IsFalse(result.ThresholdReached);
+        Assert.AreEqual(4, result.TotalCandidateCount);
+        Assert.AreEqual(4, result.SearchedCandidateCount);
+        Assert.AreEqual(0, result.ExcludedCandidateCount);
+        Assert.AreEqual(2, result.CandidatesExamined);
+        Assert.AreEqual(3L, result.SubsetEvaluations);
+        Assert.AreEqual(0, result.LargestCardinalityFullyExhausted);
+        Assert.AreEqual(1, result.ActiveCardinality);
+        Assert.AreEqual(2L, result.SubsetEvaluationsAtActiveCardinality);
+        Assert.AreEqual("4", result.TotalSubsetsAtActiveCardinality);
+        Assert.AreEqual("16", result.TotalPossibleSubsets);
+        Assert.AreEqual(5d, result.TimeBudgetMilliseconds);
+        Assert.AreEqual(0d, result.PreparationElapsedMilliseconds);
+        Assert.AreEqual(6d, result.SearchElapsedMilliseconds);
+        Assert.IsNotNull(result.SubsetEvaluationsPerSecond);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_DeadlineDoesNotEraseProofFromCompletedEvaluation()
+    {
+        var timeProvider = new ManualTimeProvider();
+        var candidate = new MinimalCounterCandidate("C", 1m);
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates: [candidate],
+            contributions: new Dictionary<string, decimal> { ["C"] = -2m },
+            beforeContribution: () =>
+                timeProvider.Advance(TimeSpan.FromMilliseconds(5)));
+
+        var result = CreateBoundedSolver(
+            problem,
+            timeProvider,
+            TimeSpan.FromMilliseconds(5)).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>());
+
+        Assert.AreEqual(MinimalCounterSetStopReason.Completed, result.StopReason);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+        Assert.IsTrue(result.ThresholdReached);
+        CollectionAssert.AreEqual(new[] { "C" }, result.CounterNodeIds.ToArray());
+        Assert.AreEqual(2L, result.SubsetEvaluations);
+        Assert.AreEqual(1, result.LargestCardinalityFullyExhausted);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_TimeBudgetIncludesProblemPreparation()
+    {
+        var timeProvider = new ManualTimeProvider();
+        var candidates = new[]
+        {
+            new MinimalCounterCandidate("A", 1m),
+            new MinimalCounterCandidate("B", 1m)
+        };
+        var problem = new FakeProblem(
+            0m,
+            -1m,
+            candidates,
+            candidates.ToDictionary(candidate => candidate.NodeId, _ => -1m));
+        var evaluator = new AdvancingEvaluator(
+            problem,
+            () => timeProvider.Advance(TimeSpan.FromMilliseconds(6)));
+        var solver = new BoundedBruteForceMinimalCounterSetSolver(
+            evaluator,
+            timeProvider,
+            TimeSpan.FromMilliseconds(5));
+
+        var result = solver.Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        Assert.AreEqual(MinimalCounterSetStopReason.TimeBudget, result.StopReason);
+        Assert.AreEqual(MinimalCounterSetProofStatus.NotProven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetTimeoutStage.Preparation, result.TimeoutStage);
+        Assert.AreEqual(2, result.TotalCandidateCount);
+        Assert.AreEqual("4", result.TotalPossibleSubsets);
+        Assert.AreEqual(1L, result.SubsetEvaluations);
+        Assert.AreEqual(0, result.LargestCardinalityFullyExhausted);
+        Assert.IsNull(result.ActiveCardinality);
+        Assert.AreEqual(6d, result.PreparationElapsedMilliseconds);
+        Assert.AreEqual(0d, result.SearchElapsedMilliseconds);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_RequestCancellationWinsWhenItRacesDeadline()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var timeProvider = new ManualTimeProvider();
+        var candidate = new MinimalCounterCandidate("C", 1m);
+        var problem = new FakeProblem(
+            0m,
+            -1m,
+            [candidate],
+            new Dictionary<string, decimal> { ["C"] = 0m },
+            beforeContribution: () =>
+            {
+                timeProvider.Advance(TimeSpan.FromMilliseconds(6));
+                cancellation.Cancel();
+            });
+
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            CreateBoundedSolver(
+                problem,
+                timeProvider,
+                TimeSpan.FromMilliseconds(5)).Solve(
+                    new Graph(),
+                    "target",
+                    Array.Empty<string>(),
+                    cancellation.Token));
+    }
+
+    [TestMethod]
+    public void MinimalCounterSetResultDigest_IgnoresProgressAndTimingMeasurements()
+    {
+        var candidate = new MinimalCounterCandidate("C", 1m);
+        var result = CreateBoundedSolver(new FakeProblem(
+            0m,
+            -1m,
+            [candidate],
+            new Dictionary<string, decimal> { ["C"] = -2m })).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>());
+        var differentlyMeasured = result with
+        {
+            CandidatesExamined = result.CandidatesExamined + 10,
+            SubsetEvaluations = result.SubsetEvaluations + 100,
+            LargestCardinalityFullyExhausted = 999,
+            ActiveCardinality = 998,
+            SubsetEvaluationsAtActiveCardinality = 97,
+            TotalSubsetsAtActiveCardinality = "123456789",
+            TotalPossibleSubsets = "987654321",
+            TimeBudgetMilliseconds = 999_999d,
+            PreparationElapsedMilliseconds = 123d,
+            SearchElapsedMilliseconds = 456d,
+            SubsetEvaluationsPerSecond = 789d,
+            TimeoutStage = MinimalCounterSetTimeoutStage.Search
+        };
+
+        Assert.AreEqual(
+            PerformanceRunMetadataCapture.CalculateResultDigest(result),
+            PerformanceRunMetadataCapture.CalculateResultDigest(differentlyMeasured));
     }
 
     [TestMethod]
@@ -299,8 +471,8 @@ public sealed class MinimalCounterSetSolverTests
             new[] { "O1" },
             result.CounterNodeIds.ToArray());
         Assert.IsTrue(result.ThresholdReached);
-        AssertApproximately(expectedInitialOdds, result.InitialTargetLogOdds);
-        AssertApproximately(expectedFinalOdds, result.FinalTargetLogOdds);
+        AssertApproximately(expectedInitialOdds, result.InitialTargetLogOdds!.Value);
+        AssertApproximately(expectedFinalOdds, result.FinalTargetLogOdds!.Value);
     }
 
     [TestMethod]
@@ -416,10 +588,14 @@ public sealed class MinimalCounterSetSolverTests
     }
 
     private static BoundedBruteForceMinimalCounterSetSolver CreateBoundedSolver(
-        IMinimalCounterSetProblem problem)
+        IMinimalCounterSetProblem problem,
+        TimeProvider? timeProvider = null,
+        TimeSpan? timeBudget = null)
     {
         return new BoundedBruteForceMinimalCounterSetSolver(
-            new FakeEvaluator(problem));
+            new FakeEvaluator(problem),
+            timeProvider,
+            timeBudget);
     }
 
     private static GraphNode Node(
@@ -517,7 +693,8 @@ public sealed class MinimalCounterSetSolverTests
         decimal initialTargetLogOdds,
         decimal thresholdLogOdds,
         IReadOnlyList<MinimalCounterCandidate> candidates,
-        IReadOnlyDictionary<string, decimal> contributions)
+        IReadOnlyDictionary<string, decimal> contributions,
+        Action? beforeContribution = null)
         : IMinimalCounterSetProblem
     {
         public decimal ThresholdLogOdds => thresholdLogOdds;
@@ -531,7 +708,59 @@ public sealed class MinimalCounterSetSolverTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            beforeContribution?.Invoke();
             return contributions[counterNodeId];
+        }
+    }
+
+    private sealed class AdvancingEvaluator(
+        IMinimalCounterSetProblem problem,
+        Action beforeReturningProblem)
+        : IMinimalCounterSetEvaluator
+    {
+        public IMinimalCounterSetProblem CreateProblem(
+            Graph graph,
+            string targetNodeId,
+            IEnumerable<string> nodeIds,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            beforeReturningProblem();
+            return problem;
+        }
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private long _timestamp;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => _timestamp;
+
+        public override ITimer CreateTimer(
+            TimerCallback callback,
+            object? state,
+            TimeSpan dueTime,
+            TimeSpan period)
+        {
+            return new InertTimer();
+        }
+
+        public void Advance(TimeSpan duration)
+        {
+            _timestamp += duration.Ticks;
+        }
+
+        private sealed class InertTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+            public void Dispose()
+            {
+            }
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 

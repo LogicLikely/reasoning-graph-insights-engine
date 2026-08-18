@@ -505,6 +505,7 @@ describe('DemoPage', () => {
     const dialog = screen.getByRole('dialog', { name: 'Reset database' })
 
     expect(dialog).toHaveTextContent('The standard example graphs are always installed.')
+    expect(within(dialog).getByRole('group', { name: '100-node stress graphs' })).toBeInTheDocument()
     expect(within(dialog).getByRole('group', { name: '1K stress graphs' })).toBeInTheDocument()
     expect(within(dialog).getByRole('group', { name: '10K stress graphs' })).toBeInTheDocument()
     expect(within(dialog).getByRole('group', { name: '100K stress graphs' })).toBeInTheDocument()

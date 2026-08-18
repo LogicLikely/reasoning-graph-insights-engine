@@ -579,6 +579,10 @@ public class GraphRepository : IGraphRepository
                         stressGraph.Description,
                         stressGraph.Shape,
                         stressGraph.NodeCount,
+                        InitialTargetLogOdds =
+                            StressGraphBenchmarkContract.InitialTargetLogOdds,
+                        EffectiveCounterContributionLogOdds =
+                            StressGraphBenchmarkContract.EffectiveCounterContributionLogOdds,
                         CorpusJson = stressCorpus!.Json,
                         CorpusEntryCount = stressCorpus.EntryCount
                     },
