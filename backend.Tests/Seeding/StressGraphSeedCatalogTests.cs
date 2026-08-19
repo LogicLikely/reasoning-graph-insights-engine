@@ -154,6 +154,7 @@ public class StressGraphSeedCatalogTests
                 .Description;
 
             Assert.AreEqual(americanDescription, germanDescription);
+            StringAssert.Contains(americanDescription, "stress-v2");
             StringAssert.Contains(americanDescription, "10000 nodes");
         }
         finally

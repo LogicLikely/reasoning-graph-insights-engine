@@ -14,8 +14,8 @@ public class StressGraphCorpusLoaderTests
     {
         var path = Path.Combine(
             AppContext.BaseDirectory,
-            "Data",
-            "Seed",
+            "data",
+            "seed",
             "insights_stress_corpus.json");
 
         var result = await StressGraphCorpusLoader.LoadAsync(path, CancellationToken.None);

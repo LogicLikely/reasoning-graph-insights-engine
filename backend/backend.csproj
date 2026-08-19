@@ -23,7 +23,7 @@
     <Content Include="data/sql/migrations/20260816_initialize_evidence_prior_odds.sql"
              CopyToOutputDirectory="PreserveNewest" />
     <Content Update="data/seed/insights_stress_corpus.json"
-             TargetPath="Data/Seed/insights_stress_corpus.json"
+             TargetPath="data/seed/insights_stress_corpus.json"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

@@ -14,20 +14,34 @@ public sealed class StressGraphBenchmarkContractTests
     public void Contract_HasAWellSeparatedMinimumOfEightCounters()
     {
         Assert.AreEqual(
-            LegacyMinimalCounterSetEvaluator.DefaultThresholdLogOdds,
+            BayesianMinimalCounterSetEvaluator.DefaultThresholdLogOdds,
             StressGraphBenchmarkContract.ThresholdLogOdds,
             "The seed workload threshold must track the production evaluator.");
-        Assert.AreEqual(
-            -0.92m,
-            StressGraphBenchmarkContract.TargetLogOddsAfterCounters(7));
-        Assert.AreEqual(
-            -1.08m,
-            StressGraphBenchmarkContract.TargetLogOddsAfterCounters(8));
         Assert.IsTrue(
-            StressGraphBenchmarkContract.TargetLogOddsAfterCounters(7) >
+            StressGraphBenchmarkContract.InitialTargetLogOdds >
             StressGraphBenchmarkContract.ThresholdLogOdds);
         Assert.IsTrue(
-            StressGraphBenchmarkContract.TargetLogOddsAfterCounters(8) <=
+            StressGraphBenchmarkContract.CounterLeafLogBayesFactor < 0m);
+        Assert.IsTrue(
+            StressGraphBenchmarkContract.ProbabilityGivenParent >
+            StressGraphBenchmarkContract.ProbabilityGivenNotParent);
+        Assert.AreEqual(1m,
+            StressGraphBenchmarkContract.ProbabilityGivenParent +
+            StressGraphBenchmarkContract.ProbabilityGivenNotParent);
+
+        var nominalAfterSeven =
+            StressGraphBenchmarkContract.InitialTargetLogOdds +
+            (7 * StressGraphBenchmarkContract.CounterLeafLogBayesFactor);
+        var nominalAfterEight =
+            StressGraphBenchmarkContract.InitialTargetLogOdds +
+            (8 * StressGraphBenchmarkContract.CounterLeafLogBayesFactor);
+        Assert.AreEqual(-0.92m, nominalAfterSeven);
+        Assert.AreEqual(-1.08m, nominalAfterEight);
+        Assert.IsTrue(
+            nominalAfterSeven >
+            StressGraphBenchmarkContract.ThresholdLogOdds);
+        Assert.IsTrue(
+            nominalAfterEight <=
             StressGraphBenchmarkContract.ThresholdLogOdds);
         Assert.AreEqual(
             8,
@@ -59,7 +73,7 @@ public sealed class StressGraphBenchmarkContractTests
             TestContext.WriteLine(
                 $"{spec.Id}\t{spec.NodeCount}\t{spec.ObjectionCount}\t" +
                 $"{StressGraphBenchmarkContract.InitialTargetLogOdds:F3}\t" +
-                $"{StressGraphBenchmarkContract.EffectiveCounterContributionLogOdds:F3}\t" +
+                $"{StressGraphBenchmarkContract.CounterLeafLogBayesFactor:F3}\t" +
                 $"{StressGraphBenchmarkContract.ExpectedMinimumCounterSetCardinality}\t" +
                 StressGraphBenchmarkContract
                     .ExpectedExhaustiveEvaluationsToFirstMinimum(spec.ObjectionCount));
@@ -78,8 +92,10 @@ public sealed class StressGraphBenchmarkContractTests
         string shape)
     {
         var graph = CreateCalibratedGraph(shape, nodeCount: 100);
-        var calculator = new GraphLikelihoodCalculator();
-        var evaluator = new LegacyMinimalCounterSetEvaluator(calculator);
+        AssertCalibratedCandidateLayout(graph, nodeCount: 100);
+
+        var evaluator = new BayesianMinimalCounterSetEvaluator(
+            new GraphPosteriorOddsCalculator());
         var nodeIds = graph.Nodes.Select(node => node.Id).ToArray();
 
         var greedy = new GreedyMinimalCounterSetSolver(evaluator).Solve(
@@ -95,9 +111,7 @@ public sealed class StressGraphBenchmarkContractTests
         Assert.IsTrue(greedy.ThresholdReached);
         Assert.AreEqual(8, greedy.CounterNodeIds.Count);
         Assert.AreEqual(StressGraphBenchmarkContract.InitialTargetLogOdds, greedy.InitialTargetLogOdds);
-        Assert.AreEqual(
-            StressGraphBenchmarkContract.TargetLogOddsAfterCounters(8),
-            greedy.FinalTargetLogOdds);
+        AssertApproximately(-1.08m, greedy.FinalTargetLogOdds!.Value);
 
         Assert.IsTrue(exhaustive.ThresholdReached);
         Assert.AreEqual(8, exhaustive.CounterNodeIds.Count);
@@ -105,9 +119,52 @@ public sealed class StressGraphBenchmarkContractTests
         Assert.AreEqual(MinimalCounterSetStopReason.Completed, exhaustive.StopReason);
         Assert.AreEqual(7, exhaustive.LargestCardinalityFullyExhausted);
         Assert.AreEqual(969L, exhaustive.SubsetEvaluations);
+        AssertApproximately(-1.08m, exhaustive.FinalTargetLogOdds!.Value);
+    }
+
+    [TestMethod]
+    [DataRow("balanced", 1_000)]
+    [DataRow("wide", 1_000)]
+    [DataRow("shared-diamond", 1_000)]
+    [DataRow("balanced", 10_000)]
+    [DataRow("wide", 10_000)]
+    [DataRow("shared-diamond", 10_000)]
+    public void CalibratedLargeGraph_HasTheProductionSevenEightBoundary(
+        string shape,
+        int nodeCount)
+    {
+        var graph = CreateCalibratedGraph(shape, nodeCount);
+        AssertCalibratedCandidateLayout(graph, nodeCount);
+
+        var evaluator = new BayesianMinimalCounterSetEvaluator(
+            new GraphPosteriorOddsCalculator());
+        var problem = evaluator.CreateProblem(
+            graph,
+            "n-00000",
+            graph.Nodes.Select(node => node.Id));
+        var orderedCandidateIds = problem.Candidates
+            .Select(candidate => candidate.NodeId)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.AreEqual(nodeCount / 10, orderedCandidateIds.Length);
         Assert.AreEqual(
-            StressGraphBenchmarkContract.TargetLogOddsAfterCounters(8),
-            exhaustive.FinalTargetLogOdds);
+            StressGraphBenchmarkContract.InitialTargetLogOdds,
+            problem.InitialTargetLogOdds);
+
+        var afterSeven = problem.CalculateTargetLogOdds(
+            orderedCandidateIds.Take(7).ToArray());
+        var afterEight = problem.CalculateTargetLogOdds(
+            orderedCandidateIds.Take(8).ToArray());
+
+        Assert.IsTrue(
+            afterSeven > problem.ThresholdLogOdds,
+            $"Expected seven counters to remain above the threshold, but got {afterSeven}.");
+        Assert.IsTrue(
+            afterEight <= problem.ThresholdLogOdds,
+            $"Expected eight counters to reach the threshold, but got {afterEight}.");
+        AssertApproximately(-0.92m, afterSeven);
+        AssertApproximately(-1.08m, afterEight);
     }
 
     private static Graph CreateCalibratedGraph(string shape, int nodeCount)
@@ -119,44 +176,21 @@ public sealed class StressGraphBenchmarkContractTests
                 .Select(index => new GraphNode
                 {
                     Id = NodeId(index),
-                    Kind = Kind(index),
-                    PriorOdds = 0m,
-                    PosteriorOdds = AuthoredPosterior(index)
+                    Kind = Kind(index, nodeCount),
+                    PriorOdds = index == 0
+                        ? StressGraphBenchmarkContract.InitialTargetLogOdds
+                        : 0m,
+                    PosteriorOdds = index switch
+                    {
+                        0 => StressGraphBenchmarkContract.InitialTargetLogOdds,
+                        _ when Kind(index, nodeCount) == "objection" =>
+                            StressGraphBenchmarkContract.CounterLeafLogBayesFactor,
+                        _ => 0m
+                    }
                 })
                 .ToList(),
             Edges = CreateEdges(shape, nodeCount)
         };
-
-        var calculator = new GraphLikelihoodCalculator();
-        var uncalibratedContext = GraphCalculationContext.From(graph.Nodes, graph.Edges);
-        var root = graph.Nodes[0];
-        var rootPathContribution = calculator.CalculateNodeLogPosteriorOdds(
-            uncalibratedContext,
-            root.Id);
-        root.PriorOdds =
-            StressGraphBenchmarkContract.InitialTargetLogOdds - rootPathContribution;
-        root.PosteriorOdds = StressGraphBenchmarkContract.InitialTargetLogOdds;
-
-        foreach (var objection in graph.Nodes.Where(node => node.Kind == "objection"))
-        {
-            var authoredLogBayesFactor = objection.PosteriorOdds - objection.PriorOdds;
-            var downstreamPathContribution = calculator.CalculateNodeLogPosteriorOdds(
-                uncalibratedContext,
-                objection.Id);
-            var accumulatedLikelihoodRatio = calculator.GetSingleAccumulatedLR(
-                uncalibratedContext,
-                objection.Id,
-                root.Id);
-            Assert.IsNotNull(accumulatedLikelihoodRatio);
-            var pathToRoot = (decimal)Math.Log((double)accumulatedLikelihoodRatio.Value);
-
-            var calibratedPriorOdds =
-                StressGraphBenchmarkContract.EffectiveCounterContributionLogOdds -
-                downstreamPathContribution -
-                pathToRoot;
-            objection.PriorOdds = calibratedPriorOdds;
-            objection.PosteriorOdds = calibratedPriorOdds + authoredLogBayesFactor;
-        }
 
         return graph;
     }
@@ -191,29 +225,65 @@ public sealed class StressGraphBenchmarkContractTests
         Id = id,
         From = NodeId(childIndex),
         To = NodeId(parentIndex),
-        Kind = childIndex % 2 == 1 ? "support" : "rebut",
-        ProbabilityGivenParent = childIndex % 2 == 1 ? 0.5005m : 0.4995m,
-        ProbabilityGivenNotParent = 0.5m
+        Kind = "support",
+        ProbabilityGivenParent =
+            StressGraphBenchmarkContract.ProbabilityGivenParent,
+        ProbabilityGivenNotParent =
+            StressGraphBenchmarkContract.ProbabilityGivenNotParent
     };
 
     private static string NodeId(int index) => $"n-{index:00000}";
 
-    private static string Kind(int index) => index switch
+    private static string Kind(int index, int nodeCount) => index switch
     {
         0 => "root",
+        _ when index >= nodeCount - (nodeCount / 10) => "objection",
+        _ when IsReplacementEvidence(index, nodeCount) => "evidence",
         _ when index % 5 == 0 => "evidence",
-        _ when index % 10 == 2 => "objection",
         _ => "claim"
     };
 
-    private static decimal AuthoredPosterior(int index)
+    private static bool IsReplacementEvidence(int index, int nodeCount)
     {
-        if (Kind(index) != "evidence")
+        var objectionCount = nodeCount / 10;
+        var objectionStart = nodeCount - objectionCount;
+        var replacementWindowStart = objectionStart - objectionCount;
+
+        return index >= replacementWindowStart &&
+            index < objectionStart &&
+            index % 5 == 1;
+    }
+
+    private static void AssertCalibratedCandidateLayout(Graph graph, int nodeCount)
+    {
+        var objectionCount = nodeCount / 10;
+        var expectedObjectionIds = Enumerable
+            .Range(nodeCount - objectionCount, objectionCount)
+            .Select(NodeId)
+            .ToArray();
+        var actualObjectionIds = graph.Nodes
+            .Where(node => node.Kind == "objection")
+            .Select(node => node.Id)
+            .ToArray();
+
+        CollectionAssert.AreEqual(expectedObjectionIds, actualObjectionIds);
+        foreach (var objectionId in actualObjectionIds)
         {
-            return 0m;
+            Assert.IsFalse(
+                graph.Edges.Any(edge => edge.To == objectionId),
+                $"Counter candidate '{objectionId}' must be a structural leaf.");
         }
 
-        var score = 35 + (5 * ((index / 5) % 7));
-        return (decimal)Math.Log(score / (double)(100 - score));
+        Assert.AreEqual(
+            (nodeCount - 1) / 5,
+            graph.Nodes.Count(node => node.Kind == "evidence"));
+        Assert.AreEqual(
+            nodeCount - 1 - ((nodeCount - 1) / 5) - objectionCount,
+            graph.Nodes.Count(node => node.Kind == "claim"));
+    }
+
+    private static void AssertApproximately(decimal expected, decimal actual)
+    {
+        Assert.AreEqual(expected, actual, 0.000001m);
     }
 }

@@ -4,40 +4,57 @@ namespace backend.Tests.Seeding;
 public class StressGraphSeedSqlTests
 {
     [TestMethod]
-    public void Sql_CalibratesEveryNonDeepRootAndObjectionFromNamedParameters()
+    public void Sql_GeneratesBayesianNonDeepNodesFromNamedParameters()
     {
-        var sql = ReadSeedSql();
+        var sql = Normalize(ReadSeedSql());
 
+        StringAssert.Contains(sql, "@CounterCandidateCount");
         StringAssert.Contains(sql, "@InitialTargetLogOdds");
-        StringAssert.Contains(sql, "@EffectiveCounterContributionLogOdds");
-        StringAssert.Contains(sql, "), counter_paths_to_root AS (");
-        StringAssert.Contains(sql, "), calibration_targets AS MATERIALIZED (");
-        StringAssert.Contains(sql, "), calibrated_priors AS (");
-        StringAssert.Contains(sql, "), calibrated_nodes AS (");
-        StringAssert.Contains(sql, "LEFT JOIN contributions");
-        StringAssert.Contains(sql, "LEFT JOIN counter_paths_to_root");
+        StringAssert.Contains(sql, "@CounterLeafLogBayesFactor");
         StringAssert.Contains(
             sql,
-            "COALESCE(contributions.total_log_likelihood, 0)");
+            "series.node_index >= @NodeCount - @CounterCandidateCount\n" +
+            "                THEN 'objection'");
         StringAssert.Contains(
             sql,
-            "AND @Shape IN ('balanced', 'wide', 'shared-diamond')");
+            "series.node_index >= @NodeCount - (2 * @CounterCandidateCount)");
         StringAssert.Contains(
             sql,
-            "prior_odds = calibrated_nodes.calibrated_prior_odds");
+            "series.node_index < @NodeCount - @CounterCandidateCount");
+        StringAssert.Contains(sql, "series.node_index % 5 = 1");
         StringAssert.Contains(
             sql,
-            "posterior_odds = calibrated_nodes.calibrated_posterior_odds");
+            "WHEN @Shape = 'deep' AND series.node_index % 5 = 0 THEN 'evidence'");
         StringAssert.Contains(
             sql,
-            "node.graph_id = calibrated_nodes.graph_id");
+            "WHEN @Shape = 'deep' AND series.node_index % 10 = 2 THEN 'objection'");
+        StringAssert.Contains(sql, "WHEN @Shape <> 'deep' THEN 50");
         StringAssert.Contains(
             sql,
-            "node.id = calibrated_nodes.id");
+            "WHEN @Shape <> 'deep' AND payload.kind = 'root'\n" +
+            "            THEN @InitialTargetLogOdds");
+        StringAssert.Contains(
+            sql,
+            "WHEN @Shape <> 'deep' AND payload.kind = 'root'\n" +
+            "            THEN @InitialTargetLogOdds\n" +
+            "        ELSE 0\n" +
+            "    END,\n" +
+            "    CASE");
+        StringAssert.Contains(
+            sql,
+            "WHEN @Shape <> 'deep' AND payload.kind = 'objection'\n" +
+            "            THEN @CounterLeafLogBayesFactor");
+        Assert.IsTrue(
+            CountOccurrences(sql, "THEN @InitialTargetLogOdds") >= 2,
+            "The root's prior and posterior must both start at the calibrated target odds.");
+        Assert.IsFalse(
+            sql.Contains("@EffectiveCounterContributionLogOdds", StringComparison.Ordinal));
+        Assert.IsFalse(sql.Contains("WITH RECURSIVE", StringComparison.Ordinal));
+        Assert.IsFalse(sql.Contains("counter_paths_to_root", StringComparison.Ordinal));
+        Assert.IsFalse(sql.Contains("calibrated_priors", StringComparison.Ordinal));
+        Assert.IsFalse(sql.Contains("UPDATE public.nodes", StringComparison.Ordinal));
         Assert.IsFalse(
             sql.Contains("importance_to_parent", StringComparison.Ordinal));
-        Assert.IsFalse(
-            sql.Contains("@Shape = 'deep'", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -61,30 +78,42 @@ public class StressGraphSeedSqlTests
     }
 
     [TestMethod]
-    public void Sql_PreservesAuthoredEvidenceAndObjectionBayesFactors()
+    public void Sql_UsesCalibratedPropagationForNonDeepEdgesAndLegacyDeepValues()
     {
-        var normalizedSql = ReadSeedSql()
-            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        var sql = Normalize(ReadSeedSql());
 
+        StringAssert.Contains(sql, "@ProbabilityGivenParent");
+        StringAssert.Contains(sql, "@ProbabilityGivenNotParent");
         StringAssert.Contains(
-            normalizedSql,
-            "WHEN payload.kind IN ('evidence', 'objection') THEN 0");
+            sql,
+            "WHEN @Shape = 'deep' AND generated_edges.node_index % 2 = 0 THEN 'rebut'\n" +
+            "        ELSE 'support'");
         StringAssert.Contains(
-            normalizedSql,
-            "END,\n    payload.prior_odds,");
+            sql,
+            "WHEN @Shape = 'deep' AND generated_edges.node_index % 2 = 1 THEN 0.5005\n" +
+            "        WHEN @Shape = 'deep' THEN 0.4995\n" +
+            "        ELSE @ProbabilityGivenParent");
         StringAssert.Contains(
-            normalizedSql,
-            "node.id = 'n-00000'\n          OR node.kind = 'objection'");
+            sql,
+            "WHEN @Shape = 'deep' THEN 0.5\n" +
+            "        ELSE @ProbabilityGivenNotParent");
         StringAssert.Contains(
-            normalizedSql,
-            "calibrated_priors.posterior_odds -\n                    calibrated_priors.prior_odds");
+            sql,
+            "'support',\n    @ProbabilityGivenParent,\n    @ProbabilityGivenNotParent");
         StringAssert.Contains(
-            normalizedSql,
-            "ln(edge.probability_given_parent::double precision) -");
-        StringAssert.Contains(
-            normalizedSql,
-            "ln(edge.probability_given_not_parent::double precision)");
+            sql,
+            "WHEN generated.kind = 'evidence' THEN ln(\n" +
+            "                generated.evidence_score::double precision /\n" +
+            "                (100 - generated.evidence_score)::double precision\n" +
+            "            )");
     }
+
+    private static string Normalize(string value)
+        => value.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    private static int CountOccurrences(string value, string search)
+        => (value.Length - value.Replace(search, string.Empty, StringComparison.Ordinal).Length) /
+            search.Length;
 
     private static string ReadSeedSql()
         => File.ReadAllText(Path.Combine(

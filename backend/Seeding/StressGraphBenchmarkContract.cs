@@ -4,8 +4,9 @@ namespace Backend.Seeding;
 
 /// <summary>
 /// Defines the deterministic minimal-counter-set workload encoded by the
-/// non-deep stress graphs. The seed SQL solves node priors from these values
-/// while preserving the graph topology and edge likelihood ratios.
+/// non-deep stress graphs. Counter candidates are structural leaves whose
+/// authored log Bayes factors propagate through strong, symmetric support
+/// edges using the production Bayesian-factor calculation.
 /// </summary>
 public static class StressGraphBenchmarkContract
 {
@@ -13,17 +14,13 @@ public static class StressGraphBenchmarkContract
 
     public const decimal InitialTargetLogOdds = 0.2m;
 
-    public const decimal EffectiveCounterContributionLogOdds = -0.16m;
+    public const decimal CounterLeafLogBayesFactor = -0.16m;
+
+    public const decimal ProbabilityGivenParent = 0.999999999m;
+
+    public const decimal ProbabilityGivenNotParent = 0.000000001m;
 
     public const int ExpectedMinimumCounterSetCardinality = 8;
-
-    public static decimal TargetLogOddsAfterCounters(int counterCount)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(counterCount);
-
-        return InitialTargetLogOdds +
-            (counterCount * EffectiveCounterContributionLogOdds);
-    }
 
     public static BigInteger ExpectedExhaustiveEvaluationsToFirstMinimum(
         int candidateCount)

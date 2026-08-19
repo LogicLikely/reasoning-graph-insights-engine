@@ -27,26 +27,29 @@ The Lab offers best-effort request cancellation for the greedy, exhaustive, and 
 
 **Run standard stress suite** executes all six operations against every currently installed balanced, wide, and shared-diamond database stress graph. Deep-chain graphs are intentionally excluded because their pathological depth can make operations extremely slow or terminate the backend; they remain available for deliberate individual runs. Included graphs follow the canonical order shown by the database-reset UI, and operations run sequentially, graph by graph, with Leaf update last. Every request uses the benchmark set selected when the suite starts. The suite does not render each graph and never overlaps its own requests.
 
-The canonical matrix contains 100, 1,000, 10,000, and 100,000-node versions of each included shape. With all optional graphs installed, that is 12 graphs and 72 recorded operations. The 100-node graphs are generated from the same deterministic node and edge rules as the larger tiers; their derived likelihoods are recalculated for the smaller graph rather than copied from a larger stored graph.
+The canonical matrix contains 100, 1,000, 10,000, and 100,000-node versions of each included shape. With all optional graphs installed, that is 12 graphs and 72 recorded operations. The 100-node graphs use the same deterministic topology and calibration rules as the larger tiers; their node roles and values are generated for that size rather than copied from a larger stored graph.
 
 Each graph-and-operation combination is executed and recorded once. No hidden warm-up runs or repetitions are added. Consequently, fixed-order cold-start and cache effects can remain visible in the data; warm-up policy is intentionally deferred.
 
-The exhaustive operation has a two-minute compute budget per graph. Until the Bayesian workload is recalibrated, allow for any installed graph—including a 100-node graph—to consume that full budget. Nine installed graphs can therefore spend up to about 18 minutes in exhaustive search; all 12 can spend up to about 24 minutes, plus the other operations and graph-loading overhead. A time-budget result is an expected completed request, so the suite records it and continues.
+The exhaustive operation has a two-minute compute budget per graph. The calibrated 100-node graphs have ten candidates and are small enough for exhaustive search to prove the minimum. The 1,000-node and larger graphs retain ten percent of their nodes as candidates and are designed to expose the combinatorial boundary by reaching the time budget. Nine installed graphs through 10,000 nodes can therefore spend up to about 18 minutes in exhaustive search, plus the other operations and graph-loading overhead. A time-budget result is an expected completed request, so the suite records it and continues. The 100,000-node tier remains available, but it is optional and generally impractical for the standard comparison because its graph loading and Bayesian analyses can add substantial time and memory beyond the exhaustive budget.
 
-## Legacy minimal-counter seed calibration (pending Phase 2)
+## Bayesian minimal-counter seed calibration
 
-The checked-in non-deep stress graphs currently preserve their original topology, node kinds, and near-neutral `1.001`/`0.999` edge likelihood ratios. Their root and objection values were calibrated for the former additive likelihood-ratio evaluator:
+The non-deep stress graphs are deterministic fixtures calibrated against the same production Bayesian-factor evaluator used by both counter-set solvers. Their topology, node and edge counts, and counts by node kind remain unchanged. Within each graph, kinds are relocated so that the final ten percent of nodes are structural-leaf objections. Evidence displaced from that tail is moved into the immediately preceding node window, preserving the original evidence count.
 
-- the root begins at log odds `0.200` (about 55% probability);
-- every objection contributes `-0.160` log odds at the root;
-- seven objections leave the target at `-0.920`, above the `-1` cutoff;
-- eight objections move it to `-1.080`, so the global minimum cardinality is eight.
+The fixture values deliberately isolate the counter-set workload:
 
-On the conditional-probability schema, those legacy path analytics derive each edge likelihood ratio as `P(child | parent) / P(child | not parent)`. Authored evidence posteriors remain unchanged. Calibrated stress-graph objections are a deliberate fixture-only exception to the usual neutral-prior convention: their prior and posterior are shifted together so the authored local Bayes-factor delta is preserved. The seed update touches only the root and objections.
+- the root prior and posterior begin at log odds `0.200` (about 55% probability);
+- evidence is neutral, with score 50 and prior and posterior log odds of `0`;
+- every objection has prior log odds `0` and an authored leaf log Bayes factor of `-0.160`;
+- every non-deep edge is a support edge with `P(child | parent) = 0.999999999` and `P(child | not parent) = 0.000000001`, which propagates leaf Bayes factors with negligible attenuation;
+- deep-chain values retain their previous generation rules because deep graphs are outside the standard suite.
 
-That calibration does not yet guarantee the same eight-counter result through the production Bayesian-factor path. Bayesian pruning and nonlinear edge transforms can change both individual counter impact and interaction among counters. Consequently, the former claims that every standard graph has a usable eight-node greedy result and that each 100-node exhaustive run proves it after 969 subset evaluations are legacy reference expectations, not current production guarantees.
+The executable contract evaluates an in-memory mirror of the generated graphs through `GraphPosteriorOddsCalculator` and `BayesianMinimalCounterSetEvaluator`. It verifies the seven/eight boundary for the 100-, 1,000-, and 10,000-node tiers. Each 100-node graph has ten candidates, so exhaustive search proves the eight-node minimum after 969 subset evaluations. The 1,000- and 10,000-node graphs supply the same qualifying eight-node boundary inside much larger candidate universes, while exhaustive search is expected to return a time-budget result rather than a proof. The optional 100,000-node tier uses the same construction but is not exercised by the ordinary calibration test because doing so would make routine test runs unreasonably expensive.
 
-The existing executable calibration check builds all three 100-node shapes in memory and verifies the legacy evaluator/solver contract without writing performance records:
+This is an intentionally engineered complexity fixture, not a model of realistic evidence quality or a claim that natural graphs have interchangeable objections. The strong propagation probabilities and neutral evidence make the greedy-versus-exhaustive scaling story legible. Do not combine pre-calibration `stress-v1` runs with `stress-v2` runs. Comparisons across the legacy likelihood-ratio and Bayesian calculation models are end-to-end algorithm/model comparisons, not pure implementation-speed benchmarks; inspect `calculationModel`, threshold outcome, candidate count, and graph fingerprint when interpreting them. Comparisons within the same model should use identical reset data and matching fingerprints.
+
+The calibration check builds representative graphs in memory and verifies the production evaluator/solver contract without writing performance records:
 
 ```bash
 dotnet test backend.Tests/backend.Tests.csproj \
@@ -54,7 +57,7 @@ dotnet test backend.Tests/backend.Tests.csproj \
   --logger "console;verbosity=detailed"
 ```
 
-Phase 2 will recalibrate the reset data through the same Bayesian evaluator used by the service and replace this legacy-only check with a service-representative workload contract before new comparison runs are treated as demonstration data. Until then, the command above is useful for detecting changes to the old calibration only; it does not validate production Bayesian counter-set behavior.
+The reset SQL encodes these values while inserting nodes and edges; it does not perform a recursive post-insert calibration pass. Static SQL tests check that it mirrors the in-memory contract, but they do not execute PostgreSQL. Before collecting a final benchmark set, complete one real reset and confirm the installed graph counts and first 100-node counter-set results. Reset cost is now tied primarily to graph generation and insertion rather than to enumerating ancestor paths.
 
 If one request fails, the suite continues with the remaining combinations and lists the affected graph and operation in its final summary. The corresponding backend report appears in History when reporting reached the persistence stage.
 
@@ -148,7 +151,7 @@ For each algorithm and graph combination:
    Release is recommended, not required. The report records the configuration that actually ran, so Debug results remain identifiable.
 
 2. Select or create the intended benchmark set in the Lab.
-3. Execute each measured operation one at a time, or use **Run standard stress suite** for the installed balanced, wide, and shared-diamond stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up. Before Phase 2 recalibrates and validates the Bayesian workload, budget up to two minutes of exhaustive search for every installed graph (up to about 24 minutes for all 12 graphs).
+3. Execute each measured operation one at a time, or use **Run standard stress suite** for the installed balanced, wide, and shared-diamond stress graphs. Each combination is recorded once; the Lab does not launch a hidden warm-up. Budget up to two minutes for each exhaustive run. Installing through 10,000 nodes produces nine standard graphs and 54 planned runs; add the 100,000-node tier only for a deliberate experiment with substantially more time and memory available.
 4. If repetitions are useful, keep the graph, canonical target, and inputs unchanged. Trends retains the raw runs and plots the selected metric's median with the sample count.
 
 The Lab's same-value leaf update does not require restoration. If benchmarking an ordinary value-changing likelihood edit instead, restore the leaf to the same starting likelihood before every measured edit. A restoration performed through the application creates another recorded run and must be excluded from the comparison.

@@ -25,11 +25,13 @@
 5. Use the deterministic graph root for counter-set and evidence-impact runs.
    Exclude pathological deep-chain graphs from the standard suite while
    leaving them available for deliberate individual runs.
-6. Add a 100-node balanced, wide, and shared-diamond tier. The checked-in
-   root/objection calibration targets the former additive likelihood-ratio
-   evaluator; Phase 2 will recalibrate and verify the production Bayesian
-   counter-set workload. Preserve topology and node kinds while that work is
-   pending.
+6. Add a 100-node balanced, wide, and shared-diamond tier and calibrate every
+   non-deep tier against the production Bayesian evaluator. Preserve topology,
+   node and edge counts, and kind counts while relocating the final ten percent
+   of nodes as structural-leaf objections. Neutral evidence and near-identity
+   support propagation isolate the intended greedy-versus-exhaustive workload.
+   Keep the 100,000-node tier optional because end-to-end runs are generally
+   impractical on a development machine.
 
 ## Current exhaustive-reference design
 
@@ -64,8 +66,11 @@
 - Treat timed-out chart points as right-censored lower bounds, never as ordinary
   two-minute completions. Use subset count and cardinality-frontier details to
   compare how much exhaustive work each branch completed within the budget.
-- Recalibrate and verify the stress fixtures through the production Bayesian
-  evaluator before treating new suite runs as demonstration data.
+- Run the production Bayesian fixture contract and complete a real reset smoke
+  check before collecting demonstration data. Do not mix `stress-v1` and
+  `stress-v2` runs. Cross-model results are end-to-end algorithm/model
+  comparisons rather than pure implementation-speed measurements; within one
+  calculation model, compare only matching graph fingerprints.
 
 ## Deferred
 
