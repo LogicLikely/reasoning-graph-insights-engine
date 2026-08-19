@@ -463,8 +463,10 @@ public class GraphRepositoryTests
             var repository = CreateRepository(connectionFactoryMock.Object, seedRoot);
             var selected = new[]
             {
-                StressGraphSeedCatalog.All[0],
-                StressGraphSeedCatalog.All[11]
+                StressGraphSeedCatalog.All.Single(spec =>
+                    spec.Id == StressGraphSeedIds.Balanced1K),
+                StressGraphSeedCatalog.All.Single(spec =>
+                    spec.Id == StressGraphSeedIds.SharedDiamond100K)
             };
 
             await repository.ResetDatabaseAsync(selected, CancellationToken.None);
@@ -475,11 +477,25 @@ public class GraphRepositoryTests
             Assert.AreEqual(StressGraphSeedIds.Balanced1K, connection.ExecutedCommands[1].Parameters["Slug"]);
             Assert.AreEqual("balanced", connection.ExecutedCommands[1].Parameters["Shape"]);
             Assert.AreEqual(1_000, connection.ExecutedCommands[1].Parameters["NodeCount"]);
+            Assert.AreEqual(100, connection.ExecutedCommands[1].Parameters["CounterCandidateCount"]);
+            Assert.AreEqual(
+                StressGraphBenchmarkContract.InitialTargetLogOdds,
+                connection.ExecutedCommands[1].Parameters["InitialTargetLogOdds"]);
+            Assert.AreEqual(
+                StressGraphBenchmarkContract.CounterLeafLogBayesFactor,
+                connection.ExecutedCommands[1].Parameters["CounterLeafLogBayesFactor"]);
+            Assert.AreEqual(
+                StressGraphBenchmarkContract.ProbabilityGivenParent,
+                connection.ExecutedCommands[1].Parameters["ProbabilityGivenParent"]);
+            Assert.AreEqual(
+                StressGraphBenchmarkContract.ProbabilityGivenNotParent,
+                connection.ExecutedCommands[1].Parameters["ProbabilityGivenNotParent"]);
             Assert.AreEqual(10_000, connection.ExecutedCommands[1].Parameters["CorpusEntryCount"]);
             Assert.AreEqual(ValidStressCorpusJson.Value, connection.ExecutedCommands[1].Parameters["CorpusJson"]);
             Assert.AreEqual(14, connection.ExecutedCommands[2].Parameters["GraphId"]);
             Assert.AreEqual(StressGraphSeedIds.SharedDiamond100K, connection.ExecutedCommands[2].Parameters["Slug"]);
             Assert.AreEqual(100_000, connection.ExecutedCommands[2].Parameters["NodeCount"]);
+            Assert.AreEqual(10_000, connection.ExecutedCommands[2].Parameters["CounterCandidateCount"]);
             Assert.AreEqual(10_000, connection.ExecutedCommands[2].Parameters["CorpusEntryCount"]);
             Assert.AreEqual(ValidStressCorpusJson.Value, connection.ExecutedCommands[2].Parameters["CorpusJson"]);
             Assert.IsTrue(connection.ExecutedCommands.All(command => command.CommandTimeout == 300));
@@ -593,7 +609,7 @@ public class GraphRepositoryTests
 
             StringAssert.EndsWith(
                 exception.FileName!,
-                Path.Combine("Data", "Seed", "insights_stress_corpus.json"));
+                Path.Combine("data", "seed", "insights_stress_corpus.json"));
             connectionFactoryMock.Verify(factory => factory.CreateConnection(), Times.Never);
         }
         finally
@@ -634,7 +650,7 @@ public class GraphRepositoryTests
         var seedRoot = Path.Combine(
             Path.GetTempPath(),
             $"reasoning-graph-seed-tests-{Guid.NewGuid():N}");
-        var sqlDirectory = Path.Combine(seedRoot, "Data", "Sql");
+        var sqlDirectory = Path.Combine(seedRoot, "data", "sql");
         Directory.CreateDirectory(sqlDirectory);
         File.WriteAllText(Path.Combine(sqlDirectory, "insights_seed.sql"), "BASE SEED");
 
@@ -642,12 +658,16 @@ public class GraphRepositoryTests
         {
             File.WriteAllText(
                 Path.Combine(sqlDirectory, "insights_stress_seed.sql"),
-                "STRESS @GraphId @Slug @Title @Description @Shape @NodeCount @CorpusJson @CorpusEntryCount");
+                "STRESS @GraphId @Slug @Title @Description @Shape @NodeCount " +
+                "@CounterCandidateCount @InitialTargetLogOdds " +
+                "@CounterLeafLogBayesFactor @ProbabilityGivenParent " +
+                "@ProbabilityGivenNotParent " +
+                "@CorpusJson @CorpusEntryCount");
         }
 
         if (includeStressCorpus)
         {
-            var seedDirectory = Path.Combine(seedRoot, "Data", "Seed");
+            var seedDirectory = Path.Combine(seedRoot, "data", "seed");
             Directory.CreateDirectory(seedDirectory);
             File.WriteAllText(
                 Path.Combine(seedDirectory, "insights_stress_corpus.json"),

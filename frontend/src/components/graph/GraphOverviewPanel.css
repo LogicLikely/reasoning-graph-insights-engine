@@ -113,16 +113,30 @@
   opacity: 0.68;
 }
 
+.graph-overview-panel__insights-lab-button,
 .graph-overview-panel__reset-button {
   width: 100%;
   min-height: 2.75rem;
-  border: 1px solid rgba(178, 44, 44, 0.42);
   border-radius: 0.5rem;
-  background: #fff5f5;
-  color: #8f1d1d;
   cursor: pointer;
   font: inherit;
   font-weight: 700;
+}
+
+.graph-overview-panel__insights-lab-button {
+  border: 1px solid var(--color-text);
+  background: var(--color-text);
+  color: var(--color-surface);
+}
+
+.graph-overview-panel__insights-lab-button:hover {
+  opacity: 0.88;
+}
+
+.graph-overview-panel__reset-button {
+  border: 1px solid rgba(178, 44, 44, 0.42);
+  background: #fff5f5;
+  color: #8f1d1d;
 }
 
 .graph-overview-panel__reset-button:hover:not(:disabled) {

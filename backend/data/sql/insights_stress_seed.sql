@@ -1,7 +1,9 @@
 --
 -- Parameterized deterministic stress-graph generator.
 -- Expected Dapper parameters: GraphId, Slug, Title, Description, Shape,
--- NodeCount, CorpusJson, CorpusEntryCount.
+-- NodeCount, CounterCandidateCount, InitialTargetLogOdds,
+-- CounterLeafLogBayesFactor, ProbabilityGivenParent,
+-- ProbabilityGivenNotParent, CorpusJson, CorpusEntryCount.
 -- This script assumes insights_seed.sql has already rebuilt the base schema.
 --
 
@@ -42,8 +44,21 @@ WITH corpus AS (
         series.node_index,
         CASE
             WHEN series.node_index = 0 THEN 'root'
-            WHEN series.node_index % 5 = 0 THEN 'evidence'
-            WHEN series.node_index % 10 = 2 THEN 'objection'
+            WHEN @Shape <> 'deep'
+                AND series.node_index >= @NodeCount - @CounterCandidateCount
+                THEN 'objection'
+            WHEN @Shape <> 'deep'
+                AND (
+                    series.node_index % 5 = 0
+                    OR (
+                        series.node_index >= @NodeCount - (2 * @CounterCandidateCount)
+                        AND series.node_index < @NodeCount - @CounterCandidateCount
+                        AND series.node_index % 5 = 1
+                    )
+                )
+                THEN 'evidence'
+            WHEN @Shape = 'deep' AND series.node_index % 5 = 0 THEN 'evidence'
+            WHEN @Shape = 'deep' AND series.node_index % 10 = 2 THEN 'objection'
             ELSE 'claim'
         END AS kind,
         corpus.title,
@@ -51,7 +66,10 @@ WITH corpus AS (
         corpus.category,
         corpus.tags,
         vocabulary.evidence_types[1 + ((series.node_index / 5) % 5)] AS evidence_type,
-        35 + (5 * ((series.node_index / 5) % 7)) AS evidence_score
+        CASE
+            WHEN @Shape <> 'deep' THEN 50
+            ELSE 35 + (5 * ((series.node_index / 5) % 7))
+        END AS evidence_score
     FROM generate_series(0, @NodeCount - 1) AS series(node_index)
     INNER JOIN corpus
         ON corpus.corpus_index = series.node_index % @CorpusEntryCount
@@ -61,13 +79,12 @@ WITH corpus AS (
         generated.*,
         format('n-%s', lpad(generated.node_index::text, 5, '0')) AS node_id,
         CASE
-            WHEN generated.kind = 'evidence'
-                THEN ln(
-                    generated.evidence_score::double precision /
-                    (100 - generated.evidence_score)::double precision
-                )
+            WHEN generated.kind = 'evidence' THEN ln(
+                generated.evidence_score::double precision /
+                (100 - generated.evidence_score)::double precision
+            )
             ELSE 0::double precision
-        END AS prior_odds
+        END AS authored_log_odds
     FROM generated
 )
 INSERT INTO public.nodes (
@@ -98,10 +115,17 @@ SELECT
     payload.category,
     payload.tags,
     CASE
-        WHEN payload.kind IN ('evidence', 'objection') THEN 0
-        ELSE payload.prior_odds
+        WHEN @Shape <> 'deep' AND payload.kind = 'root'
+            THEN @InitialTargetLogOdds
+        ELSE 0
     END,
-    payload.prior_odds,
+    CASE
+        WHEN @Shape <> 'deep' AND payload.kind = 'root'
+            THEN @InitialTargetLogOdds
+        WHEN @Shape <> 'deep' AND payload.kind = 'objection'
+            THEN @CounterLeafLogBayesFactor
+        ELSE payload.authored_log_odds
+    END,
     CASE
         WHEN payload.kind = 'evidence' THEN jsonb_build_object(
             'type', payload.evidence_type,
@@ -151,9 +175,19 @@ SELECT
     graph.id,
     format('n-%s', lpad(generated_edges.node_index::text, 5, '0')),
     format('n-%s', lpad(generated_edges.parent_index::text, 5, '0')),
-    CASE WHEN generated_edges.node_index % 2 = 1 THEN 'support' ELSE 'rebut' END,
-    CASE WHEN generated_edges.node_index % 2 = 1 THEN 0.5005 ELSE 0.4995 END,
-    0.5,
+    CASE
+        WHEN @Shape = 'deep' AND generated_edges.node_index % 2 = 0 THEN 'rebut'
+        ELSE 'support'
+    END,
+    CASE
+        WHEN @Shape = 'deep' AND generated_edges.node_index % 2 = 1 THEN 0.5005
+        WHEN @Shape = 'deep' THEN 0.4995
+        ELSE @ProbabilityGivenParent
+    END,
+    CASE
+        WHEN @Shape = 'deep' THEN 0.5
+        ELSE @ProbabilityGivenNotParent
+    END,
     TIMESTAMPTZ '2026-08-15 00:00:00+00',
     TIMESTAMPTZ '2026-08-15 00:00:00+00'
 FROM generated_edges
@@ -198,9 +232,9 @@ SELECT
     graph.id,
     format('n-%s', lpad(local_diamonds.node_index::text, 5, '0')),
     format('n-%s', lpad(local_diamonds.alternate_parent_index::text, 5, '0')),
-    CASE WHEN local_diamonds.node_index % 2 = 1 THEN 'support' ELSE 'rebut' END,
-    CASE WHEN local_diamonds.node_index % 2 = 1 THEN 0.5005 ELSE 0.4995 END,
-    0.5,
+    'support',
+    @ProbabilityGivenParent,
+    @ProbabilityGivenNotParent,
     TIMESTAMPTZ '2026-08-15 00:00:00+00',
     TIMESTAMPTZ '2026-08-15 00:00:00+00'
 FROM local_diamonds

@@ -15,7 +15,9 @@ interface DatabaseResetDialogProps {
   onConfirm: (stressGraphIds: StressGraphId[]) => void
 }
 
-const STRESS_GRAPH_SCALES: readonly StressGraphScale[] = ['1K', '10K', '100K']
+const STRESS_GRAPH_SCALES: readonly StressGraphScale[] = [
+  ...new Set(STRESS_GRAPH_OPTIONS.map(({ scale }) => scale)),
+]
 const FOCUSABLE_SELECTOR = [
   'button:not(:disabled)',
   'input:not(:disabled)',
@@ -175,24 +177,25 @@ function OpenDatabaseResetDialog({
             {STRESS_GRAPH_SCALES.map((scale) => {
               const options = STRESS_GRAPH_OPTIONS.filter((option) => option.scale === scale)
               const selectedGroupCount = options.filter(({ id }) => selectedIds.has(id)).length
+              const scaleLabel = scale === '100' ? '100-node' : scale
 
               return (
                 <fieldset disabled={isSubmitting} key={scale}>
-                  <legend>{scale} stress graphs</legend>
+                  <legend>{scaleLabel} stress graphs</legend>
                   <div className="database-reset-dialog__group-actions">
                     <button
                       disabled={selectedGroupCount === options.length}
                       onClick={() => updateGroup(scale, true)}
                       type="button"
                     >
-                      Select {scale}
+                      Select {scaleLabel}
                     </button>
                     <button
                       disabled={selectedGroupCount === 0}
                       onClick={() => updateGroup(scale, false)}
                       type="button"
                     >
-                      Clear {scale}
+                      Clear {scaleLabel}
                     </button>
                   </div>
                   <div className="database-reset-dialog__options">

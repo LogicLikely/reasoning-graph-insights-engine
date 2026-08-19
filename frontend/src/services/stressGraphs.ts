@@ -1,5 +1,20 @@
 export const STRESS_GRAPH_OPTIONS = [
   {
+    id: 'stress-balanced-100',
+    label: 'Balanced tree (100 nodes)',
+    scale: '100',
+  },
+  {
+    id: 'stress-wide-100',
+    label: 'Wide star (100 nodes)',
+    scale: '100',
+  },
+  {
+    id: 'stress-shared-diamond-100',
+    label: 'Shared-diamond DAG (100 nodes)',
+    scale: '100',
+  },
+  {
     id: 'stress-balanced-1k',
     label: 'Balanced tree (1,000 nodes)',
     scale: '1K',

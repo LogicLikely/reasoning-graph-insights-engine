@@ -3,6 +3,8 @@ using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Backend.Seeding;
 using Dapper;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace Backend.Repositories;
@@ -75,13 +77,16 @@ public class GraphRepository : IGraphRepository
 
     private readonly DbConnectionFactory _dbConnectionFactory;
     private readonly IHostEnvironment _hostEnvironment;
+    private readonly ILogger<GraphRepository> _logger;
 
     public GraphRepository(
         DbConnectionFactory dbConnectionFactory,
-        IHostEnvironment hostEnvironment)
+        IHostEnvironment hostEnvironment,
+        ILogger<GraphRepository>? logger = null)
     {
         _dbConnectionFactory = dbConnectionFactory;
         _hostEnvironment = hostEnvironment;
+        _logger = logger ?? NullLogger<GraphRepository>.Instance;
     }
 
     public async Task<IReadOnlyList<GraphSummary>> GetSummariesAsync(
@@ -523,18 +528,18 @@ public class GraphRepository : IGraphRepository
     {
         var seedSqlPath = Path.Combine(
             _hostEnvironment.ContentRootPath,
-            "Data",
-            "Sql",
+            "data",
+            "sql",
             "insights_seed.sql");
         var stressSeedSqlPath = Path.Combine(
             _hostEnvironment.ContentRootPath,
-            "Data",
-            "Sql",
+            "data",
+            "sql",
             "insights_stress_seed.sql");
         var stressCorpusPath = Path.Combine(
             _hostEnvironment.ContentRootPath,
-            "Data",
-            "Seed",
+            "data",
+            "seed",
             "insights_stress_corpus.json");
 
         if (!File.Exists(seedSqlPath))
@@ -567,8 +572,19 @@ public class GraphRepository : IGraphRepository
                 commandTimeout: ResetCommandTimeoutSeconds,
                 cancellationToken: cancellationToken));
 
-            foreach (var stressGraph in stressGraphs)
+            for (var graphIndex = 0; graphIndex < stressGraphs.Count; graphIndex++)
             {
+                var stressGraph = stressGraphs[graphIndex];
+                _logger.LogInformation(
+                    "Preparing stress graph {GraphIndex} of {GraphCount}: {GraphSlug} " +
+                    "({NodeCount} nodes). Work remains uncommitted until the full " +
+                    "database reset completes.",
+                    graphIndex + 1,
+                    stressGraphs.Count,
+                    stressGraph.Slug,
+                    stressGraph.NodeCount);
+
+                var graphStopwatch = Stopwatch.StartNew();
                 await connection.ExecuteAsync(new CommandDefinition(
                     stressSeedSql!,
                     new
@@ -579,16 +595,38 @@ public class GraphRepository : IGraphRepository
                         stressGraph.Description,
                         stressGraph.Shape,
                         stressGraph.NodeCount,
+                        CounterCandidateCount = stressGraph.ObjectionCount,
+                        InitialTargetLogOdds =
+                            StressGraphBenchmarkContract.InitialTargetLogOdds,
+                        CounterLeafLogBayesFactor =
+                            StressGraphBenchmarkContract.CounterLeafLogBayesFactor,
+                        ProbabilityGivenParent =
+                            StressGraphBenchmarkContract.ProbabilityGivenParent,
+                        ProbabilityGivenNotParent =
+                            StressGraphBenchmarkContract.ProbabilityGivenNotParent,
                         CorpusJson = stressCorpus!.Json,
                         CorpusEntryCount = stressCorpus.EntryCount
                     },
                     transaction,
                     commandTimeout: ResetCommandTimeoutSeconds,
                     cancellationToken: cancellationToken));
+                graphStopwatch.Stop();
+
+                _logger.LogInformation(
+                    "Prepared stress graph {GraphIndex} of {GraphCount}: {GraphSlug} " +
+                    "in {ElapsedMilliseconds} ms. Work remains uncommitted until the " +
+                    "full database reset completes.",
+                    graphIndex + 1,
+                    stressGraphs.Count,
+                    stressGraph.Slug,
+                    graphStopwatch.ElapsedMilliseconds);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
             transaction.Commit();
+            _logger.LogInformation(
+                "Database reset committed the base seed and {StressGraphCount} stress graphs.",
+                stressGraphs.Count);
         }
         catch
         {

@@ -14,6 +14,9 @@ public class StressGraphSeedCatalogTests
         CollectionAssert.AreEqual(
             new[]
             {
+                StressGraphSeedIds.Balanced100,
+                StressGraphSeedIds.Wide100,
+                StressGraphSeedIds.SharedDiamond100,
                 StressGraphSeedIds.Balanced1K,
                 StressGraphSeedIds.Wide1K,
                 StressGraphSeedIds.Deep1K,
@@ -29,11 +32,12 @@ public class StressGraphSeedCatalogTests
             },
             specs.Select(spec => spec.Id).ToArray());
         CollectionAssert.AreEqual(
-            Enumerable.Range(3, 12).ToArray(),
+            new[] { 15, 16, 17 }.Concat(Enumerable.Range(3, 12)).ToArray(),
             specs.Select(spec => spec.GraphId).ToArray());
         CollectionAssert.AreEqual(
             new[]
             {
+                "balanced", "wide", "shared-diamond",
                 "balanced", "wide", "deep", "shared-diamond",
                 "balanced", "wide", "deep", "shared-diamond",
                 "balanced", "wide", "deep", "shared-diamond"
@@ -42,6 +46,7 @@ public class StressGraphSeedCatalogTests
         CollectionAssert.AreEqual(
             new[]
             {
+                100, 100, 100,
                 1_000, 1_000, 1_000, 1_000,
                 10_000, 10_000, 10_000, 10_000,
                 100_000, 100_000, 100_000, 100_000
@@ -50,20 +55,29 @@ public class StressGraphSeedCatalogTests
         CollectionAssert.AreEqual(
             new[]
             {
+                99, 99, 194,
                 999, 999, 999, 1_994,
                 9_999, 9_999, 9_999, 19_994,
                 99_999, 99_999, 99_999, 199_994
             },
             specs.Select(spec => spec.EdgeCount).ToArray());
         CollectionAssert.AreEqual(
-            new[] { 5, 1, 999, 5, 7, 1, 9_999, 7, 9, 1, 99_999, 9 },
+            new[] { 4, 1, 4, 5, 1, 999, 5, 7, 1, 9_999, 7, 9, 1, 99_999, 9 },
             specs.Select(spec => spec.MaximumDepth).ToArray());
     }
 
     [TestMethod]
     public void All_DefinesExactKindCounts()
     {
-        foreach (var spec in StressGraphSeedCatalog.All.Take(4))
+        foreach (var spec in StressGraphSeedCatalog.All.Take(3))
+        {
+            Assert.AreEqual(1, spec.RootCount);
+            Assert.AreEqual(70, spec.ClaimCount);
+            Assert.AreEqual(19, spec.EvidenceCount);
+            Assert.AreEqual(10, spec.ObjectionCount);
+        }
+
+        foreach (var spec in StressGraphSeedCatalog.All.Skip(3).Take(4))
         {
             Assert.AreEqual(1, spec.RootCount);
             Assert.AreEqual(700, spec.ClaimCount);
@@ -71,7 +85,7 @@ public class StressGraphSeedCatalogTests
             Assert.AreEqual(100, spec.ObjectionCount);
         }
 
-        foreach (var spec in StressGraphSeedCatalog.All.Skip(4).Take(4))
+        foreach (var spec in StressGraphSeedCatalog.All.Skip(7).Take(4))
         {
             Assert.AreEqual(1, spec.RootCount);
             Assert.AreEqual(7_000, spec.ClaimCount);
@@ -79,7 +93,7 @@ public class StressGraphSeedCatalogTests
             Assert.AreEqual(1_000, spec.ObjectionCount);
         }
 
-        foreach (var spec in StressGraphSeedCatalog.All.Skip(8))
+        foreach (var spec in StressGraphSeedCatalog.All.Skip(11))
         {
             Assert.AreEqual(1, spec.RootCount);
             Assert.AreEqual(70_000, spec.ClaimCount);
@@ -131,11 +145,16 @@ public class StressGraphSeedCatalogTests
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
-            var germanDescription = StressGraphSeedCatalog.All[4].Description;
+            var germanDescription = StressGraphSeedCatalog.All
+                .Single(spec => spec.Id == StressGraphSeedIds.Balanced10K)
+                .Description;
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
-            var americanDescription = StressGraphSeedCatalog.All[4].Description;
+            var americanDescription = StressGraphSeedCatalog.All
+                .Single(spec => spec.Id == StressGraphSeedIds.Balanced10K)
+                .Description;
 
             Assert.AreEqual(americanDescription, germanDescription);
+            StringAssert.Contains(americanDescription, "stress-v2");
             StringAssert.Contains(americanDescription, "10000 nodes");
         }
         finally

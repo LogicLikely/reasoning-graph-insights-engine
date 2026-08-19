@@ -4,6 +4,9 @@ import { isStressGraphId, STRESS_GRAPH_OPTIONS } from './stressGraphs'
 describe('stress graph options', () => {
   it('matches the backend allowlist in canonical install order', () => {
     expect(STRESS_GRAPH_OPTIONS.map(({ id }) => id)).toEqual([
+      'stress-balanced-100',
+      'stress-wide-100',
+      'stress-shared-diamond-100',
       'stress-balanced-1k',
       'stress-wide-1k',
       'stress-deep-1k',
@@ -24,6 +27,7 @@ describe('stress graph options', () => {
       expect(isStressGraphId(id)).toBe(true)
     })
     expect(isStressGraphId('stress-balanced-1m')).toBe(false)
+    expect(isStressGraphId('stress-deep-100')).toBe(false)
     expect(isStressGraphId('sample-medium')).toBe(false)
   })
 })

@@ -1,0 +1,1050 @@
+using Backend.Calculation;
+using Backend.Calculation.MinimalCounterSets;
+using Backend.Models.Domain;
+using Backend.Reporting;
+
+namespace backend.Tests.Calculation;
+
+[TestClass]
+public sealed class MinimalCounterSetSolverTests
+{
+    [TestMethod]
+    public void GreedySolver_UsesPriorityThenNodeIdAndStopsAtThreshold()
+    {
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates:
+            [
+                new MinimalCounterCandidate("B", 5m),
+                new MinimalCounterCandidate("C", 4m),
+                new MinimalCounterCandidate("A", 5m)
+            ],
+            contributions: new Dictionary<string, decimal>
+            {
+                ["A"] = -0.4m,
+                ["B"] = -0.7m,
+                ["C"] = -10m
+            });
+
+        var result = CreateGreedySolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        CollectionAssert.AreEqual(
+            new[] { "A", "B" },
+            result.CounterNodeIds.ToArray());
+        Assert.IsTrue(result.ThresholdReached);
+        Assert.AreEqual(-1.1m, result.FinalTargetLogOdds);
+        Assert.AreEqual(3, result.TotalCandidateCount);
+        Assert.AreEqual(2, result.CandidatesExamined);
+        Assert.AreEqual(MinimalCounterSetProofStatus.NotApplicable, result.ProofStatus);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_FindsSmallerSetThanGreedyPriorityOrder()
+    {
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates:
+            [
+                new MinimalCounterCandidate("A", 10m),
+                new MinimalCounterCandidate("B", 9m)
+            ],
+            contributions: new Dictionary<string, decimal>
+            {
+                ["A"] = -0.4m,
+                ["B"] = -1.2m
+            });
+
+        var greedyResult = CreateGreedySolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+        var boundedResult = CreateBoundedSolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        CollectionAssert.AreEqual(
+            new[] { "A", "B" },
+            greedyResult.CounterNodeIds.ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "B" },
+            boundedResult.CounterNodeIds.ToArray());
+        Assert.AreEqual(3L, boundedResult.SubsetEvaluations);
+        Assert.AreEqual(1, boundedResult.LargestCardinalityFullyExhausted);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, boundedResult.ProofStatus);
+    }
+
+    [TestMethod]
+    public void Solvers_EvaluateExactNonlinearCounterSubsets()
+    {
+        var problem = new ExactSubsetProblem();
+
+        var greedyResult = CreateGreedySolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+        var boundedResult = CreateBoundedSolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        // A and B look strongest in isolation, but their combined effect is
+        // deliberately non-additive. Greedy recalculates each growing prefix.
+        CollectionAssert.AreEqual(
+            new[] { "A", "B", "C" },
+            greedyResult.CounterNodeIds.ToArray());
+        Assert.AreEqual(-1.5m, greedyResult.FinalTargetLogOdds);
+
+        // Exhaustive search evaluates exact subsets and therefore proves that
+        // C alone is the minimum result. Summing singleton contributions would
+        // incorrectly accept A+B instead.
+        CollectionAssert.AreEqual(
+            new[] { "C" },
+            boundedResult.CounterNodeIds.ToArray());
+        Assert.AreEqual(-1.2m, boundedResult.FinalTargetLogOdds);
+        Assert.AreEqual(4L, boundedResult.SubsetEvaluations);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, boundedResult.ProofStatus);
+    }
+
+    [TestMethod]
+    public void GreedySolver_ReturnsBestExaminedPrefixWhenThresholdIsNotReached()
+    {
+        var result = CreateGreedySolver(new BestPrefixProblem()).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        Assert.IsFalse(result.ThresholdReached);
+        CollectionAssert.AreEqual(
+            new[] { "A" },
+            result.CounterNodeIds.ToArray());
+        Assert.AreEqual(-0.8m, result.FinalTargetLogOdds);
+        Assert.AreEqual(2, result.CandidatesExamined);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_EnumeratesInIncreasingCardinality()
+    {
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates:
+            [
+                new MinimalCounterCandidate("A", 2m),
+                new MinimalCounterCandidate("B", 1m)
+            ],
+            contributions: new Dictionary<string, decimal>
+            {
+                ["A"] = -0.5m,
+                ["B"] = -0.6m
+            });
+
+        var result = CreateBoundedSolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        CollectionAssert.AreEqual(
+            new[] { "A", "B" },
+            result.CounterNodeIds.ToArray());
+        Assert.AreEqual(4L, result.SubsetEvaluations);
+        Assert.AreEqual(2, result.LargestCardinalityFullyExhausted);
+        Assert.IsTrue(result.ThresholdReached);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_SearchesBeyondHistoricalCandidateLimitAndProvesResult()
+    {
+        var candidates = Enumerable.Range(0, 21)
+            .Reverse()
+            .Select(index => new MinimalCounterCandidate($"C{index:00}", 1m))
+            .ToArray();
+        var contributions = candidates.ToDictionary(
+            candidate => candidate.NodeId,
+            candidate => candidate.NodeId == "C20" ? -2m : 0m,
+            StringComparer.Ordinal);
+        var problem = new FakeProblem(0m, -1m, candidates, contributions);
+
+        var result = CreateBoundedSolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        Assert.AreEqual(21, result.TotalCandidateCount);
+        Assert.AreEqual(21, result.SearchedCandidateCount);
+        Assert.AreEqual(0, result.ExcludedCandidateCount);
+        Assert.AreEqual(21, result.CandidatesExamined);
+        Assert.AreEqual(22L, result.SubsetEvaluations);
+        CollectionAssert.AreEqual(
+            new[] { "C20" },
+            result.CounterNodeIds.ToArray());
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetStopReason.Completed, result.StopReason);
+        Assert.AreEqual("2097152", result.TotalPossibleSubsets);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_ProvesNoSolutionWhenItExhaustsAllSubsets()
+    {
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates:
+            [
+                new MinimalCounterCandidate("A", 3m),
+                new MinimalCounterCandidate("B", 2m),
+                new MinimalCounterCandidate("C", 1m)
+            ],
+            contributions: new Dictionary<string, decimal>
+            {
+                ["A"] = 0.1m,
+                ["B"] = 0.2m,
+                ["C"] = 0.3m
+            });
+
+        var result = CreateBoundedSolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        Assert.IsFalse(result.ThresholdReached);
+        Assert.AreEqual(8L, result.SubsetEvaluations);
+        Assert.AreEqual(3, result.LargestCardinalityFullyExhausted);
+        Assert.AreEqual(0m, result.FinalTargetLogOdds);
+        Assert.AreEqual(0, result.CounterNodeIds.Count);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+    }
+
+    [TestMethod]
+    [Timeout(10_000)]
+    public void BoundedSolver_ExhaustsExactlyAllSubsetsInCandidateUniverse()
+    {
+        var candidates = Enumerable.Range(0, 8)
+            .Select(index => new MinimalCounterCandidate($"C{index:00}", 1m))
+            .ToArray();
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates,
+            candidates.ToDictionary(candidate => candidate.NodeId, _ => 0.1m));
+
+        var result = CreateBoundedSolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        Assert.IsFalse(result.ThresholdReached);
+        Assert.AreEqual(1L << candidates.Length, result.SubsetEvaluations);
+        Assert.AreEqual(candidates.Length, result.CandidatesExamined);
+        Assert.AreEqual(
+            candidates.Length,
+            result.LargestCardinalityFullyExhausted);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetStopReason.Completed, result.StopReason);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_ProvesEmptySetIsMinimalWithMoreThanTwentyCandidates()
+    {
+        var candidates = Enumerable.Range(0, 21)
+            .Select(index => new MinimalCounterCandidate($"C{index:00}", 1m))
+            .ToArray();
+        var problem = new FakeProblem(
+            -1m,
+            -1m,
+            candidates,
+            candidates.ToDictionary(candidate => candidate.NodeId, _ => -1m));
+
+        var result = CreateBoundedSolver(problem).Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        Assert.IsTrue(result.ThresholdReached);
+        Assert.AreEqual(1L, result.SubsetEvaluations);
+        Assert.AreEqual(0, result.LargestCardinalityFullyExhausted);
+        Assert.AreEqual(0, result.CounterNodeIds.Count);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetStopReason.Completed, result.StopReason);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_TimeBudgetReturnsSearchFrontierWithoutWaiting()
+    {
+        var timeProvider = new ManualTimeProvider();
+        var candidates = Enumerable.Range(0, 4)
+            .Select(index => new MinimalCounterCandidate($"C{index}", 1m))
+            .ToArray();
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates,
+            candidates.ToDictionary(candidate => candidate.NodeId, _ => 0.1m),
+            beforeContribution: () =>
+                timeProvider.Advance(TimeSpan.FromMilliseconds(3)));
+
+        var result = CreateBoundedSolver(
+            problem,
+            timeProvider,
+            TimeSpan.FromMilliseconds(5)).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>());
+
+        Assert.AreEqual(MinimalCounterSetStopReason.TimeBudget, result.StopReason);
+        Assert.AreEqual(MinimalCounterSetProofStatus.NotProven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetTimeoutStage.Search, result.TimeoutStage);
+        Assert.IsFalse(result.ThresholdReached);
+        Assert.AreEqual(4, result.TotalCandidateCount);
+        Assert.AreEqual(4, result.SearchedCandidateCount);
+        Assert.AreEqual(0, result.ExcludedCandidateCount);
+        Assert.AreEqual(2, result.CandidatesExamined);
+        Assert.AreEqual(3L, result.SubsetEvaluations);
+        Assert.AreEqual(0, result.LargestCardinalityFullyExhausted);
+        Assert.AreEqual(1, result.ActiveCardinality);
+        Assert.AreEqual(2L, result.SubsetEvaluationsAtActiveCardinality);
+        Assert.AreEqual("4", result.TotalSubsetsAtActiveCardinality);
+        Assert.AreEqual("16", result.TotalPossibleSubsets);
+        Assert.AreEqual(5d, result.TimeBudgetMilliseconds);
+        Assert.AreEqual(0d, result.PreparationElapsedMilliseconds);
+        Assert.AreEqual(6d, result.SearchElapsedMilliseconds);
+        Assert.IsNotNull(result.SubsetEvaluationsPerSecond);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_DeadlineDoesNotEraseProofFromCompletedEvaluation()
+    {
+        var timeProvider = new ManualTimeProvider();
+        var candidate = new MinimalCounterCandidate("C", 1m);
+        var problem = new FakeProblem(
+            initialTargetLogOdds: 0m,
+            thresholdLogOdds: -1m,
+            candidates: [candidate],
+            contributions: new Dictionary<string, decimal> { ["C"] = -2m },
+            beforeContribution: () =>
+                timeProvider.Advance(TimeSpan.FromMilliseconds(5)));
+
+        var result = CreateBoundedSolver(
+            problem,
+            timeProvider,
+            TimeSpan.FromMilliseconds(5)).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>());
+
+        Assert.AreEqual(MinimalCounterSetStopReason.Completed, result.StopReason);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+        Assert.IsTrue(result.ThresholdReached);
+        CollectionAssert.AreEqual(new[] { "C" }, result.CounterNodeIds.ToArray());
+        Assert.AreEqual(2L, result.SubsetEvaluations);
+        Assert.AreEqual(1, result.LargestCardinalityFullyExhausted);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_TimeBudgetIncludesProblemPreparation()
+    {
+        var timeProvider = new ManualTimeProvider();
+        var candidates = new[]
+        {
+            new MinimalCounterCandidate("A", 1m),
+            new MinimalCounterCandidate("B", 1m)
+        };
+        var problem = new FakeProblem(
+            0m,
+            -1m,
+            candidates,
+            candidates.ToDictionary(candidate => candidate.NodeId, _ => -1m));
+        var evaluator = new AdvancingEvaluator(
+            problem,
+            () => timeProvider.Advance(TimeSpan.FromMilliseconds(6)));
+        var solver = new BoundedBruteForceMinimalCounterSetSolver(
+            evaluator,
+            timeProvider,
+            TimeSpan.FromMilliseconds(5));
+
+        var result = solver.Solve(
+            new Graph(),
+            "target",
+            Array.Empty<string>());
+
+        Assert.AreEqual(MinimalCounterSetStopReason.TimeBudget, result.StopReason);
+        Assert.AreEqual(MinimalCounterSetProofStatus.NotProven, result.ProofStatus);
+        Assert.AreEqual(MinimalCounterSetTimeoutStage.Preparation, result.TimeoutStage);
+        Assert.AreEqual(2, result.TotalCandidateCount);
+        Assert.AreEqual("4", result.TotalPossibleSubsets);
+        Assert.AreEqual(1L, result.SubsetEvaluations);
+        Assert.AreEqual(0, result.LargestCardinalityFullyExhausted);
+        Assert.IsNull(result.ActiveCardinality);
+        Assert.AreEqual(6d, result.PreparationElapsedMilliseconds);
+        Assert.AreEqual(0d, result.SearchElapsedMilliseconds);
+    }
+
+    [TestMethod]
+    public void BoundedSolver_RequestCancellationWinsWhenItRacesDeadline()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var timeProvider = new ManualTimeProvider();
+        var candidate = new MinimalCounterCandidate("C", 1m);
+        var problem = new FakeProblem(
+            0m,
+            -1m,
+            [candidate],
+            new Dictionary<string, decimal> { ["C"] = 0m },
+            beforeContribution: () =>
+            {
+                timeProvider.Advance(TimeSpan.FromMilliseconds(6));
+                cancellation.Cancel();
+            });
+
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            CreateBoundedSolver(
+                problem,
+                timeProvider,
+                TimeSpan.FromMilliseconds(5)).Solve(
+                    new Graph(),
+                    "target",
+                    Array.Empty<string>(),
+                    cancellation.Token));
+    }
+
+    [TestMethod]
+    public void MinimalCounterSetResultDigest_IgnoresProgressAndTimingMeasurements()
+    {
+        var candidate = new MinimalCounterCandidate("C", 1m);
+        var result = CreateBoundedSolver(new FakeProblem(
+            0m,
+            -1m,
+            [candidate],
+            new Dictionary<string, decimal> { ["C"] = -2m })).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>());
+        var differentlyMeasured = result with
+        {
+            CandidatesExamined = result.CandidatesExamined + 10,
+            SubsetEvaluations = result.SubsetEvaluations + 100,
+            LargestCardinalityFullyExhausted = 999,
+            ActiveCardinality = 998,
+            SubsetEvaluationsAtActiveCardinality = 97,
+            TotalSubsetsAtActiveCardinality = "123456789",
+            TotalPossibleSubsets = "987654321",
+            TimeBudgetMilliseconds = 999_999d,
+            PreparationElapsedMilliseconds = 123d,
+            SearchElapsedMilliseconds = 456d,
+            SubsetEvaluationsPerSecond = 789d,
+            TimeoutStage = MinimalCounterSetTimeoutStage.Search
+        };
+
+        Assert.AreEqual(
+            PerformanceRunMetadataCapture.CalculateResultDigest(result),
+            PerformanceRunMetadataCapture.CalculateResultDigest(differentlyMeasured));
+    }
+
+    [TestMethod]
+    public void Solvers_HonorCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var problem = new FakeProblem(
+            0m,
+            -1m,
+            Array.Empty<MinimalCounterCandidate>(),
+            new Dictionary<string, decimal>());
+
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            CreateGreedySolver(problem).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>(),
+                cancellation.Token));
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            CreateBoundedSolver(problem).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>(),
+                cancellation.Token));
+    }
+
+    [TestMethod]
+    public void BoundedSolver_ChecksCancellationWhileEnumeratingSubsets()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var problem = new CancelingProblem(cancellation, cancelAfterContributionCalls: 3);
+
+        Assert.ThrowsException<OperationCanceledException>(() =>
+            CreateBoundedSolver(problem).Solve(
+                new Graph(),
+                "target",
+                Array.Empty<string>(),
+                cancellation.Token));
+        Assert.AreEqual(3, problem.ContributionCalls);
+    }
+
+    [TestMethod]
+    public void LegacyEvaluator_PreservesExistingPriorityAndContributionMath()
+    {
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("R", "root", priorOdds: 1m),
+                Node("O1", "objection", priorOdds: -1m, posteriorOdds: 2m),
+                Node("O2", "counter", priorOdds: -1m, posteriorOdds: 1m)
+            ],
+            Edges =
+            [
+                Edge("O1-R", "O1", "R", 0.5m),
+                Edge("O2-R", "O2", "R", 0.5m)
+            ]
+        };
+        var solver = new GreedyMinimalCounterSetSolver(
+            new LegacyMinimalCounterSetEvaluator(
+                new GraphLikelihoodCalculator()));
+
+        var result = solver.Solve(
+            graph,
+            "R",
+            graph.Nodes.Select(node => node.Id));
+
+        var expectedInitialOdds = 1m +
+            (decimal)Math.Log(0.5d);
+        var expectedFinalOdds = expectedInitialOdds - 1m +
+            (decimal)Math.Log(0.5d);
+        CollectionAssert.AreEqual(
+            new[] { "O1" },
+            result.CounterNodeIds.ToArray());
+        Assert.IsTrue(result.ThresholdReached);
+        AssertApproximately(expectedInitialOdds, result.InitialTargetLogOdds!.Value);
+        AssertApproximately(expectedFinalOdds, result.FinalTargetLogOdds!.Value);
+    }
+
+    [TestMethod]
+    public void BayesianEvaluator_UsesBfImpactForBothSolvers()
+    {
+        decimal counterLogBayesFactor = (decimal)Math.Log(4d);
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("H", "root", priorOdds: 0.2m),
+                Node(
+                    "weak",
+                    "objection",
+                    posteriorOdds: counterLogBayesFactor),
+                Node(
+                    "strong",
+                    "objection",
+                    posteriorOdds: counterLogBayesFactor)
+            ],
+            Edges =
+            [
+                ConditionalEdge(
+                    "weak-H",
+                    "weak",
+                    "H",
+                    probabilityGivenParent: 0.2m,
+                    probabilityGivenNotParent: 0.8m),
+                ConditionalEdge(
+                    "strong-H",
+                    "strong",
+                    "H",
+                    probabilityGivenParent: 0.000000001m,
+                    probabilityGivenNotParent: 0.999999999m)
+            ]
+        };
+        var evaluator = new BayesianMinimalCounterSetEvaluator(
+            new GraphPosteriorOddsCalculator());
+
+        var greedyResult = new GreedyMinimalCounterSetSolver(evaluator).Solve(
+            graph,
+            "H",
+            graph.Nodes.Select(node => node.Id));
+        var boundedResult =
+            new BoundedBruteForceMinimalCounterSetSolver(evaluator).Solve(
+                graph,
+                "H",
+                graph.Nodes.Select(node => node.Id));
+
+        CollectionAssert.AreEqual(
+            new[] { "strong" },
+            greedyResult.CounterNodeIds.ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "strong" },
+            boundedResult.CounterNodeIds.ToArray());
+        Assert.IsTrue(greedyResult.ThresholdReached);
+        Assert.IsTrue(boundedResult.ThresholdReached);
+        Assert.AreEqual(
+            greedyResult.FinalTargetLogOdds,
+            boundedResult.FinalTargetLogOdds);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, boundedResult.ProofStatus);
+    }
+
+    [TestMethod]
+    public void BayesianEvaluator_ExcludesDisconnectedAndNonBayesianCounterAliases()
+    {
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("H", "root"),
+                Node("reachable", "objection", posteriorOdds: 1m),
+                Node("disconnected", "objection", posteriorOdds: 1m),
+                Node("legacy-alias", "counter", posteriorOdds: 1m)
+            ],
+            Edges =
+            [
+                ConditionalEdge(
+                    "reachable-H",
+                    "reachable",
+                    "H",
+                    probabilityGivenParent: 0.2m,
+                    probabilityGivenNotParent: 0.8m),
+                ConditionalEdge(
+                    "legacy-alias-H",
+                    "legacy-alias",
+                    "H",
+                    probabilityGivenParent: 0.2m,
+                    probabilityGivenNotParent: 0.8m)
+            ]
+        };
+        var evaluator = new BayesianMinimalCounterSetEvaluator(
+            new GraphPosteriorOddsCalculator());
+
+        var problem = evaluator.CreateProblem(
+            graph,
+            "H",
+            graph.Nodes.Select(node => node.Id));
+
+        CollectionAssert.AreEqual(
+            new[] { "reachable" },
+            problem.Candidates.Select(candidate => candidate.NodeId).ToArray());
+    }
+
+    [TestMethod]
+    public void LegacyEvaluator_ExcludesUnreachableCounters()
+    {
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("R", "root"),
+                Node("reachable", "objection", posteriorOdds: 1m),
+                Node("unreachable", "objection", posteriorOdds: 10m)
+            ],
+            Edges = [Edge("reachable-R", "reachable", "R", 1m)]
+        };
+        var evaluator = new LegacyMinimalCounterSetEvaluator(
+            new GraphLikelihoodCalculator());
+
+        var problem = evaluator.CreateProblem(
+            graph,
+            "R",
+            graph.Nodes.Select(node => node.Id));
+
+        CollectionAssert.AreEqual(
+            new[] { "reachable" },
+            problem.Candidates.Select(candidate => candidate.NodeId).ToArray());
+    }
+
+    [TestMethod]
+    public void BoundedSolver_HandlesNinetySixNodeGraphWithNoCounters()
+    {
+        var graph = new Graph
+        {
+            Nodes =
+            [
+                Node("R", "root"),
+                .. Enumerable.Range(1, 95)
+                    .Select(index => Node($"E{index:00}", "evidence"))
+            ],
+            Edges = Enumerable.Range(1, 95)
+                .Select(index => Edge(
+                    $"E{index:00}-R",
+                    $"E{index:00}",
+                    "R",
+                    likelihoodRatio: 2m))
+                .ToList()
+        };
+        var solver = new BoundedBruteForceMinimalCounterSetSolver(
+            new LegacyMinimalCounterSetEvaluator(
+                new GraphLikelihoodCalculator()));
+
+        var result = solver.Solve(
+            graph,
+            "R",
+            graph.Nodes.Select(node => node.Id));
+
+        Assert.AreEqual(96, graph.Nodes.Count);
+        Assert.AreEqual(0, result.TotalCandidateCount);
+        Assert.AreEqual(1L, result.SubsetEvaluations);
+        Assert.IsFalse(result.ThresholdReached);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+    }
+
+    [DataTestMethod]
+    [DataRow(11, 3)]
+    [DataRow(27, 9)]
+    public void BoundedSolver_ProvesMinimalSetOnSmallGraphSizes(
+        int nodeCount,
+        int counterCount)
+    {
+        var graph = CreateSmallCounterGraph(nodeCount, counterCount);
+        var solver = new BoundedBruteForceMinimalCounterSetSolver(
+            new LegacyMinimalCounterSetEvaluator(
+                new GraphLikelihoodCalculator()));
+
+        var result = solver.Solve(
+            graph,
+            "R",
+            graph.Nodes.Select(node => node.Id));
+
+        Assert.AreEqual(nodeCount, graph.Nodes.Count);
+        Assert.AreEqual(counterCount, result.TotalCandidateCount);
+        Assert.AreEqual(counterCount, result.CounterNodeIds.Count);
+        Assert.IsTrue(result.ThresholdReached);
+        Assert.AreEqual(MinimalCounterSetProofStatus.Proven, result.ProofStatus);
+    }
+
+    [TestMethod]
+    public void GreedySolver_TargetCounterIsNotItsOwnCandidate()
+    {
+        var graph = new Graph
+        {
+            Nodes = [Node("O3", "objection")]
+        };
+        var solver = new GreedyMinimalCounterSetSolver(
+            new LegacyMinimalCounterSetEvaluator(
+                new GraphLikelihoodCalculator()));
+
+        var result = solver.Solve(
+            graph,
+            "O3",
+            graph.Nodes.Select(node => node.Id));
+
+        Assert.IsFalse(result.ThresholdReached);
+        Assert.AreEqual(0, result.TotalCandidateCount);
+        Assert.AreEqual(0, result.CounterNodeIds.Count);
+    }
+
+    private static GreedyMinimalCounterSetSolver CreateGreedySolver(
+        IMinimalCounterSetProblem problem)
+    {
+        return new GreedyMinimalCounterSetSolver(new FakeEvaluator(problem));
+    }
+
+    private static BoundedBruteForceMinimalCounterSetSolver CreateBoundedSolver(
+        IMinimalCounterSetProblem problem,
+        TimeProvider? timeProvider = null,
+        TimeSpan? timeBudget = null)
+    {
+        return new BoundedBruteForceMinimalCounterSetSolver(
+            new FakeEvaluator(problem),
+            timeProvider,
+            timeBudget);
+    }
+
+    private static GraphNode Node(
+        string id,
+        string kind,
+        decimal priorOdds = 0m,
+        decimal posteriorOdds = 0m)
+    {
+        return new GraphNode
+        {
+            Id = id,
+            Kind = kind,
+            PriorOdds = priorOdds,
+            PosteriorOdds = posteriorOdds
+        };
+    }
+
+    private static GraphEdge Edge(
+        string id,
+        string from,
+        string to,
+        decimal likelihoodRatio)
+    {
+        return new GraphEdge
+        {
+            Id = id,
+            From = from,
+            To = to,
+            Kind = "support",
+            ProbabilityGivenParent = likelihoodRatio >= 1m
+                ? 1m
+                : likelihoodRatio,
+            ProbabilityGivenNotParent = likelihoodRatio >= 1m
+                ? 1m / likelihoodRatio
+                : 1m
+        };
+    }
+
+    private static GraphEdge ConditionalEdge(
+        string id,
+        string from,
+        string to,
+        decimal probabilityGivenParent,
+        decimal probabilityGivenNotParent)
+    {
+        return new GraphEdge
+        {
+            Id = id,
+            From = from,
+            To = to,
+            Kind = "counter",
+            ProbabilityGivenParent = probabilityGivenParent,
+            ProbabilityGivenNotParent = probabilityGivenNotParent
+        };
+    }
+
+    private static Graph CreateSmallCounterGraph(int nodeCount, int counterCount)
+    {
+        var counterLogLikelihoodRatio = (decimal)Math.Log(0.1d);
+        var nodes = new List<GraphNode>
+        {
+            Node(
+                "R",
+                "root",
+                priorOdds: (counterCount * 2m) - 0.5m -
+                    (counterCount * counterLogLikelihoodRatio))
+        };
+        var edges = new List<GraphEdge>();
+
+        for (var index = 0; index < counterCount; index++)
+        {
+            var nodeId = $"O{index:00}";
+            nodes.Add(Node(nodeId, "objection"));
+            edges.Add(Edge($"{nodeId}-R", nodeId, "R", 0.1m));
+        }
+
+        for (var index = nodes.Count; index < nodeCount; index++)
+        {
+            var nodeId = $"E{index:00}";
+            nodes.Add(Node(nodeId, "evidence"));
+            edges.Add(Edge($"{nodeId}-R", nodeId, "R", 1m));
+        }
+
+        return new Graph
+        {
+            Nodes = nodes,
+            Edges = edges
+        };
+    }
+
+    private static void AssertApproximately(decimal expected, decimal actual)
+    {
+        Assert.IsTrue(
+            Math.Abs(expected - actual) < 0.000000001m,
+            $"Expected {expected}, but found {actual}.");
+    }
+
+    private sealed class FakeEvaluator(IMinimalCounterSetProblem problem)
+        : IMinimalCounterSetEvaluator
+    {
+        public IMinimalCounterSetProblem CreateProblem(
+            Graph graph,
+            string targetNodeId,
+            IEnumerable<string> nodeIds,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return problem;
+        }
+    }
+
+    private sealed class ExactSubsetProblem : IMinimalCounterSetProblem
+    {
+        public decimal ThresholdLogOdds => -1m;
+
+        public decimal InitialTargetLogOdds => 0m;
+
+        public IReadOnlyList<MinimalCounterCandidate> Candidates { get; } =
+        [
+            new MinimalCounterCandidate("A", 3m),
+            new MinimalCounterCandidate("B", 2m),
+            new MinimalCounterCandidate("C", 1m)
+        ];
+
+        public decimal CalculateTargetLogOdds(
+            IReadOnlyList<string> counterNodeIds,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return string.Join(",", counterNodeIds.Order(StringComparer.Ordinal)) switch
+            {
+                "A" => -0.6m,
+                "B" => -0.6m,
+                "C" => -1.2m,
+                "A,B" => 0.5m,
+                "A,C" => -1.3m,
+                "B,C" => -1.4m,
+                "A,B,C" => -1.5m,
+                _ => InitialTargetLogOdds
+            };
+        }
+
+        public decimal GetTargetLogOddsContribution(
+            string counterNodeId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return counterNodeId switch
+            {
+                "A" => -0.6m,
+                "B" => -0.6m,
+                "C" => -1.2m,
+                _ => throw new InvalidOperationException()
+            };
+        }
+    }
+
+    private sealed class BestPrefixProblem : IMinimalCounterSetProblem
+    {
+        public decimal ThresholdLogOdds => -1m;
+
+        public decimal InitialTargetLogOdds => 0m;
+
+        public IReadOnlyList<MinimalCounterCandidate> Candidates { get; } =
+        [
+            new MinimalCounterCandidate("A", 2m),
+            new MinimalCounterCandidate("B", 1m)
+        ];
+
+        public decimal CalculateTargetLogOdds(
+            IReadOnlyList<string> counterNodeIds,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return counterNodeIds.Count switch
+            {
+                1 => -0.8m,
+                2 => 0.2m,
+                _ => InitialTargetLogOdds
+            };
+        }
+
+        public decimal GetTargetLogOddsContribution(
+            string counterNodeId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return counterNodeId switch
+            {
+                "A" => -0.8m,
+                "B" => -0.2m,
+                _ => throw new InvalidOperationException()
+            };
+        }
+    }
+
+    private sealed class FakeProblem(
+        decimal initialTargetLogOdds,
+        decimal thresholdLogOdds,
+        IReadOnlyList<MinimalCounterCandidate> candidates,
+        IReadOnlyDictionary<string, decimal> contributions,
+        Action? beforeContribution = null)
+        : IMinimalCounterSetProblem
+    {
+        public decimal ThresholdLogOdds => thresholdLogOdds;
+
+        public decimal InitialTargetLogOdds => initialTargetLogOdds;
+
+        public IReadOnlyList<MinimalCounterCandidate> Candidates => candidates;
+
+        public decimal GetTargetLogOddsContribution(
+            string counterNodeId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            beforeContribution?.Invoke();
+            return contributions[counterNodeId];
+        }
+    }
+
+    private sealed class AdvancingEvaluator(
+        IMinimalCounterSetProblem problem,
+        Action beforeReturningProblem)
+        : IMinimalCounterSetEvaluator
+    {
+        public IMinimalCounterSetProblem CreateProblem(
+            Graph graph,
+            string targetNodeId,
+            IEnumerable<string> nodeIds,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            beforeReturningProblem();
+            return problem;
+        }
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private long _timestamp;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => _timestamp;
+
+        public override ITimer CreateTimer(
+            TimerCallback callback,
+            object? state,
+            TimeSpan dueTime,
+            TimeSpan period)
+        {
+            return new InertTimer();
+        }
+
+        public void Advance(TimeSpan duration)
+        {
+            _timestamp += duration.Ticks;
+        }
+
+        private sealed class InertTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+            public void Dispose()
+            {
+            }
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class CancelingProblem(
+        CancellationTokenSource cancellation,
+        int cancelAfterContributionCalls)
+        : IMinimalCounterSetProblem
+    {
+        public int ContributionCalls { get; private set; }
+
+        public decimal ThresholdLogOdds => -1m;
+
+        public decimal InitialTargetLogOdds => 0m;
+
+        public IReadOnlyList<MinimalCounterCandidate> Candidates { get; } =
+            Enumerable.Range(0, 20)
+                .Select(index => new MinimalCounterCandidate($"C{index:00}", 1m))
+                .ToArray();
+
+        public decimal GetTargetLogOddsContribution(
+            string counterNodeId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ContributionCalls++;
+            if (ContributionCalls == cancelAfterContributionCalls)
+            {
+                cancellation.Cancel();
+            }
+
+            return 1m;
+        }
+    }
+}

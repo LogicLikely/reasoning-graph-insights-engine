@@ -1,14 +1,28 @@
+using System.Diagnostics;
+using System.Text.Json.Nodes;
 using Backend.Calculation;
+using Backend.Calculation.MinimalCounterSets;
 using Backend.Models.Domain;
 using Backend.Models.Dto;
 using Backend.Repositories;
+using Backend.Reporting;
 using Backend.Seeding;
 
 namespace Backend.Services;
 
 public class GraphService : IGraphService
 {
+    private const int MinimalCounterSetPreviewLimit = 20;
+    private const int EvidenceImpactPreviewLimit = 5;
+    private const int RobustnessRankingPreviewLimit = 10;
+
     private readonly IGraphRepository _graphRepository;
+
+    // Minimal-counter search implementations share the BF evaluator.
+    private readonly GreedyMinimalCounterSetSolver _greedyMinimalCounterSetSolver;
+    private readonly BoundedBruteForceMinimalCounterSetSolver _boundedMinimalCounterSetSolver;
+    private readonly IPerformanceRunStore _performanceRunStore;
+    private readonly PerformanceBuildInfo _buildInfo;
 
     // BF-based pruning, recurrence, and persisted posterior-log-odds updates.
     private readonly GraphPosteriorOddsCalculator _posteriorOddsCalculator;
@@ -27,11 +41,81 @@ public class GraphService : IGraphService
         IGraphRepository graphRepository,
         GraphLikelihoodCalculator graphLikelihoodCalculator,
         GraphPosteriorOddsCalculator posteriorOddsCalculator)
+        : this(
+            graphRepository,
+            graphLikelihoodCalculator,
+            posteriorOddsCalculator,
+            CreateMinimalCounterSetSolvers(posteriorOddsCalculator),
+            NullPerformanceRunStore.Instance)
     {
+    }
+
+    private GraphService(
+        IGraphRepository graphRepository,
+        GraphLikelihoodCalculator graphLikelihoodCalculator,
+        GraphPosteriorOddsCalculator posteriorOddsCalculator,
+        (GreedyMinimalCounterSetSolver Greedy, BoundedBruteForceMinimalCounterSetSolver Bounded) solvers,
+        IPerformanceRunStore performanceRunStore)
+        : this(
+            graphRepository,
+            graphLikelihoodCalculator,
+            posteriorOddsCalculator,
+            solvers.Greedy,
+            solvers.Bounded,
+            performanceRunStore)
+    {
+    }
+
+    public GraphService(
+        IGraphRepository graphRepository,
+        GraphLikelihoodCalculator graphLikelihoodCalculator,
+        GreedyMinimalCounterSetSolver greedyMinimalCounterSetSolver,
+        BoundedBruteForceMinimalCounterSetSolver boundedMinimalCounterSetSolver,
+        IPerformanceRunStore performanceRunStore)
+        : this(
+            graphRepository,
+            graphLikelihoodCalculator,
+            new GraphPosteriorOddsCalculator(),
+            greedyMinimalCounterSetSolver,
+            boundedMinimalCounterSetSolver,
+            performanceRunStore)
+    {
+    }
+
+    public GraphService(
+        IGraphRepository graphRepository,
+        GraphLikelihoodCalculator graphLikelihoodCalculator,
+        GraphPosteriorOddsCalculator posteriorOddsCalculator,
+        GreedyMinimalCounterSetSolver greedyMinimalCounterSetSolver,
+        BoundedBruteForceMinimalCounterSetSolver boundedMinimalCounterSetSolver,
+        IPerformanceRunStore performanceRunStore)
+    {
+        _graphRepository = graphRepository ?? throw new ArgumentNullException(nameof(graphRepository));
         ArgumentNullException.ThrowIfNull(graphLikelihoodCalculator);
-        ArgumentNullException.ThrowIfNull(posteriorOddsCalculator);
-        _graphRepository = graphRepository;
-        _posteriorOddsCalculator = posteriorOddsCalculator;
+        _posteriorOddsCalculator = posteriorOddsCalculator ??
+            throw new ArgumentNullException(nameof(posteriorOddsCalculator));
+        _greedyMinimalCounterSetSolver = greedyMinimalCounterSetSolver ??
+            throw new ArgumentNullException(nameof(greedyMinimalCounterSetSolver));
+        _boundedMinimalCounterSetSolver = boundedMinimalCounterSetSolver ??
+            throw new ArgumentNullException(nameof(boundedMinimalCounterSetSolver));
+        _performanceRunStore = performanceRunStore ??
+            throw new ArgumentNullException(nameof(performanceRunStore));
+        _buildInfo = PerformanceBuildInfoCapture.Capture(
+            Environment.GetEnvironmentVariable("GIT_COMMIT") ??
+            Environment.GetEnvironmentVariable("SOURCE_VERSION"),
+            gitBranch: Environment.GetEnvironmentVariable("GIT_BRANCH") ??
+                Environment.GetEnvironmentVariable("BRANCH_NAME"));
+    }
+
+    private static (
+        GreedyMinimalCounterSetSolver Greedy,
+        BoundedBruteForceMinimalCounterSetSolver Bounded)
+        CreateMinimalCounterSetSolvers(GraphPosteriorOddsCalculator calculator)
+    {
+        var evaluator = new BayesianMinimalCounterSetEvaluator(calculator);
+        return (
+            new GreedyMinimalCounterSetSolver(evaluator),
+            new BoundedBruteForceMinimalCounterSetSolver(evaluator));
     }
 
     public async Task<IReadOnlyList<GraphSummaryDto>> GetSummariesAsync(
@@ -100,22 +184,55 @@ public class GraphService : IGraphService
         };
     }
 
-    public async Task<List<string>?> GetMinimalCounterSetAsync(
+    public Task<List<string>?> GetMinimalCounterSetAsync(
         string slug,
         string targetNodeId,
         CancellationToken cancellationToken = default)
     {
+        return GetMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<List<string>?> GetMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var loadStopwatch = Stopwatch.StartNew();
         var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        loadStopwatch.Stop();
         if (graph is null)
         {
             return null;
         }
 
-        return GetMinimalCounterSet(
+        var reported = await ExecuteReportedCalculationAsync(
             graph,
-            targetNodeId,
-            graph.Nodes.Select(node => node.Id),
+            CreateMinimalCounterSetAlgorithm(PerformanceAlgorithmImplementations.Greedy),
+            CreateTargetInvocation("database", targetNodeId),
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadStopwatch.Elapsed.TotalMilliseconds,
+            () => _greedyMinimalCounterSetSolver.Solve(
+                graph,
+                targetNodeId,
+                graph.Nodes.Select(node => node.Id),
+                cancellationToken),
+            CreateMinimalCounterSetDetails,
+            result => result.CounterNodeIds.Count,
+            _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
             cancellationToken);
+
+        return reported.Result.ThresholdReached
+            ? reported.Result.CounterNodeIds.ToList()
+            : null;
     }
 
     public Task<List<string>?> GetMinimalCounterSetAsync(
@@ -124,18 +241,130 @@ public class GraphService : IGraphService
         GraphDto graphContext,
         CancellationToken cancellationToken = default)
     {
+        return GetMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<List<string>?> GetMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
         {
-            return Task.FromResult<List<string>?>(null);
+            return null;
         }
 
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var graph = ToDomainGraph(graphContext);
+        var reported = await ExecuteReportedCalculationAsync(
+            graph,
+            CreateMinimalCounterSetAlgorithm(PerformanceAlgorithmImplementations.Greedy),
+            CreateTargetInvocation("fixture", targetNodeId),
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadElapsedMilliseconds: null,
+            () => _greedyMinimalCounterSetSolver.Solve(
+                graph,
+                targetNodeId,
+                graph.Nodes.Select(node => node.Id),
+                cancellationToken),
+            CreateMinimalCounterSetDetails,
+            result => result.CounterNodeIds.Count,
+            _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
+            cancellationToken);
+
+        return reported.Result.ThresholdReached
+            ? reported.Result.CounterNodeIds.ToList()
+            : null;
+    }
+
+    public Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        return GetBoundedMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var loadStopwatch = Stopwatch.StartNew();
+        var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        loadStopwatch.Stop();
+        if (graph is null)
+        {
+            return null;
+        }
+
+        return await GetBoundedMinimalCounterSetAsync(
+            graph,
+            "database",
+            targetNodeId,
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadStopwatch.Elapsed.TotalMilliseconds,
+            benchmarkSetId,
+            cancellationToken);
+    }
+
+    public Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        CancellationToken cancellationToken = default)
+    {
+        return GetBoundedMinimalCounterSetAsync(
+            slug,
+            targetNodeId,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<BoundedMinimalCounterSetDto?> GetBoundedMinimalCounterSetAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
         var graph = ToDomainGraph(graphContext);
 
-        return Task.FromResult(GetMinimalCounterSet(
+        return await GetBoundedMinimalCounterSetAsync(
             graph,
+            "fixture",
             targetNodeId,
-            graph.Nodes.Select(node => node.Id),
-            cancellationToken));
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadElapsedMilliseconds: null,
+            benchmarkSetId,
+            cancellationToken);
     }
 
     public NodeRobustnessDto? GetLeastRobustNode(
@@ -294,12 +523,74 @@ public class GraphService : IGraphService
         return odds / (1d + odds);
     }
 
-    public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
+    private decimal CalculateTargetLogOdds(
+        Graph source,
+        string targetClaimId,
+        HashSet<string> includedNodeIds,
+        CancellationToken cancellationToken)
+    {
+        var graph = new Graph
+        {
+            Id = source.Id,
+            Slug = source.Slug,
+            Title = source.Title,
+            Description = source.Description,
+            Nodes = source.Nodes
+                .Where(node => includedNodeIds.Contains(node.Id))
+                .ToList(),
+            Edges = source.Edges
+                .Where(edge =>
+                    includedNodeIds.Contains(edge.From) &&
+                    includedNodeIds.Contains(edge.To))
+                .ToList()
+        };
+
+        return _posteriorOddsCalculator.CalculateNodeLogPosteriorOdds(
+            graph,
+            targetClaimId,
+            cancellationToken);
+    }
+
+    public Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
         string slug,
         CancellationToken cancellationToken = default)
     {
+        return GetLeastRobustNodeAsync(
+            slug,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
+        string slug,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var loadStopwatch = Stopwatch.StartNew();
         var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
-        return graph is null ? null : GetLeastRobustNode(graph, cancellationToken);
+        loadStopwatch.Stop();
+        if (graph is null)
+        {
+            return null;
+        }
+
+        var reported = await ExecuteReportedCalculationAsync(
+            graph,
+            CreateCurrentAlgorithm(PerformanceAlgorithmNames.LeastRobustNode),
+            CreateGraphInvocation("database"),
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadStopwatch.Elapsed.TotalMilliseconds,
+            () => GetLeastRobustNode(graph, cancellationToken),
+            result => CreateRobustnessDetails(graph, result),
+            result => result is null ? 0 : 1,
+            _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
+            cancellationToken);
+
+        return reported.Result;
     }
 
     public Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
@@ -307,20 +598,84 @@ public class GraphService : IGraphService
         GraphDto graphContext,
         CancellationToken cancellationToken = default)
     {
+        return GetLeastRobustNodeAsync(
+            slug,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<NodeRobustnessDto?> GetLeastRobustNodeAsync(
+        string slug,
+        GraphDto graphContext,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
         {
-            return Task.FromResult<NodeRobustnessDto?>(null);
+            return null;
         }
 
-        return Task.FromResult(GetLeastRobustNode(ToDomainGraph(graphContext), cancellationToken));
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var graph = ToDomainGraph(graphContext);
+        var reported = await ExecuteReportedCalculationAsync(
+            graph,
+            CreateCurrentAlgorithm(PerformanceAlgorithmNames.LeastRobustNode),
+            CreateGraphInvocation("fixture"),
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadElapsedMilliseconds: null,
+            () => GetLeastRobustNode(graph, cancellationToken),
+            result => CreateRobustnessDetails(graph, result),
+            result => result is null ? 0 : 1,
+            _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
+            cancellationToken);
+
+        return reported.Result;
+    }
+
+    public Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
+        string slug,
+        CancellationToken cancellationToken = default)
+    {
+        return GetNodeRobustnessRankingAsync(
+            slug,
+            benchmarkSetId: null,
+            cancellationToken);
     }
 
     public async Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
         string slug,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var loadStopwatch = Stopwatch.StartNew();
         var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
-        return graph is null ? null : GetNodeRobustnessRanking(graph, cancellationToken);
+        loadStopwatch.Stop();
+        if (graph is null)
+        {
+            return null;
+        }
+
+        var reported = await ExecuteReportedCalculationAsync(
+            graph,
+            CreateCurrentAlgorithm(PerformanceAlgorithmNames.RobustnessRanking),
+            CreateGraphInvocation("database"),
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadStopwatch.Elapsed.TotalMilliseconds,
+            () => GetNodeRobustnessRanking(graph, cancellationToken),
+            result => CreateRobustnessRankingDetails(graph, result),
+            result => result.Count,
+            _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
+            cancellationToken);
+
+        return reported.Result;
     }
 
     public Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
@@ -328,27 +683,90 @@ public class GraphService : IGraphService
         GraphDto graphContext,
         CancellationToken cancellationToken = default)
     {
+        return GetNodeRobustnessRankingAsync(
+            slug,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<List<NodeRobustnessDto>?> GetNodeRobustnessRankingAsync(
+        string slug,
+        GraphDto graphContext,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
         {
-            return Task.FromResult<List<NodeRobustnessDto>?>(null);
+            return null;
         }
 
-        return Task.FromResult<List<NodeRobustnessDto>?>(
-            GetNodeRobustnessRanking(ToDomainGraph(graphContext), cancellationToken));
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var graph = ToDomainGraph(graphContext);
+        var reported = await ExecuteReportedCalculationAsync(
+            graph,
+            CreateCurrentAlgorithm(PerformanceAlgorithmNames.RobustnessRanking),
+            CreateGraphInvocation("fixture"),
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadElapsedMilliseconds: null,
+            () => GetNodeRobustnessRanking(graph, cancellationToken),
+            result => CreateRobustnessRankingDetails(graph, result),
+            result => result.Count,
+            _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
+            cancellationToken);
+
+        return reported.Result;
+    }
+
+    public Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
+        string slug,
+        string targetNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        return GetEvidenceImpactRankingAsync(
+            slug,
+            targetNodeId,
+            benchmarkSetId: null,
+            cancellationToken);
     }
 
     public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
         string slug,
         string targetNodeId,
+        string? benchmarkSetId,
         CancellationToken cancellationToken = default)
     {
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var loadStopwatch = Stopwatch.StartNew();
         var graph = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
-        return graph is null
-            ? null
-            : _posteriorOddsCalculator.GetEvidenceImpactRanking(
+        loadStopwatch.Stop();
+        if (graph is null)
+        {
+            return null;
+        }
+
+        var reported = await ExecuteReportedCalculationAsync(
+            graph,
+            CreateCurrentAlgorithm(PerformanceAlgorithmNames.EvidenceImpactRanking),
+            CreateTargetInvocation("database", targetNodeId),
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadStopwatch.Elapsed.TotalMilliseconds,
+            () => _posteriorOddsCalculator.GetEvidenceImpactRanking(
                 graph,
                 targetNodeId,
-                cancellationToken);
+                cancellationToken),
+            result => CreateEvidenceImpactDetails(graph, targetNodeId, result),
+            result => result.SupportingEvidence.Count + result.CounterEvidence.Count,
+            _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
+            cancellationToken);
+
+        return reported.Result;
     }
 
     public Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
@@ -357,17 +775,47 @@ public class GraphService : IGraphService
         GraphDto graphContext,
         CancellationToken cancellationToken = default)
     {
+        return GetEvidenceImpactRankingAsync(
+            slug,
+            targetNodeId,
+            graphContext,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<EvidenceImpactRankingDto?> GetEvidenceImpactRankingAsync(
+        string slug,
+        string targetNodeId,
+        GraphDto graphContext,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
         if (!string.Equals(slug, graphContext.Slug, StringComparison.Ordinal))
         {
-            return Task.FromResult<EvidenceImpactRankingDto?>(null);
+            return null;
         }
 
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
         var graph = ToDomainGraph(graphContext);
-        return Task.FromResult<EvidenceImpactRankingDto?>(
-            _posteriorOddsCalculator.GetEvidenceImpactRanking(
+        var reported = await ExecuteReportedCalculationAsync(
+            graph,
+            CreateCurrentAlgorithm(PerformanceAlgorithmNames.EvidenceImpactRanking),
+            CreateTargetInvocation("fixture", targetNodeId),
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadElapsedMilliseconds: null,
+            () => _posteriorOddsCalculator.GetEvidenceImpactRanking(
                 graph,
                 targetNodeId,
-                cancellationToken));
+                cancellationToken),
+            result => CreateEvidenceImpactDetails(graph, targetNodeId, result),
+            result => result.SupportingEvidence.Count + result.CounterEvidence.Count,
+            _ => PerformanceRunStatuses.Completed,
+            benchmarkSetId,
+            cancellationToken);
+
+        return reported.Result;
     }
 
     public async Task<bool> DeleteNodeAsync(
@@ -488,29 +936,165 @@ public class GraphService : IGraphService
                string.Equals(kind, "objection", StringComparison.OrdinalIgnoreCase);
     }
 
-    public async Task<bool> UpdateNodeAsync(
+    public Task<bool> UpdateNodeAsync(
         string slug,
         string nodeId,
         GraphNodeUpdateDto node,
         CancellationToken cancellationToken = default)
     {
+        return UpdateNodeAsync(
+            slug,
+            nodeId,
+            node,
+            benchmarkSetId: null,
+            cancellationToken);
+    }
+
+    public async Task<bool> UpdateNodeAsync(
+        string slug,
+        string nodeId,
+        GraphNodeUpdateDto node,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!node.PriorOdds.HasValue)
+        {
+            var updatedWithoutReport = await _graphRepository.UpdateNodeAsync(
+                slug,
+                nodeId,
+                node,
+                cancellationToken);
+
+            // Kind changes path eligibility and the evidence-leaf base case.
+            // Posterior odds changes affect authored evidence strength.
+            if (updatedWithoutReport &&
+                (node.Kind is not null || node.PosteriorOdds.HasValue))
+            {
+                await RecalculateAndPersistNodesAndAncestorsAsync(
+                    slug,
+                    [nodeId],
+                    cancellationToken);
+            }
+
+            return updatedWithoutReport;
+        }
+
+        var operationStartedAtUtc = DateTimeOffset.UtcNow;
+        var operationStopwatch = Stopwatch.StartNew();
+        var loadStopwatch = Stopwatch.StartNew();
+        var graphBeforeUpdate = await _graphRepository.GetBySlugAsync(slug, cancellationToken);
+        loadStopwatch.Stop();
+        var totalLoadElapsedMilliseconds =
+            loadStopwatch.Elapsed.TotalMilliseconds;
+        var nodeBeforeUpdate = graphBeforeUpdate?.Nodes.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, nodeId, StringComparison.Ordinal));
+        var updateInvocation = CreateNodeUpdateInvocation(
+            nodeBeforeUpdate,
+            nodeId,
+            node);
+
         var updated = await _graphRepository.UpdateNodeAsync(slug, nodeId, node, cancellationToken);
         if (!updated)
         {
             return false;
         }
 
-        // Kind changes path eligibility and the evidence-leaf base case. Odds
-        // changes affect either the target prior or its authored leaf log BF.
-        if (node.Kind is not null ||
-            node.PriorOdds.HasValue ||
-            node.PosteriorOdds.HasValue)
+        var postUpdateLoadStopwatch = Stopwatch.StartNew();
+        var graphForCalculation = await _graphRepository.GetBySlugAsync(
+            slug,
+            cancellationToken);
+        postUpdateLoadStopwatch.Stop();
+        totalLoadElapsedMilliseconds +=
+            postUpdateLoadStopwatch.Elapsed.TotalMilliseconds;
+        if (graphForCalculation is null)
         {
-            await RecalculateAndPersistNodesAndAncestorsAsync(
-                slug,
-                [nodeId],
-                cancellationToken);
+            return true;
         }
+
+        var reportingGraph = graphForCalculation;
+        IReadOnlyDictionary<string, decimal> recalculatedLogOdds =
+            new Dictionary<string, decimal>();
+        PerformanceMeasurementResult computeMeasurement;
+        double? persistElapsedMilliseconds = null;
+        var compute = PerformanceMeasurement.Start();
+        try
+        {
+            recalculatedLogOdds =
+                _posteriorOddsCalculator.RecalculateNodesAndAncestors(
+                    graphForCalculation,
+                    [nodeId],
+                    cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            computeMeasurement = compute.Stop();
+            await TryReportFailedLeafUpdateAsync(
+                reportingGraph,
+                updateInvocation,
+                graphForCalculation.Nodes.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Id, nodeId, StringComparison.Ordinal))?.Kind,
+                nodeId,
+                operationStartedAtUtc,
+                operationStopwatch,
+                totalLoadElapsedMilliseconds,
+                computeMeasurement,
+                persistElapsedMilliseconds: null,
+                recalculatedLogOdds,
+                benchmarkSetId,
+                exception);
+            throw;
+        }
+
+        computeMeasurement = compute.Stop();
+
+        var persistStopwatch = Stopwatch.StartNew();
+        try
+        {
+            if (recalculatedLogOdds.Count > 0)
+            {
+                await _graphRepository.UpdateNodePosteriorOddsBatchAsync(
+                    graphForCalculation.Id,
+                    recalculatedLogOdds,
+                    cancellationToken);
+            }
+        }
+        catch (Exception exception)
+        {
+            persistStopwatch.Stop();
+            await TryReportFailedLeafUpdateAsync(
+                reportingGraph,
+                updateInvocation,
+                graphForCalculation.Nodes.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Id, nodeId, StringComparison.Ordinal))?.Kind,
+                nodeId,
+                operationStartedAtUtc,
+                operationStopwatch,
+                totalLoadElapsedMilliseconds,
+                computeMeasurement,
+                persistStopwatch.Elapsed.TotalMilliseconds,
+                recalculatedLogOdds,
+                benchmarkSetId,
+                exception);
+            throw;
+        }
+
+        persistStopwatch.Stop();
+        persistElapsedMilliseconds = persistStopwatch.Elapsed.TotalMilliseconds;
+        await ReportLeafUpdateAsync(
+            reportingGraph,
+            updateInvocation,
+            graphForCalculation.Nodes.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, nodeId, StringComparison.Ordinal))?.Kind,
+            nodeId,
+            operationStartedAtUtc,
+            operationStopwatch,
+            totalLoadElapsedMilliseconds,
+            computeMeasurement,
+            persistElapsedMilliseconds,
+            recalculatedLogOdds,
+            persistedRowCount: recalculatedLogOdds.Count,
+            triggered: true,
+            benchmarkSetId);
 
         return true;
     }
@@ -639,136 +1223,636 @@ public class GraphService : IGraphService
         return recalculatedLogOdds;
     }
 
-    private List<string>? GetMinimalCounterSet(
+    private async Task<BoundedMinimalCounterSetDto> GetBoundedMinimalCounterSetAsync(
         Graph graph,
-        string targetClaimId,
-        IEnumerable<string> nodeIds,
-        CancellationToken cancellationToken
-    )
-    {
-        const decimal targetLogOddsThreshold = -1m;
-
-        ArgumentNullException.ThrowIfNull(graph);
-        ArgumentNullException.ThrowIfNull(targetClaimId);
-        ArgumentNullException.ThrowIfNull(nodeIds);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var nodesById = graph.Nodes.ToDictionary(
-            node => node.Id,
-            StringComparer.Ordinal);
-        if (!nodesById.ContainsKey(targetClaimId))
-        {
-            throw new InvalidOperationException(
-                $"Target node '{targetClaimId}' does not exist in the graph.");
-        }
-
-        var availableNodeIds = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string nodeId in nodeIds.Distinct(StringComparer.Ordinal))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!nodesById.ContainsKey(nodeId))
-            {
-                throw new InvalidOperationException(
-                    $"Node '{nodeId}' does not exist in the graph.");
-            }
-
-            availableNodeIds.Add(nodeId);
-        }
-
-        availableNodeIds.Add(targetClaimId);
-
-        var counterNodeIds = availableNodeIds
-            .Where(nodeId =>
-                nodeId != targetClaimId &&
-                IsCounterNode(nodesById[nodeId]))
-            .ToList();
-        var includedNodeIds = availableNodeIds
-            .Where(nodeId => !IsCounterNode(nodesById[nodeId]))
-            .ToHashSet(StringComparer.Ordinal);
-        includedNodeIds.Add(targetClaimId);
-
-        decimal targetClaimLogOdds = CalculateTargetLogOdds(
-            graph,
-            targetClaimId,
-            includedNodeIds,
-            cancellationToken);
-        if (targetClaimLogOdds <= targetLogOddsThreshold)
-        {
-            return [];
-        }
-
-        // Rank once against the no-counter graph. The BF calculation includes
-        // pruning and every nonlinear edge transform, so the lowest resulting
-        // target log odds is the strongest counter.
-        var rankedCounters = new List<(string NodeId, decimal TargetLogOdds)>(
-            counterNodeIds.Count);
-        foreach (string counterNodeId in counterNodeIds)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            includedNodeIds.Add(counterNodeId);
-            decimal candidateTargetLogOdds = CalculateTargetLogOdds(
-                graph,
-                targetClaimId,
-                includedNodeIds,
-                cancellationToken);
-            includedNodeIds.Remove(counterNodeId);
-            rankedCounters.Add((counterNodeId, candidateTargetLogOdds));
-        }
-
-        var countersUsed = new List<string>();
-        foreach (var counter in rankedCounters
-                     .OrderBy(counter => counter.TargetLogOdds)
-                     .ThenBy(counter => counter.NodeId, StringComparer.Ordinal))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            includedNodeIds.Add(counter.NodeId);
-            countersUsed.Add(counter.NodeId);
-            targetClaimLogOdds = CalculateTargetLogOdds(
-                graph,
-                targetClaimId,
-                includedNodeIds,
-                cancellationToken);
-
-            if (targetClaimLogOdds <= targetLogOddsThreshold)
-            {
-                return countersUsed;
-            }
-        }
-
-        return null;
-    }
-
-    private decimal CalculateTargetLogOdds(
-        Graph source,
-        string targetClaimId,
-        HashSet<string> includedNodeIds,
+        string dataSource,
+        string targetNodeId,
+        DateTimeOffset operationStartedAtUtc,
+        Stopwatch operationStopwatch,
+        double? loadElapsedMilliseconds,
+        string? benchmarkSetId,
         CancellationToken cancellationToken)
     {
-        var graph = new Graph
+        var invocation = CreateTargetInvocation(dataSource, targetNodeId);
+        invocation.Parameters["timeBudgetMilliseconds"] =
+            _boundedMinimalCounterSetSolver.ConfiguredTimeBudgetMilliseconds;
+
+        var reported = await ExecuteReportedCalculationAsync(
+            graph,
+            CreateMinimalCounterSetAlgorithm(
+                PerformanceAlgorithmImplementations.TimeBoundedExhaustive),
+            invocation,
+            operationStartedAtUtc,
+            operationStopwatch,
+            loadElapsedMilliseconds,
+            () => _boundedMinimalCounterSetSolver.Solve(
+                graph,
+                targetNodeId,
+                graph.Nodes.Select(node => node.Id),
+                cancellationToken),
+            CreateMinimalCounterSetDetails,
+            result => result.CounterNodeIds.Count,
+            result => result.StopReason == MinimalCounterSetStopReason.TimeBudget
+                ? PerformanceRunStatuses.TimedOut
+                : PerformanceRunStatuses.Completed,
+            benchmarkSetId,
+            cancellationToken);
+
+        return new BoundedMinimalCounterSetDto
         {
-            Id = source.Id,
-            Slug = source.Slug,
-            Title = source.Title,
-            Description = source.Description,
-            Nodes = source.Nodes
-                .Where(node => includedNodeIds.Contains(node.Id))
-                .ToList(),
-            Edges = source.Edges
-                .Where(edge =>
-                    includedNodeIds.Contains(edge.From) &&
-                    includedNodeIds.Contains(edge.To))
-                .ToList()
+            CounterNodeIds = reported.Result.ThresholdReached
+                ? reported.Result.CounterNodeIds.ToList()
+                : null,
+            ProofStatus = ToProofStatusValue(reported.Result.ProofStatus),
+            Status = reported.StoredRun.Outcome.Status,
+            StopReason = ToStopReasonValue(reported.Result.StopReason),
+            TimeBudgetMilliseconds =
+                reported.Result.TimeBudgetMilliseconds ??
+                _boundedMinimalCounterSetSolver.ConfiguredTimeBudgetMilliseconds,
+            RunNumber = reported.StoredRun.RunNumber
+        };
+    }
+
+    private async Task<ReportedCalculation<T>> ExecuteReportedCalculationAsync<T>(
+        Graph graph,
+        PerformanceAlgorithmInfo algorithm,
+        PerformanceInvocationInfo invocation,
+        DateTimeOffset operationStartedAtUtc,
+        Stopwatch operationStopwatch,
+        double? loadElapsedMilliseconds,
+        Func<T> calculate,
+        Func<T, JsonObject> createDetails,
+        Func<T, int?> getResultCount,
+        Func<T, string> getStatus,
+        string? benchmarkSetId,
+        CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+        var measurement = PerformanceMeasurement.Start();
+        try
+        {
+            var result = calculate();
+            var measured = measurement.Stop();
+            operationStopwatch.Stop();
+
+            var run = new PerformanceRunRecord
+            {
+                BenchmarkSetId = NormalizeBenchmarkSetId(benchmarkSetId),
+                StartedAtUtc = operationStartedAtUtc,
+                Algorithm = algorithm,
+                Build = _buildInfo,
+                Graph = PerformanceRunMetadataCapture.CaptureGraph(graph),
+                Invocation = invocation,
+                Timing = new PerformanceTimingInfo
+                {
+                    LoadElapsedMilliseconds = loadElapsedMilliseconds,
+                    ComputeElapsedMilliseconds = measured.ElapsedMilliseconds,
+                    OperationElapsedMilliseconds =
+                        operationStopwatch.Elapsed.TotalMilliseconds
+                },
+                Resources = measured.Resources,
+                Outcome = new PerformanceOutcomeInfo
+                {
+                    Status = getStatus(result),
+                    ResultCount = getResultCount(result),
+                    ResultDigest =
+                        PerformanceRunMetadataCapture.CalculateResultDigest(result)
+                },
+                Details = createDetails(result)
+            };
+            var storedRun = await _performanceRunStore.AppendAsync(
+                run,
+                CancellationToken.None);
+
+            return new ReportedCalculation<T>(result, storedRun);
+        }
+        catch (Exception exception)
+        {
+            var measured = measurement.Stop();
+            operationStopwatch.Stop();
+            var status = exception is OperationCanceledException
+                ? PerformanceRunStatuses.Cancelled
+                : PerformanceRunStatuses.Failed;
+            var failedRun = new PerformanceRunRecord
+            {
+                BenchmarkSetId = NormalizeBenchmarkSetId(benchmarkSetId),
+                StartedAtUtc = operationStartedAtUtc,
+                Algorithm = algorithm,
+                Build = _buildInfo,
+                Graph = PerformanceRunMetadataCapture.CaptureGraph(graph),
+                Invocation = invocation,
+                Timing = new PerformanceTimingInfo
+                {
+                    LoadElapsedMilliseconds = loadElapsedMilliseconds,
+                    ComputeElapsedMilliseconds = measured.ElapsedMilliseconds,
+                    OperationElapsedMilliseconds =
+                        operationStopwatch.Elapsed.TotalMilliseconds
+                },
+                Resources = measured.Resources,
+                Outcome = new PerformanceOutcomeInfo
+                {
+                    Status = status,
+                    ErrorType = exception.GetType().FullName,
+                    ErrorMessage = exception.Message
+                }
+            };
+
+            try
+            {
+                await _performanceRunStore.AppendAsync(
+                    failedRun,
+                    CancellationToken.None);
+            }
+            catch
+            {
+                // Reporting must not replace the calculation's original failure.
+            }
+
+            throw;
+        }
+    }
+
+    private async Task ReportLeafUpdateAsync(
+        Graph graph,
+        PerformanceInvocationInfo invocation,
+        string? changedNodeKind,
+        string changedNodeId,
+        DateTimeOffset operationStartedAtUtc,
+        Stopwatch operationStopwatch,
+        double loadElapsedMilliseconds,
+        PerformanceMeasurementResult computeMeasurement,
+        double? persistElapsedMilliseconds,
+        IReadOnlyDictionary<string, decimal> recalculatedLogOdds,
+        int persistedRowCount,
+        bool triggered,
+        string? benchmarkSetId,
+        Exception? exception = null)
+    {
+        operationStopwatch.Stop();
+        var isLeaf = !graph.Edges.Any(edge =>
+            string.Equals(edge.To, changedNodeId, StringComparison.Ordinal));
+        var details = new JsonObject
+        {
+            ["triggered"] = triggered,
+            ["recalculationScope"] = "node-and-ancestors",
+            ["affectedNodeCount"] = recalculatedLogOdds.Count,
+            ["maximumAncestorDistance"] =
+                TryGetMaximumAncestorDistance(graph, changedNodeId),
+            ["persistedRowCount"] = persistedRowCount,
+            ["changedNodeKind"] = changedNodeKind,
+            ["isLeaf"] = isLeaf
+        };
+        var run = new PerformanceRunRecord
+        {
+            BenchmarkSetId = NormalizeBenchmarkSetId(benchmarkSetId),
+            StartedAtUtc = operationStartedAtUtc,
+            Algorithm = CreateLeafUpdateAlgorithm(),
+            Build = _buildInfo,
+            Graph = PerformanceRunMetadataCapture.CaptureGraph(graph),
+            Invocation = invocation,
+            Timing = new PerformanceTimingInfo
+            {
+                LoadElapsedMilliseconds = loadElapsedMilliseconds,
+                ComputeElapsedMilliseconds = computeMeasurement.ElapsedMilliseconds,
+                PersistElapsedMilliseconds = persistElapsedMilliseconds,
+                OperationElapsedMilliseconds =
+                    operationStopwatch.Elapsed.TotalMilliseconds
+            },
+            Resources = computeMeasurement.Resources,
+            Outcome = new PerformanceOutcomeInfo
+            {
+                Status = exception switch
+                {
+                    OperationCanceledException => PerformanceRunStatuses.Cancelled,
+                    not null => PerformanceRunStatuses.Failed,
+                    _ => PerformanceRunStatuses.Completed
+                },
+                ResultCount = exception is null ? recalculatedLogOdds.Count : null,
+                ResultDigest = exception is null
+                    ? PerformanceRunMetadataCapture.CalculateResultDigest(
+                        recalculatedLogOdds)
+                    : null,
+                ErrorType = exception?.GetType().FullName,
+                ErrorMessage = exception?.Message
+            },
+            Details = details
         };
 
-        return _posteriorOddsCalculator.CalculateNodeLogPosteriorOdds(
-            graph,
-            targetClaimId,
-            cancellationToken);
+        await _performanceRunStore.AppendAsync(run, CancellationToken.None);
     }
 
-    private static bool IsCounterNode(GraphNode node)
+    private static int? TryGetMaximumAncestorDistance(
+        Graph graph,
+        string changedNodeId)
     {
-        return string.Equals(node.Kind, "objection", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(node.Kind, "counter", StringComparison.OrdinalIgnoreCase);
+        try
+        {
+            return PerformanceRunMetadataCapture.GetMaximumAncestorDistance(
+                graph,
+                changedNodeId);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
+
+    private async Task TryReportFailedLeafUpdateAsync(
+        Graph graph,
+        PerformanceInvocationInfo invocation,
+        string? changedNodeKind,
+        string changedNodeId,
+        DateTimeOffset operationStartedAtUtc,
+        Stopwatch operationStopwatch,
+        double loadElapsedMilliseconds,
+        PerformanceMeasurementResult computeMeasurement,
+        double? persistElapsedMilliseconds,
+        IReadOnlyDictionary<string, decimal> recalculatedLogOdds,
+        string? benchmarkSetId,
+        Exception exception)
+    {
+        try
+        {
+            await ReportLeafUpdateAsync(
+                graph,
+                invocation,
+                changedNodeKind,
+                changedNodeId,
+                operationStartedAtUtc,
+                operationStopwatch,
+                loadElapsedMilliseconds,
+                computeMeasurement,
+                persistElapsedMilliseconds,
+                recalculatedLogOdds,
+                persistedRowCount: 0,
+                triggered: true,
+                benchmarkSetId,
+                exception: exception);
+        }
+        catch
+        {
+            // Reporting must not replace the update's original failure.
+        }
+    }
+
+    private static string? NormalizeBenchmarkSetId(string? benchmarkSetId)
+    {
+        return string.IsNullOrWhiteSpace(benchmarkSetId)
+            ? null
+            : benchmarkSetId.Trim();
+    }
+
+    private static PerformanceAlgorithmInfo CreateMinimalCounterSetAlgorithm(
+        string implementation)
+    {
+        return new PerformanceAlgorithmInfo
+        {
+            Name = PerformanceAlgorithmNames.MinimalCounterSet,
+            Implementation = implementation,
+            CalculationModel = "graph-posterior-odds-calculator"
+        };
+    }
+
+    private static PerformanceAlgorithmInfo CreateCurrentAlgorithm(string name)
+    {
+        return new PerformanceAlgorithmInfo
+        {
+            Name = name,
+            Implementation = PerformanceAlgorithmImplementations.Current,
+            CalculationModel = "graph-posterior-odds-calculator"
+        };
+    }
+
+    private static PerformanceAlgorithmInfo CreateLeafUpdateAlgorithm()
+    {
+        return new PerformanceAlgorithmInfo
+        {
+            Name = PerformanceAlgorithmNames.LeafUpdate,
+            Implementation = PerformanceAlgorithmImplementations.Current,
+            CalculationModel = "graph-posterior-odds-calculator"
+        };
+    }
+
+    private static PerformanceInvocationInfo CreateGraphInvocation(string dataSource)
+    {
+        return new PerformanceInvocationInfo
+        {
+            DataSource = dataSource
+        };
+    }
+
+    private static PerformanceInvocationInfo CreateTargetInvocation(
+        string dataSource,
+        string targetNodeId)
+    {
+        return new PerformanceInvocationInfo
+        {
+            DataSource = dataSource,
+            TargetNodeId = targetNodeId,
+            Parameters = new JsonObject
+            {
+                ["thresholdLogOdds"] =
+                    BayesianMinimalCounterSetEvaluator.DefaultThresholdLogOdds
+            }
+        };
+    }
+
+    private static PerformanceInvocationInfo CreateNodeUpdateInvocation(
+        GraphNode? existingNode,
+        string changedNodeId,
+        GraphNodeUpdateDto update)
+    {
+        var changes = GetNodeUpdateChanges(existingNode, update);
+        var oldValues = new JsonObject();
+        var newValues = new JsonObject();
+        foreach (var change in changes)
+        {
+            oldValues[change.Field] =
+                PerformanceRunMetadataCapture.ToJsonNode(change.OldValue);
+            newValues[change.Field] =
+                PerformanceRunMetadataCapture.ToJsonNode(change.NewValue);
+        }
+
+        return new PerformanceInvocationInfo
+        {
+            DataSource = "database",
+            ChangedNodeId = changedNodeId,
+            ChangedField = changes.Count switch
+            {
+                0 => "none",
+                1 => changes[0].Field,
+                _ => "multiple"
+            },
+            OldValue = changes.Count == 1
+                ? PerformanceRunMetadataCapture.ToJsonNode(changes[0].OldValue)
+                : oldValues,
+            NewValue = changes.Count == 1
+                ? PerformanceRunMetadataCapture.ToJsonNode(changes[0].NewValue)
+                : newValues,
+            Parameters = new JsonObject
+            {
+                ["changedFields"] = new JsonArray(
+                    changes
+                        .Select(change => JsonValue.Create(change.Field))
+                        .ToArray())
+            }
+        };
+    }
+
+    private static List<NodeUpdateChange> GetNodeUpdateChanges(
+        GraphNode? existingNode,
+        GraphNodeUpdateDto update)
+    {
+        var changes = new List<NodeUpdateChange>();
+        if (update.Kind is not null)
+        {
+            changes.Add(new NodeUpdateChange("kind", existingNode?.Kind, update.Kind));
+        }
+
+        if (update.Title is not null)
+        {
+            changes.Add(new NodeUpdateChange("title", existingNode?.Title, update.Title));
+        }
+
+        if (update.BodyText is not null)
+        {
+            changes.Add(new NodeUpdateChange(
+                "bodyText",
+                existingNode?.BodyText,
+                update.BodyText));
+        }
+
+        if (update.PriorOdds.HasValue)
+        {
+            changes.Add(new NodeUpdateChange(
+                "priorOdds",
+                existingNode?.PriorOdds,
+                update.PriorOdds.Value));
+        }
+
+        if (update.PosteriorOdds.HasValue)
+        {
+            changes.Add(new NodeUpdateChange(
+                "posteriorOdds",
+                existingNode?.PosteriorOdds,
+                update.PosteriorOdds.Value));
+        }
+
+        return changes;
+    }
+
+    private static JsonObject CreateMinimalCounterSetDetails(
+        MinimalCounterSetResult result)
+    {
+        return new JsonObject
+        {
+            ["totalCandidateCount"] = JsonValue.Create(result.TotalCandidateCount),
+            ["searchedCandidateCount"] = JsonValue.Create(result.SearchedCandidateCount),
+            ["excludedCandidateCount"] = JsonValue.Create(result.ExcludedCandidateCount),
+            ["candidatesExamined"] = result.CandidatesExamined,
+            ["subsetEvaluations"] = result.SubsetEvaluations,
+            ["largestCardinalityFullyExhausted"] =
+                JsonValue.Create(result.LargestCardinalityFullyExhausted),
+            ["activeCardinality"] = JsonValue.Create(result.ActiveCardinality),
+            ["subsetEvaluationsAtActiveCardinality"] =
+                JsonValue.Create(result.SubsetEvaluationsAtActiveCardinality),
+            ["totalSubsetsAtActiveCardinality"] =
+                result.TotalSubsetsAtActiveCardinality,
+            ["totalPossibleSubsets"] = result.TotalPossibleSubsets,
+            ["timeBudgetMilliseconds"] =
+                JsonValue.Create(result.TimeBudgetMilliseconds),
+            ["preparationElapsedMilliseconds"] =
+                JsonValue.Create(result.PreparationElapsedMilliseconds),
+            ["searchElapsedMilliseconds"] =
+                JsonValue.Create(result.SearchElapsedMilliseconds),
+            ["subsetEvaluationsPerSecond"] =
+                JsonValue.Create(result.SubsetEvaluationsPerSecond),
+            ["timeoutStage"] = ToTimeoutStageValue(result.TimeoutStage),
+            ["returnedSetSize"] = result.CounterNodeIds.Count,
+            ["bestSetSize"] = result.CounterNodeIds.Count,
+            ["thresholdLogOdds"] = JsonValue.Create(result.ThresholdLogOdds),
+            ["initialTargetLogOdds"] =
+                JsonValue.Create(result.InitialTargetLogOdds),
+            ["finalTargetLogOdds"] = JsonValue.Create(result.FinalTargetLogOdds),
+            ["bestTargetLogOdds"] = JsonValue.Create(result.FinalTargetLogOdds),
+            ["thresholdReached"] = result.ThresholdReached,
+            ["proofStatus"] = ToProofStatusValue(result.ProofStatus),
+            ["stopReason"] = ToStopReasonValue(result.StopReason),
+            ["returnedNodeIds"] = new JsonArray(
+                result.CounterNodeIds
+                    .Take(MinimalCounterSetPreviewLimit)
+                    .Select(nodeId => JsonValue.Create(nodeId))
+                    .ToArray()),
+            ["returnedNodeIdsTruncated"] =
+                result.CounterNodeIds.Count > MinimalCounterSetPreviewLimit,
+            ["bestNodeIds"] = new JsonArray(
+                result.CounterNodeIds
+                    .Take(MinimalCounterSetPreviewLimit)
+                    .Select(nodeId => JsonValue.Create(nodeId))
+                    .ToArray()),
+            ["bestNodeIdsTruncated"] =
+                result.CounterNodeIds.Count > MinimalCounterSetPreviewLimit
+        };
+    }
+
+    private static JsonObject CreateEvidenceImpactDetails(
+        Graph graph,
+        string targetNodeId,
+        EvidenceImpactRankingDto result)
+    {
+        var reachableEvidenceCount = CountReachableEvidenceNodes(graph, targetNodeId);
+        var neutralEvidenceCount = result.SupportingEvidence
+            .Concat(result.CounterEvidence)
+            .Count(impact => impact.ProbabilityDifference == 0d);
+        return new JsonObject
+        {
+            ["reachableNodeCount"] =
+                PerformanceRunMetadataCapture.CountReachableNodes(graph, targetNodeId),
+            ["reachableEvidenceCount"] = reachableEvidenceCount,
+            ["supportingResultCount"] = result.SupportingEvidence.Count,
+            ["counterResultCount"] = result.CounterEvidence.Count,
+            ["neutralEvidenceCount"] = neutralEvidenceCount,
+            ["supportingPreview"] = CreateEvidenceImpactPreview(
+                result.SupportingEvidence),
+            ["counterPreview"] = CreateEvidenceImpactPreview(
+                result.CounterEvidence)
+        };
+    }
+
+    private static JsonObject CreateRobustnessDetails(
+        Graph graph,
+        NodeRobustnessDto? result)
+    {
+        return new JsonObject
+        {
+            ["nodesEvaluated"] = graph.Nodes.Count,
+            ["edgesExamined"] = graph.Edges.Count,
+            ["leafCount"] = PerformanceRunMetadataCapture.CountLeafNodes(graph),
+            ["robustnessResultCount"] = graph.Nodes.Count,
+            ["selectedNodeId"] = result?.NodeId,
+            ["selectedNodeTitle"] = result?.NodeTitle,
+            ["selectedRobustness"] = result?.Robustness
+        };
+    }
+
+    private static JsonObject CreateRobustnessRankingDetails(
+        Graph graph,
+        IReadOnlyCollection<NodeRobustnessDto> result)
+    {
+        return new JsonObject
+        {
+            ["nodesEvaluated"] = graph.Nodes.Count,
+            ["edgesExamined"] = graph.Edges.Count,
+            ["leafCount"] = PerformanceRunMetadataCapture.CountLeafNodes(graph),
+            ["robustnessResultCount"] = result.Count,
+            ["rankedItemCount"] = result.Count,
+            ["rankingPreview"] = new JsonArray(
+                result
+                    .Take(RobustnessRankingPreviewLimit)
+                    .Select(item => new JsonObject
+                    {
+                        ["nodeId"] = item.NodeId,
+                        ["nodeTitle"] = item.NodeTitle,
+                        ["robustness"] = item.Robustness
+                    })
+                    .ToArray())
+        };
+    }
+
+    private static JsonArray CreateEvidenceImpactPreview(
+        IEnumerable<EvidenceImpactDto> result)
+    {
+        return new JsonArray(
+            result
+                .Take(EvidenceImpactPreviewLimit)
+                .Select(item => new JsonObject
+                {
+                    ["nodeId"] = item.NodeId,
+                    ["targetLogOddsImpact"] = item.LogLr,
+                    ["probabilityDifference"] = item.ProbabilityDifference
+                })
+                .ToArray());
+    }
+
+    private static int CountReachableEvidenceNodes(Graph graph, string targetNodeId)
+    {
+        var nodesById = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
+        var childrenByParent = graph.Edges
+            .GroupBy(edge => edge.To, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(edge => edge.From).ToArray(),
+                StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<string>();
+        pending.Push(targetNodeId);
+        var evidenceCount = 0;
+
+        while (pending.Count > 0)
+        {
+            var nodeId = pending.Pop();
+            if (!visited.Add(nodeId))
+            {
+                continue;
+            }
+
+            if (nodesById.TryGetValue(nodeId, out var node) &&
+                (string.Equals(node.Kind, "evidence", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(node.Kind, "objection", StringComparison.OrdinalIgnoreCase)))
+            {
+                evidenceCount++;
+            }
+
+            if (!childrenByParent.TryGetValue(nodeId, out var childNodeIds))
+            {
+                continue;
+            }
+
+            foreach (var childNodeId in childNodeIds)
+            {
+                pending.Push(childNodeId);
+            }
+        }
+
+        return evidenceCount;
+    }
+
+    private static string ToProofStatusValue(MinimalCounterSetProofStatus proofStatus)
+    {
+        return proofStatus switch
+        {
+            MinimalCounterSetProofStatus.Proven => "proven",
+            MinimalCounterSetProofStatus.NotProven => "notProven",
+            _ => "notApplicable"
+        };
+    }
+
+    private static string ToStopReasonValue(MinimalCounterSetStopReason stopReason)
+    {
+        return stopReason switch
+        {
+            MinimalCounterSetStopReason.TimeBudget => "timeBudget",
+            _ => "completed"
+        };
+    }
+
+    private static string? ToTimeoutStageValue(
+        MinimalCounterSetTimeoutStage? timeoutStage)
+    {
+        return timeoutStage switch
+        {
+            MinimalCounterSetTimeoutStage.Preparation => "preparation",
+            MinimalCounterSetTimeoutStage.Search => "search",
+            _ => null
+        };
+    }
+
+    private sealed record ReportedCalculation<T>(
+        T Result,
+        PerformanceRunRecord StoredRun);
+
+    private sealed record NodeUpdateChange(
+        string Field,
+        object? OldValue,
+        object? NewValue);
 }
