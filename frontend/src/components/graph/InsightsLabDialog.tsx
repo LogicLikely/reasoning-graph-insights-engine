@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { GraphFixture, GraphFixtureNode } from '../../fixtures/sampleGraph'
 import {
   getBoundedNodeCounterSet,
@@ -26,6 +26,7 @@ export interface InsightsLabDialogProps {
   isOpen: boolean
   graph: GraphFixture | null
   graphDataSource: GraphDataSource
+  allowNewRuns?: boolean
   installedStressGraphIds?: readonly StressGraphId[]
   onClose: () => void
   onGraphUpdated?: () => void
@@ -151,6 +152,10 @@ const CANCEL_REPORT_POLL_ATTEMPTS = 8
 const CANCEL_REPORT_POLL_INTERVAL_MS = 250
 const CANONICAL_STRESS_TARGET_ID = 'n-00000'
 const BENCHMARK_SET_STORAGE_KEY = 'insights-lab-benchmark-set-id'
+const NEW_RUNS_DISABLED_MESSAGE = [
+  'New Insights Lab runs are disabled in this demo.',
+  'You can still review saved runs in History and Trends.',
+].join(' ')
 const STANDARD_STRESS_GRAPH_OPTIONS = STRESS_GRAPH_OPTIONS.filter(
   ({ id }) => !id.startsWith('stress-deep-'),
 )
@@ -357,11 +362,16 @@ function runMatches(
 
 type OpenDialogProps = Omit<InsightsLabDialogProps, 'isOpen'>
 
-export function InsightsLabDialog({ isOpen, ...props }: InsightsLabDialogProps) {
-  return isOpen ? <OpenInsightsLabDialog {...props} /> : null
+export function InsightsLabDialog({
+  isOpen,
+  allowNewRuns = true,
+  ...props
+}: InsightsLabDialogProps) {
+  return isOpen ? <OpenInsightsLabDialog {...props} allowNewRuns={allowNewRuns} /> : null
 }
 
 function OpenInsightsLabDialog({
+  allowNewRuns = true,
   graph,
   graphDataSource,
   installedStressGraphIds,
@@ -421,15 +431,16 @@ function OpenInsightsLabDialog({
     return STANDARD_STRESS_GRAPH_OPTIONS.filter(({ id }) => installedIds.has(id))
   }, [installedStressGraphIds])
 
-  const receiveBenchmarkSets = (nextSets: BenchmarkSet[]) => {
+  const receiveBenchmarkSets = useCallback((nextSets: BenchmarkSet[]) => {
     setBenchmarkSets(nextSets)
     setSelectedBenchmarkSetId((current) => {
+      if (!allowNewRuns) return ''
       if (nextSets.some(({ id }) => id === current)) return current
       const stored = window.localStorage.getItem(BENCHMARK_SET_STORAGE_KEY)
       if (stored && nextSets.some(({ id }) => id === stored)) return stored
       return nextSets.length === 1 ? nextSets[0].id : ''
     })
-  }
+  }, [allowNewRuns])
 
   useEffect(() => {
     if (selectedBenchmarkSetId) {
@@ -498,7 +509,7 @@ function OpenInsightsLabDialog({
       }
       previousFocus?.focus()
     }
-  }, [])
+  }, [receiveBenchmarkSets])
 
   useEffect(() => {
     if (isBusy) runningStatusRef.current?.focus()
@@ -580,6 +591,10 @@ function OpenInsightsLabDialog({
   }
 
   const handleCreateBenchmarkSet = async () => {
+    if (!allowNewRuns) {
+      window.alert(NEW_RUNS_DISABLED_MESSAGE)
+      return
+    }
     const name = newBenchmarkSetName.trim()
     if (!name || isCreatingBenchmarkSet || isBusy) return
     setIsCreatingBenchmarkSet(true)
@@ -601,7 +616,7 @@ function OpenInsightsLabDialog({
   }
 
   const launch = async (operation: OperationDefinition) => {
-    if (runGuardRef.current || !graph || !selectedBenchmarkSetId) return
+    if (!allowNewRuns || runGuardRef.current || !graph || !selectedBenchmarkSetId) return
     const benchmarkSetId = selectedBenchmarkSetId
     const leafTargetNode = operation.id === 'leaf' ? highestNode : undefined
     const targetNodeId = operation.id === 'leaf' ? leafTargetNode?.id : algorithmTargetNodeId
@@ -723,7 +738,7 @@ function OpenInsightsLabDialog({
   }
 
   const launchStressSuite = async () => {
-    if (runGuardRef.current || !selectedBenchmarkSetId) return
+    if (!allowNewRuns || runGuardRef.current || !selectedBenchmarkSetId) return
 
     const benchmarkSetId = selectedBenchmarkSetId
     runGuardRef.current = true
@@ -1081,6 +1096,10 @@ function OpenInsightsLabDialog({
                   disabled={isBusy || isCreatingBenchmarkSet}
                   id="insights-lab-benchmark-set"
                   onChange={(event) => {
+                    if (!allowNewRuns) {
+                      window.alert(NEW_RUNS_DISABLED_MESSAGE)
+                      return
+                    }
                     setBenchmarkSetError(null)
                     setSelectedBenchmarkSetId(event.target.value)
                   }}
@@ -1157,7 +1176,8 @@ function OpenInsightsLabDialog({
                 <small>The exhaustive reference search can use its full two-minute server compute budget on each graph; reaching that budget is recorded as an expected partial result and the suite continues.</small>
               </div>
               <button
-                disabled={isBusy
+                disabled={!allowNewRuns
+                  || isBusy
                   || isHistoryLoading
                   || !selectedBenchmarkSetId
                   || knownInstalledStandardStressGraphs?.length === 0}
@@ -1214,7 +1234,8 @@ function OpenInsightsLabDialog({
                 const missingTarget = operation.requiresTarget && !algorithmTargetNodeId
                 const missingLeafTarget = operation.id === 'leaf' && !highestNode
                 const wrongSource = operation.databaseOnly && graphDataSource !== 'database'
-                const disabled = !graph
+                const disabled = !allowNewRuns
+                  || !graph
                   || isHistoryLoading
                   || isBusy
                   || !selectedBenchmarkSetId

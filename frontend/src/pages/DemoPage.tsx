@@ -35,6 +35,7 @@ const DB_CATALOG_UNREACHABLE_MESSAGE = 'Unable to load the database graph list r
 const DB_EMPTY_TITLE = 'No database graphs'
 const DB_EMPTY_MESSAGE = 'The database does not contain any graphs yet. Reset the database to restore the seed data.'
 const DB_RESET_ERROR_MESSAGE = 'The database reset failed or could not be confirmed. The current view has been retained.'
+const ALLOW_NEW_INSIGHTS_LAB_RUNS = import.meta.env.VITE_INSIGHTS_LAB_ALLOW_NEW_RUNS !== 'false'
 
 type EdgeCreateFields = Pick<
   GraphFixtureEdge,
@@ -585,6 +586,7 @@ export function DemoPage() {
       />
 
       <InsightsLabDialog
+        allowNewRuns={ALLOW_NEW_INSIGHTS_LAB_RUNS}
         graph={graph}
         graphDataSource={graphDataSource}
         installedStressGraphIds={installedStressGraphIds}

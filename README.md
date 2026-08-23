@@ -82,6 +82,9 @@ npm install
 npm run dev
 ```
 
+New Insights Lab runs are enabled by default. To make the Lab history and trends read-only,
+set `VITE_INSIGHTS_LAB_ALLOW_NEW_RUNS=false` when starting or building the frontend.
+
 Run frontend tests:
 
 ```bash
