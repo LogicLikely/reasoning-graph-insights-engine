@@ -145,6 +145,104 @@ describe('InsightsLabDialog', () => {
     expect(runButton).toBeEnabled()
   })
 
+  it('blocks new runs while keeping recorded History and Trends available', async () => {
+    const alternateBenchmarkSet = {
+      id: 'benchmark-02',
+      name: 'LL-699 follow-up',
+      createdAtUtc: '2026-08-18T12:00:00Z',
+    }
+    const recordedRun = {
+      runNumber: 7,
+      benchmarkSetId: benchmarkSet.id,
+      startedAtUtc: '2026-08-17T18:42:31.123Z',
+      algorithm: { name: 'minimal-counter-set', implementation: 'greedy' },
+      graph: { slug: 'lab-graph' },
+      invocation: { dataSource: 'database', targetNodeId: 'node-002' },
+      timing: { operationElapsedMilliseconds: 18.4 },
+      outcome: { status: 'completed', resultCount: 1 },
+      details: { returnedNodeIds: ['node-100'] },
+    }
+    serviceMocks.getPerformanceRuns.mockResolvedValue(
+      report([recordedRun], [benchmarkSet, alternateBenchmarkSet]),
+    )
+    window.localStorage.setItem('insights-lab-benchmark-set-id', benchmarkSet.id)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined)
+
+    try {
+      render(
+        <InsightsLabDialog
+          allowNewRuns={false}
+          graph={graph}
+          graphDataSource="database"
+          installedStressGraphIds={['stress-balanced-100']}
+          isOpen
+          onClose={vi.fn()}
+        />,
+      )
+
+      await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+      const benchmarkSelect = screen.getByLabelText('Benchmark set')
+      expect(benchmarkSelect).toHaveValue('')
+      for (const runButton of screen.getAllByRole('button', { name: /^Run / })) {
+        expect(runButton).toBeDisabled()
+      }
+
+      fireEvent.change(benchmarkSelect, { target: { value: alternateBenchmarkSet.id } })
+      expect(benchmarkSelect).toHaveValue('')
+      expect(alertSpy).toHaveBeenLastCalledWith(
+        'New Insights Lab runs are disabled in this demo. You can still review saved runs in History and Trends.',
+      )
+
+      fireEvent.change(screen.getByLabelText('New benchmark set'), {
+        target: { value: 'Attempted benchmark' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Create and select' }))
+      expect(alertSpy).toHaveBeenCalledTimes(2)
+      expect(alertSpy).toHaveBeenLastCalledWith(
+        'New Insights Lab runs are disabled in this demo. You can still review saved runs in History and Trends.',
+      )
+
+      for (const runButton of screen.getAllByRole('button', { name: /^Run / })) {
+        fireEvent.click(runButton)
+      }
+      expect(serviceMocks.createBenchmarkSet).not.toHaveBeenCalled()
+      expect(serviceMocks.getNodeCounterSet).not.toHaveBeenCalled()
+      expect(serviceMocks.getBoundedNodeCounterSet).not.toHaveBeenCalled()
+      expect(serviceMocks.getEvidenceImpactRanking).not.toHaveBeenCalled()
+      expect(serviceMocks.getLeastRobustNode).not.toHaveBeenCalled()
+      expect(serviceMocks.getNodeRobustnessRanking).not.toHaveBeenCalled()
+      expect(serviceMocks.updateNode).not.toHaveBeenCalled()
+      expect(serviceMocks.getGraphCatalog).not.toHaveBeenCalled()
+      expect(serviceMocks.getGraphBySlug).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('tab', { name: /History/ }))
+      expect(await screen.findByRole('button', { name: 'View run 7' })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Trends' }))
+      expect(screen.getByRole('heading', { name: 'Historical trends' })).toBeInTheDocument()
+    } finally {
+      alertSpy.mockRestore()
+    }
+  })
+
+  it('does not enable new runs when disabled mode suppresses automatic benchmark selection', async () => {
+    render(
+      <InsightsLabDialog
+        allowNewRuns={false}
+        graph={graph}
+        graphDataSource="database"
+        isOpen
+        onClose={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    expect(screen.getByLabelText('Benchmark set')).toHaveValue('')
+    for (const runButton of screen.getAllByRole('button', { name: /^Run / })) {
+      expect(runButton).toBeDisabled()
+    }
+  })
+
   it('uses and explains the canonical root for target-based stress runs', async () => {
     const stressGraph = {
       ...graph,
