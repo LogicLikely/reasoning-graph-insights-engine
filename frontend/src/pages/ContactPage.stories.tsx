@@ -28,9 +28,8 @@ export const Default: Story = {
         },
     },
     play: async ({ canvas }) => {
-        await expect(canvas.getByText(/A preserved React learning exercise/i)).toBeVisible()
-        await expect(canvas.getByText(/does not send a message to LogicLikely/i)).toBeVisible()
-        await expect(canvas.getByRole('link', { name: /Open the LogicLikely contact form/i })).toHaveAttribute(
+        await expect(canvas.getByText(/This form was a React learning exercise/i)).toBeVisible()
+        await expect(canvas.getByRole('link', { name: /Contact LogicLikely/i })).toHaveAttribute(
             'href',
             'https://www.logiclikely.com/contact',
         )
