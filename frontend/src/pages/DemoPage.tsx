@@ -595,23 +595,6 @@ export function DemoPage() {
         onGraphUpdated={handleGraphUpdatedFromInsightsLab}
       />
 
-      <section className="demo-support-strip">
-        <article className="feature-card">
-          <h3>Why this phase matters</h3>
-          <p>
-            The demo page is now graph-first. Later API work can replace the
-            local fixture without changing the overall page composition.
-          </p>
-        </article>
-
-        <article className="feature-card">
-          <h3>Deliberately simple nodes</h3>
-          <p>
-            Nodes stay readable in the canvas while richer context moves into the
-            details panel where it belongs.
-          </p>
-        </article>
-      </section>
     </div>
   )
 }
