@@ -55,7 +55,7 @@ export Database__ConnectionString="Host=localhost;Database=insights;Username=pos
 
 ## CORS Configuration
 
-The backend currently allows all origins for development purposes.
+The backend default allows all origins for development purposes, though the production site is locked down.
 
 To restrict frontend access, update `Program.cs` and set an allowed origin:
 
