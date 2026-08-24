@@ -185,6 +185,21 @@ describe('DemoPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('places the Insights Lab launcher above Node Details with a short description', async () => {
+    getGraphBySlugMock.mockResolvedValue(sampleGraph)
+
+    render(<DemoPage />)
+
+    const launcher = await screen.findByTestId('demo-insights-lab-launcher')
+    const details = screen.getByTestId('demo-details-sheet')
+
+    expect(launcher.nextElementSibling).toBe(details)
+    expect(within(launcher).getByRole('heading', { name: 'Insights Lab' })).toBeInTheDocument()
+    expect(
+      within(launcher).getByText('Explore saved benchmark runs and compare algorithm performance trends.'),
+    ).toBeInTheDocument()
+  })
+
   it('opens and closes the Insights Lab with the active graph context', async () => {
     getGraphCatalogMock.mockResolvedValue(graphCatalogWithStressGraph)
     getGraphBySlugMock.mockResolvedValue(sampleGraph)
@@ -192,7 +207,7 @@ describe('DemoPage', () => {
     render(<DemoPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Insights Lab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Insights Lab' }))
 
     expect(screen.getByRole('dialog', { name: 'Insights Lab' })).toBeInTheDocument()
     expect(screen.getByTestId('insights-lab-context')).toHaveTextContent(
@@ -210,7 +225,7 @@ describe('DemoPage', () => {
     render(<DemoPage />)
 
     await screen.findByTestId('insights-graph-canvas')
-    fireEvent.click(screen.getByRole('button', { name: 'Insights Lab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Insights Lab' }))
     fireEvent.click(screen.getByRole('button', { name: 'Simulate graph update' }))
 
     await waitFor(() => {
@@ -241,7 +256,7 @@ describe('DemoPage', () => {
     render(<DemoPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Select evidence node' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Insights Lab' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Insights Lab' }))
     fireEvent.keyDown(window, { key: 'a' })
     fireEvent.keyDown(window, { key: 'd' })
     fireEvent.keyDown(window, { key: 'Escape' })

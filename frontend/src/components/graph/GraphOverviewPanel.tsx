@@ -21,7 +21,6 @@ interface GraphOverviewPanelProps {
   isResettingDatabase?: boolean
   onDataSourceChange?: (dataSource: GraphDataSource) => void
   onGraphChange?: (slug: string) => void
-  onOpenInsightsLab?: () => void
   onResetDatabase?: () => void
 }
 
@@ -38,7 +37,6 @@ export function GraphOverviewPanel({
   isResettingDatabase = false,
   onDataSourceChange,
   onGraphChange,
-  onOpenInsightsLab,
   onResetDatabase,
 }: GraphOverviewPanelProps) {
   const isUsingFixture = dataSource === 'fixture'
@@ -105,13 +103,6 @@ export function GraphOverviewPanel({
           </select>
         </label>
       ) : null}
-      <button
-        className="graph-overview-panel__insights-lab-button"
-        onClick={onOpenInsightsLab}
-        type="button"
-      >
-        Insights Lab
-      </button>
       {!isUsingFixture && onResetDatabase ? (
         <button
           className="graph-overview-panel__reset-button"

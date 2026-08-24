@@ -552,6 +552,26 @@ export function DemoPage() {
         </article>
 
         <div className="demo-sidebar-stack">
+          {shouldShowOverviewPanel ? (
+            <section
+              aria-labelledby="demo-insights-lab-title"
+              className="demo-insights-lab-card"
+              data-testid="demo-insights-lab-launcher"
+            >
+              <div className="demo-insights-lab-card__copy">
+                <span className="eyebrow">Performance Analysis</span>
+                <h3 id="demo-insights-lab-title">Insights Lab</h3>
+                <p>Explore saved benchmark runs and compare algorithm performance trends.</p>
+              </div>
+              <button
+                className="primary-link demo-insights-lab-card__button"
+                onClick={() => setIsInsightsLabOpen(true)}
+                type="button"
+              >
+                Open Insights Lab
+              </button>
+            </section>
+          ) : null}
           {isGraphFullscreen ? null : detailsSheet}
           {shouldShowOverviewPanel ? (
             <GraphOverviewPanel
@@ -567,7 +587,6 @@ export function DemoPage() {
               isResettingDatabase={isResettingDatabase}
               onDataSourceChange={handleGraphDataSourceChange}
               onGraphChange={handleGraphChange}
-              onOpenInsightsLab={() => setIsInsightsLabOpen(true)}
               onResetDatabase={handleOpenResetDialog}
             />
           ) : null}
