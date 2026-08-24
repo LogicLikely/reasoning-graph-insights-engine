@@ -19,7 +19,7 @@ export function AboutPage() {
           <p>
             Nodes represent claims, evidence, and counters. Edges capture the
             support or rebuttal relationships that make the structure meaningful.
-            That graph model becomes the basis for visualization and later
+            That graph model becomes the basis for visualization and 
             analysis workflows.
           </p>
         </article>
@@ -29,7 +29,7 @@ export function AboutPage() {
           <p>
             The frontend is responsible for navigation, workspace layout, and
             future graph interaction. The backend owns graph retrieval, shaping,
-            and the API surface that will feed the demo experience.
+            and the API surface that feeds the demo experience.
           </p>
         </article>
       </section>
@@ -54,11 +54,12 @@ export function AboutPage() {
         </article>
 
         <article className="feature-card">
-          <h3>Why this phase stays simple</h3>
+          <h3>2026 Summer Internship Program</h3>
           <p>
-            This page shell focuses on routing, layout, and credibility. Graph
-            rendering and backend integration come next, with a cleaner foundation
-            now in place to support them.
+            This page site is part of a summer internship program for 2026, conducted
+            by Jacob Nuttall. Along with first-hand experience working in our 
+            development environment, the program sought to gain real analysis into
+            algorithms the company is considering.
           </p>
         </article>
       </section>

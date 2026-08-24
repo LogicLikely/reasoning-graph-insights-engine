@@ -29,22 +29,24 @@ export function HomePage() {
           <h2>From claims and evidence to a navigable reasoning surface.</h2>
           <p>
             The project is designed to support graph-based inspection of
-            arguments, counterarguments, and evidence chains. This first frontend
-            phase establishes the SPA shell that later phases will connect to
-            live graph rendering and backend data.
+            arguments, counterarguments, and evidence chains. The Insights Lab
+            analysis clearly demonstrates an NP-hard problem where the brute force
+            approach is incapable of scaling while a greedy algorithm is effective
+            for even very large graphs.
           </p>
         </article>
 
         <aside className="callout-card">
           <span className="eyebrow">Next Step</span>
-          <h3>Demo-ready entry point</h3>
+          <h3>Exploring graph algorithms</h3>
           <p>
-            The demo page is already laid out with a future graph canvas and
-            operator sidebar so React Flow can slot in naturally in the next
-            phase.
+            The demo page shows examples of different graph shapes and sizes.
+            Through the "Insights Lab" button, different trends can be
+            explored, such as brute force vs greedy algorithms for finding
+            the minimal set of counter arguments to effectively rebut a claim.
           </p>
           <Link className="text-link" to="/demo">
-            See the prepared workspace
+            See the demo
           </Link>
         </aside>
       </section>
@@ -68,10 +70,12 @@ export function HomePage() {
               </p>
             </li>
             <li>
-              <strong>Phase-by-phase delivery</strong>
+              <strong>Report on findings</strong>
               <p>
-                Keep the app easy to extend as routing, visualization, and API
-                integration arrive.
+                The project provides the ability to visually compare 
+                algorithms with different graph shapes (wide, chain, balanced, 
+                diamond) and sizes (100-, 1,000-, 10,000-, and 100,000-node 
+                graphs)
               </p>
             </li>
           </ul>
@@ -89,8 +93,12 @@ export function HomePage() {
               <p>ASP.NET Core Web API with controller, service, and repository layers.</p>
             </li>
             <li>
-              <strong>Near-term direction</strong>
-              <p>Graph canvas integration, live endpoint wiring, and deeper analysis views.</p>
+              <strong>CI/CD</strong>
+              <p>The repository is hosted on GitHub. A series of CI gates are run for each
+                PR. The frontend and backend have their own gates. Upon merging a PR to
+                main, the frontend is automatically deployed to Cloudflare Pages. The backend
+                is manually updated.
+              </p>
             </li>
           </ul>
         </article>

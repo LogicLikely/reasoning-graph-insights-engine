@@ -33,6 +33,45 @@
   align-content: start;
 }
 
+.demo-insights-lab-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 1.15rem;
+  padding: 1.35rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at top right, rgba(26, 141, 114, 0.2), transparent 48%),
+    var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.demo-insights-lab-card__copy {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.demo-insights-lab-card__copy .eyebrow {
+  justify-self: start;
+}
+
+.demo-insights-lab-card__copy h3 {
+  font-size: 1.45rem;
+}
+
+.demo-insights-lab-card__copy p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+
+.demo-insights-lab-card__button {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+}
+
 .demo-details-sheet__backdrop,
 .demo-details-sheet__mobile-header {
   display: none;

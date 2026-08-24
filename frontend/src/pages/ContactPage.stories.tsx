@@ -8,7 +8,7 @@ const meta = {
         docs: {
             description: {
                 component:
-                    'Storybook coverage for the Contact Page. This includes a full contact form with validation and a live preview section.',
+                    'Storybook coverage for the Contact Page. The page directs real messages to LogicLikely while preserving the original React form exercise, validation, console logging, and live preview.',
             },
         },
     },
@@ -23,9 +23,16 @@ export const Default: Story = {
     parameters: {
         docs: {
             description: {
-                story: 'The initial state of the contact page with an empty form.',
+                story: 'The contact bridge, exercise disclaimer, and initial empty form.',
             },
         },
+    },
+    play: async ({ canvas }) => {
+        await expect(canvas.getByText(/This form was a React learning exercise/i)).toBeVisible()
+        await expect(canvas.getByRole('link', { name: /Contact LogicLikely/i })).toHaveAttribute(
+            'href',
+            'https://www.logiclikely.com/contact',
+        )
     },
 }
 

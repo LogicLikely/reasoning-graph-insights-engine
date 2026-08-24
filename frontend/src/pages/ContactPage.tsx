@@ -187,11 +187,30 @@ export function ContactPage() {
     return (
         <div className="page-shell contact-page-shell" data-testid="contact-page">
             <section className="page-hero">
-                <span className="eyebrow">Get in Touch</span>
+                <span className="eyebrow">Contact</span>
                 <h1>Contact LogicLikely</h1>
-                <p>
-                    Use this form to send a question, comment, or idea.
-                </p>
+            </section>
+
+            <section className="contact-guidance" aria-labelledby="contact-exercise-title">
+                <div className="contact-guidance__exercise">
+                    <p>
+                    </p>
+                        This form was a React learning exercise and is deliberately non-functional. 
+                        It served as the basis for the more robust form at LogicLikely. 
+                        Use the button to contact us directly.
+                </div>
+
+                <div className="contact-guidance__bridge">
+                    <a
+                        className="primary-link contact-guidance__link"
+                        href="https://www.logiclikely.com/contact"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        Contact LogicLikely
+                        <span aria-hidden="true">↗</span>
+                    </a>
+                </div>
             </section>
 
             <ContactForm />

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { expect, fn, userEvent } from 'storybook/test'
+import { expect } from 'storybook/test'
 import { GraphOverviewPanel } from './GraphOverviewPanel'
 
 const meta = {
@@ -35,12 +35,9 @@ export const Default: Story = {
     edgeCount: 10,
     fixtureName: 'sample-medium',
     dataSource: 'fixture',
-    onOpenInsightsLab: fn(),
   },
-  play: async ({ args, canvas }) => {
+  play: async ({ canvas }) => {
     await expect(canvas.getByText(/Graph Overview/i)).toBeVisible()
-    await userEvent.click(canvas.getByRole('button', { name: 'Insights Lab' }))
-    await expect(args.onOpenInsightsLab).toHaveBeenCalledOnce()
   },
 }
 
