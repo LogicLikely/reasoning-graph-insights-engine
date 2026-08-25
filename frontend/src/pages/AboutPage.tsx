@@ -99,62 +99,183 @@ export function AboutPage() {
         <div className="about-section__heading">
           <span className="eyebrow">Architecture</span>
           <h2 id="architecture-heading">
-            A full-stack path from interaction to analysis.
+            From edge delivery to graph analysis.
           </h2>
           <p>
-            The browser is intentionally separated from graph analysis and
-            persistence. The React client handles navigation, visualization,
-            and editing; the ASP.NET Core API coordinates graph services,
-            calculations, storage, and performance reporting.
+            Cloudflare Pages serves the React client, which handles navigation,
+            visualization, and editing in the browser. Over HTTPS, the client
+            exchanges REST / JSON requests with an ASP.NET Core API that
+            coordinates graph analysis, persistence, and performance reporting.
           </p>
         </div>
 
-        <figure className="architecture-diagram">
-          <figcaption>Request and data flow</figcaption>
+        <figure
+          className="architecture-diagram"
+          aria-labelledby="architecture-diagram-caption"
+          aria-describedby="architecture-diagram-summary"
+        >
+          <figcaption id="architecture-diagram-caption">
+            Production request and data flow
+          </figcaption>
+          <p
+            id="architecture-diagram-summary"
+            className="architecture-diagram__summary"
+          >
+            Cloudflare Pages delivers the React application to the browser. The
+            application communicates with the ASP.NET Core API, which delegates
+            to backend services and returns the results through the same API.
+          </p>
 
-          <ol className="architecture-trunk">
-            <li className="architecture-node">
-              <span>Browser interface</span>
-              <strong>React + TypeScript</strong>
-              <p>Interactive graph workspace</p>
-            </li>
-            <li className="architecture-node">
-              <span>REST / JSON</span>
-              <strong>ASP.NET Core API</strong>
-              <p>Application boundary</p>
-            </li>
-            <li className="architecture-node architecture-node--accent">
-              <span>Service layer</span>
-              <strong>Graph services</strong>
-              <p>Coordinates analysis and data</p>
-            </li>
-          </ol>
+          <div className="architecture-runtime">
+            <section
+              className="architecture-zone architecture-zone--frontend"
+              aria-label="Client and frontend delivery"
+            >
+              <span className="architecture-zone__label">Client &amp; delivery</span>
 
-          <div className="architecture-fanout">
-            <span>Graph services coordinate three downstream responsibilities</span>
-          </div>
+              <div className="architecture-delivery-flow">
+                <article className="architecture-system">
+                  <div className="architecture-system__heading">
+                    <span
+                      className="architecture-marker architecture-marker--cloudflare"
+                      aria-hidden="true"
+                    >
+                      CF
+                    </span>
+                    <div>
+                      <span>Frontend hosting</span>
+                      <strong>Cloudflare Pages</strong>
+                    </div>
+                  </div>
+                  <p>Serves the production build at the edge</p>
+                </article>
 
-          <ul className="architecture-branches">
-            <li>
-              <span>Calculation</span>
-              <strong>Analysis engine</strong>
-              <p>Bayesian evaluation, sensitivity analysis, and counter-set solvers</p>
-            </li>
-            <li>
-              <span>Persistence</span>
-              <strong>Dapper repository</strong>
-              <p>Graph reads and writes</p>
-              <div className="architecture-datastore">
-                <span>Database</span>
-                <strong>PostgreSQL</strong>
+                <div className="architecture-delivery-connector" aria-hidden="true">
+                  <span>Delivers app</span>
+                </div>
+
+                <article className="architecture-system architecture-system--client">
+                  <div className="architecture-system__heading">
+                    <span className="architecture-marker" aria-hidden="true">
+                      UI
+                    </span>
+                    <div>
+                      <span>Browser interface</span>
+                      <strong>React + TypeScript</strong>
+                    </div>
+                  </div>
+                  <p>Graph navigation, visualization, and editing</p>
+                </article>
               </div>
-            </li>
-            <li>
-              <span>Reporting</span>
-              <strong>Performance history</strong>
-              <p>Saved benchmark runs and trends</p>
-            </li>
-          </ul>
+            </section>
+
+            <div
+              className="architecture-network"
+              aria-label="HTTPS REST and JSON connection through the Cloudflare edge"
+            >
+              <span>Cloudflare edge · HTTPS</span>
+              <strong>REST / JSON</strong>
+            </div>
+
+            <section
+              className="architecture-zone architecture-zone--backend"
+              aria-label="Application backend"
+            >
+              <span className="architecture-zone__label">Application backend</span>
+
+              <div className="architecture-backbone">
+                <article className="architecture-system">
+                  <div className="architecture-system__heading">
+                    <span className="architecture-marker" aria-hidden="true">
+                      API
+                    </span>
+                    <div>
+                      <span>Application boundary</span>
+                      <strong>ASP.NET Core API</strong>
+                    </div>
+                  </div>
+                  <p>Controllers and REST endpoints</p>
+                </article>
+
+                <div className="architecture-backbone__connector" aria-hidden="true" />
+
+                <article className="architecture-system architecture-system--hub">
+                  <div className="architecture-system__heading">
+                    <span className="architecture-marker" aria-hidden="true">
+                      SVC
+                    </span>
+                    <div>
+                      <span>Service layer</span>
+                      <strong>Backend services</strong>
+                    </div>
+                  </div>
+                  <p>Coordinates analysis, persistence, and reporting</p>
+                </article>
+              </div>
+
+              <ul className="architecture-responsibilities">
+                <li className="architecture-responsibility">
+                  <div className="architecture-responsibility__heading">
+                    <span className="architecture-marker" aria-hidden="true">
+                      ALG
+                    </span>
+                    <div>
+                      <span>Calculation</span>
+                      <strong>Analysis engine</strong>
+                    </div>
+                  </div>
+                  <p>
+                    Bayesian evaluation, counter-set search, and sensitivity
+                    analysis
+                  </p>
+                </li>
+
+                <li className="architecture-responsibility">
+                  <div className="architecture-responsibility__heading">
+                    <span className="architecture-marker" aria-hidden="true">
+                      DATA
+                    </span>
+                    <div>
+                      <span>Persistence</span>
+                      <strong>Dapper repository</strong>
+                    </div>
+                  </div>
+                  <p>Graph reads and writes</p>
+                  <div className="architecture-store">
+                    <span className="architecture-store__icon" aria-hidden="true">
+                      DB
+                    </span>
+                    <div>
+                      <span>Graph database</span>
+                      <strong>PostgreSQL</strong>
+                    </div>
+                  </div>
+                </li>
+
+                <li className="architecture-responsibility">
+                  <div className="architecture-responsibility__heading">
+                    <span className="architecture-marker" aria-hidden="true">
+                      RUN
+                    </span>
+                    <div>
+                      <span>Reporting</span>
+                      <strong>Performance run store</strong>
+                    </div>
+                  </div>
+                  <p>Benchmark capture and trend history</p>
+                  <div className="architecture-store">
+                    <span className="architecture-store__icon" aria-hidden="true">
+                      JSON
+                    </span>
+                    <div>
+                      <span>Report store</span>
+                      <strong>JSON run history</strong>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </div>
         </figure>
       </section>
 

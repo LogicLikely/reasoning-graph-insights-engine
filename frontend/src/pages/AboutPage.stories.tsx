@@ -43,10 +43,12 @@ export const Default: Story = {
     ).toBeVisible()
     await expect(
       canvas.getByRole('heading', {
-        name: /A full-stack path from interaction to analysis/i,
+        name: /From edge delivery to graph analysis/i,
         level: 2,
       }),
     ).toBeVisible()
+    await expect(canvas.getByText('Cloudflare Pages')).toBeVisible()
+    await expect(canvas.getByText('JSON run history')).toBeVisible()
     await expect(canvas.getByRole('link', { name: /Open the demo/i })).toHaveAttribute(
       'href',
       '/demo',

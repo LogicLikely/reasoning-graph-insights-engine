@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { AboutPage } from './AboutPage'
@@ -32,13 +32,18 @@ describe('AboutPage', () => {
     ).toHaveAttribute('href', 'https://github.com/Jacobn99')
     expect(
       screen.getByRole('heading', {
-        name: /A full-stack path from interaction to analysis/i,
+        name: /From edge delivery to graph analysis/i,
         level: 2,
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText('React + TypeScript')).toBeInTheDocument()
-    expect(screen.getByText('ASP.NET Core API')).toBeInTheDocument()
-    expect(screen.getByText('PostgreSQL')).toBeInTheDocument()
+    const architecture = screen.getByRole('figure', {
+      name: /Production request and data flow/i,
+    })
+    expect(within(architecture).getByText('Cloudflare Pages')).toBeInTheDocument()
+    expect(within(architecture).getByText('React + TypeScript')).toBeInTheDocument()
+    expect(within(architecture).getByText('ASP.NET Core API')).toBeInTheDocument()
+    expect(within(architecture).getByText('PostgreSQL')).toBeInTheDocument()
+    expect(within(architecture).getByText('JSON run history')).toBeInTheDocument()
   })
 
   it('links to the demo and public source repository', () => {

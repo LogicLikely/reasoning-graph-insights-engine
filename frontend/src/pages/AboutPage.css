@@ -213,7 +213,7 @@
 }
 
 .architecture-diagram figcaption {
-  margin-bottom: 0.9rem;
+  margin-bottom: 1rem;
   color: var(--color-text-muted);
   font-size: 0.75rem;
   font-weight: 800;
@@ -221,113 +221,312 @@
   text-transform: uppercase;
 }
 
-.architecture-trunk,
-.architecture-branches {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.architecture-trunk {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3rem;
-}
-
-.architecture-node {
-  position: relative;
-  display: grid;
-  align-content: center;
-  gap: 0.35rem;
-  min-height: 7rem;
-  padding: 1rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.84);
-  text-align: center;
-}
-
-.architecture-node:not(:last-child)::after {
-  content: '→';
+.architecture-diagram__summary {
   position: absolute;
-  top: 50%;
-  right: -2.25rem;
-  color: var(--color-accent-soft);
-  font-size: 1.45rem;
-  font-weight: 800;
-  transform: translateY(-50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.architecture-node--accent {
-  border-color: rgba(13, 93, 86, 0.52);
-  background: rgba(247, 248, 242, 0.96);
-  box-shadow: inset 0 0 0 1px rgba(13, 93, 86, 0.06);
+.architecture-runtime {
+  display: grid;
+  grid-template-columns: minmax(13.5rem, 0.72fr) 5.5rem minmax(0, 1.65fr);
+  gap: 0.85rem;
+  align-items: stretch;
 }
 
-.architecture-node > span,
-.architecture-branches > li > span,
-.architecture-datastore span {
-  color: var(--color-accent);
-  font-size: 0.7rem;
+.architecture-zone {
+  position: relative;
+  padding: 2.65rem 1rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1.2rem;
+  background: rgba(247, 248, 242, 0.7);
+}
+
+.architecture-zone--backend {
+  border-color: var(--color-border-strong);
+  background: rgba(253, 253, 248, 0.92);
+}
+
+.architecture-zone__label {
+  position: absolute;
+  top: 0.85rem;
+  left: 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
-.architecture-node strong,
-.architecture-branches strong {
-  color: var(--color-text);
-  font-size: 1.02rem;
+.architecture-delivery-flow {
+  display: grid;
+  align-content: center;
+  height: 100%;
 }
 
-.architecture-node p,
-.architecture-branches p {
-  font-size: 0.88rem;
-  line-height: 1.5;
+.architecture-system,
+.architecture-responsibility {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  padding: 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.88);
 }
 
-.architecture-fanout {
+.architecture-system--client {
+  border-color: var(--color-border-strong);
+}
+
+.architecture-system--hub {
+  border-color: rgba(13, 93, 86, 0.52);
+  background: rgba(237, 243, 236, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(13, 93, 86, 0.06);
+}
+
+.architecture-system__heading,
+.architecture-responsibility__heading,
+.architecture-store {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin: 1rem 0;
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-align: center;
+  gap: 0.7rem;
+  min-width: 0;
 }
 
-.architecture-fanout::before,
-.architecture-fanout::after {
+.architecture-system__heading > div,
+.architecture-responsibility__heading > div,
+.architecture-store > div {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.architecture-marker,
+.architecture-store__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.72rem;
+  background: rgba(13, 93, 86, 0.1);
+  color: var(--color-accent);
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.architecture-marker--cloudflare {
+  background: #f48120;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(244, 129, 32, 0.18);
+}
+
+.architecture-system__heading span:not(.architecture-marker),
+.architecture-responsibility__heading span:not(.architecture-marker),
+.architecture-store span:not(.architecture-store__icon) {
+  color: var(--color-accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.architecture-system strong,
+.architecture-responsibility strong,
+.architecture-store strong {
+  color: var(--color-text);
+  font-size: 0.93rem;
+  line-height: 1.25;
+}
+
+.architecture-system p,
+.architecture-responsibility p {
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.architecture-delivery-connector {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 2.6rem;
+}
+
+.architecture-delivery-connector::before {
   content: '';
-  flex: 1;
+  position: absolute;
+  top: 0;
+  bottom: 0.3rem;
+  left: 50%;
+  width: 1px;
+  background: var(--color-border-strong);
+}
+
+.architecture-delivery-connector::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  border: 0.3rem solid transparent;
+  border-top: 0.42rem solid var(--color-accent-soft);
+  transform: translateX(-50%);
+}
+
+.architecture-delivery-connector span,
+.architecture-network span,
+.architecture-network strong {
+  position: relative;
+  z-index: 1;
+  padding: 0.12rem 0.3rem;
+  background: #f7f8f2;
+  color: var(--color-text-muted);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.architecture-network {
+  position: relative;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.architecture-network::before {
+  content: '';
+  position: absolute;
+  right: 0.35rem;
+  left: 0;
+  top: 50%;
   height: 1px;
   background: var(--color-border-strong);
 }
 
-.architecture-branches {
+.architecture-network::after,
+.architecture-backbone__connector::after {
+  content: '';
+  position: absolute;
+  border: 0.3rem solid transparent;
+  border-left: 0.42rem solid var(--color-accent-soft);
+}
+
+.architecture-network::after {
+  top: 50%;
+  right: -0.18rem;
+  transform: translateY(-50%);
+}
+
+.architecture-network strong {
+  color: var(--color-accent);
+}
+
+.architecture-backbone {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.25rem minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.architecture-backbone__connector {
+  position: relative;
+}
+
+.architecture-backbone__connector::before {
+  content: '';
+  position: absolute;
+  right: 0.35rem;
+  left: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--color-border-strong);
+}
+
+.architecture-backbone__connector::after {
+  top: 50%;
+  right: -0.18rem;
+  transform: translateY(-50%);
+}
+
+.architecture-responsibilities {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.85rem;
-  align-items: start;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 2.1rem 0 0;
+  list-style: none;
 }
 
-.architecture-branches > li {
-  display: grid;
-  gap: 0.35rem;
-  min-height: 7.25rem;
-  padding: 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 1.1rem;
-  background: var(--color-surface);
+.architecture-responsibilities::before {
+  content: '';
+  position: absolute;
+  top: 0.7rem;
+  right: 16.666%;
+  left: 16.666%;
+  height: 1px;
+  background: var(--color-border-strong);
 }
 
-.architecture-datastore {
-  display: grid;
-  gap: 0.1rem;
-  margin-top: 0.45rem;
-  padding-top: 0.7rem;
+.architecture-responsibilities::after {
+  content: '';
+  position: absolute;
+  top: -0.8rem;
+  left: 75%;
+  width: 1px;
+  height: 1.5rem;
+  background: var(--color-border-strong);
+}
+
+.architecture-responsibility {
+  min-width: 0;
+}
+
+.architecture-responsibility::before {
+  content: '';
+  position: absolute;
+  top: -1.4rem;
+  left: 50%;
+  width: 1px;
+  height: 1.15rem;
+  background: var(--color-border-strong);
+}
+
+.architecture-responsibility::after {
+  content: '';
+  position: absolute;
+  top: -0.35rem;
+  left: 50%;
+  border: 0.28rem solid transparent;
+  border-top: 0.4rem solid var(--color-accent-soft);
+  transform: translateX(-50%);
+}
+
+.architecture-responsibility__heading {
+  align-items: flex-start;
+}
+
+.architecture-store {
+  align-self: end;
+  margin-top: auto;
+  padding-top: 0.65rem;
   border-top: 1px solid var(--color-border);
+}
+
+.architecture-store__icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  font-size: 0.5rem;
 }
 
 .capability-grid {
@@ -458,41 +657,135 @@
     justify-content: flex-start;
   }
 
-  .architecture-trunk {
-    gap: 2.25rem;
+  .architecture-runtime {
+    grid-template-columns: 1fr;
   }
 
-  .architecture-node:not(:last-child)::after {
-    right: -1.8rem;
+  .architecture-delivery-flow {
+    grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .architecture-delivery-connector {
+    min-height: 0;
+  }
+
+  .architecture-delivery-connector::before {
+    top: 50%;
+    right: 0.4rem;
+    bottom: auto;
+    left: 0;
+    width: auto;
+    height: 1px;
+  }
+
+  .architecture-delivery-connector::after {
+    top: 50%;
+    right: -0.15rem;
+    bottom: auto;
+    left: auto;
+    border: 0.3rem solid transparent;
+    border-left: 0.42rem solid var(--color-accent-soft);
+    transform: translateY(-50%);
+  }
+
+  .architecture-network {
+    min-height: 3.8rem;
+  }
+
+  .architecture-network::before {
+    top: 0;
+    right: auto;
+    bottom: 0.35rem;
+    left: 50%;
+    width: 1px;
+    height: auto;
+  }
+
+  .architecture-network::after {
+    top: auto;
+    right: auto;
+    bottom: -0.18rem;
+    left: 50%;
+    border: 0.3rem solid transparent;
+    border-top: 0.42rem solid var(--color-accent-soft);
+    transform: translateX(-50%);
   }
 }
 
 @media (max-width: 720px) {
-  .architecture-trunk,
-  .architecture-branches,
+  .architecture-responsibilities,
   .capability-grid {
     grid-template-columns: 1fr;
   }
 
-  .architecture-trunk {
-    gap: 2.25rem;
+  .architecture-backbone {
+    grid-template-columns: 1fr;
   }
 
-  .architecture-node {
-    min-height: 6.5rem;
+  .architecture-backbone__connector {
+    min-height: 2.6rem;
   }
 
-  .architecture-node:not(:last-child)::after {
-    content: '↓';
+  .architecture-backbone__connector::before {
+    top: 0;
+    right: auto;
+    bottom: 0.35rem;
+    left: 50%;
+    width: 1px;
+    height: auto;
+  }
+
+  .architecture-backbone__connector::after {
     top: auto;
-    right: 50%;
-    bottom: -1.85rem;
-    transform: translateX(50%);
+    right: auto;
+    bottom: -0.18rem;
+    left: 50%;
+    border: 0.3rem solid transparent;
+    border-top: 0.42rem solid var(--color-accent-soft);
+    transform: translateX(-50%);
   }
 
-  .architecture-branches > li,
-  .capability-card {
-    min-height: auto;
+  .architecture-responsibilities {
+    gap: 1.6rem;
+    padding-top: 2.1rem;
+  }
+
+  .architecture-responsibilities::before {
+    top: 0;
+    right: 50%;
+    bottom: 0;
+    left: 1.15rem;
+    width: auto;
+    height: auto;
+    border-top: 1px solid var(--color-border-strong);
+    border-left: 1px solid var(--color-border-strong);
+    background: none;
+  }
+
+  .architecture-responsibilities::after {
+    top: -0.8rem;
+    left: 50%;
+    height: 0.8rem;
+  }
+
+  .architecture-responsibility {
+    margin-left: 2.35rem;
+  }
+
+  .architecture-responsibility::before {
+    top: 1.2rem;
+    left: -1.2rem;
+    width: 1.2rem;
+    height: 1px;
+  }
+
+  .architecture-responsibility::after {
+    top: 0.94rem;
+    left: -0.15rem;
+    border: 0.28rem solid transparent;
+    border-left: 0.4rem solid var(--color-accent-soft);
+    transform: none;
   }
 }
 
@@ -509,7 +802,30 @@
     border-radius: 1.1rem;
   }
 
-  .architecture-fanout span {
-    max-width: 15rem;
+  .architecture-delivery-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .architecture-delivery-connector {
+    min-height: 2.6rem;
+  }
+
+  .architecture-delivery-connector::before {
+    top: 0;
+    right: auto;
+    bottom: 0.3rem;
+    left: 50%;
+    width: 1px;
+    height: auto;
+  }
+
+  .architecture-delivery-connector::after {
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: 50%;
+    border: 0.3rem solid transparent;
+    border-top: 0.42rem solid var(--color-accent-soft);
+    transform: translateX(-50%);
   }
 }
