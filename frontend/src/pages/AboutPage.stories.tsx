@@ -8,11 +8,11 @@ const meta = {
     docs: {
       description: {
         component:
-          'Storybook coverage for the About page. These stories validate that the architecture and project-positioning copy renders correctly inside the app shell.',
+          'Storybook coverage for the About page. This story validates the project narrative, internship acknowledgment, architecture, and primary next steps.',
       },
     },
   },
-  tags: ['autodocs', 'ai-generated', 'needs-work'],
+  tags: ['autodocs'],
 } satisfies Meta<typeof AboutPage>
 
 export default meta
@@ -24,11 +24,40 @@ export const Default: Story = {
     docs: {
       description: {
         story:
-          'Checks the default About page render by asserting that the main hero copy is visible. This verifies that the page-level explanatory content is mounted and readable.',
+          'Checks that the project overview, internship contribution, architecture, and exploration links render together.',
       },
     },
   },
   play: async ({ canvas }) => {
-    await expect(canvas.getByText(/A small platform for reasoning graphs/i)).toBeVisible()
+    await expect(
+      canvas.getByRole('heading', {
+        name: /A working laboratory for reasoning graphs/i,
+        level: 1,
+      }),
+    ).toBeVisible()
+    await expect(
+      canvas.getByRole('heading', {
+        name: /A collaborative engineering project/i,
+        level: 2,
+      }),
+    ).toBeVisible()
+    await expect(
+      canvas.getByRole('heading', {
+        name: /From edge delivery to graph analysis/i,
+        level: 2,
+      }),
+    ).toBeVisible()
+    await expect(canvas.getByText('Cloudflare Pages')).toBeVisible()
+    await expect(canvas.getByText('JSON run history')).toBeVisible()
+    await expect(canvas.getByRole('link', { name: /Open the demo/i })).toHaveAttribute(
+      'href',
+      '/demo',
+    )
+    await expect(
+      canvas.getByRole('link', { name: /View source on GitHub/i }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/LogicLikely/reasoning-graph-insights-engine',
+    )
   },
 }

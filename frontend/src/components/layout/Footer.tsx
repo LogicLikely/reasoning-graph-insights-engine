@@ -12,7 +12,7 @@ export function Footer() {
         <div className="site-footer__links">
           <Link to="/">Home</Link>
           <Link to="/demo">Demo</Link>
-          <Link to="/about">Architecture</Link>
+          <Link to="/about">About</Link>
         </div>
       </div>
     </footer>
