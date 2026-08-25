@@ -28,16 +28,17 @@ export function HomePage() {
           <span className="eyebrow">What This Explores</span>
           <h2>From claims and evidence to a navigable reasoning surface.</h2>
           <p>
-            The project is designed to support graph-based inspection of
-            arguments, counterarguments, and evidence chains. The Insights Lab
-            analysis clearly demonstrates an NP-hard problem where the brute force
-            approach is incapable of scaling while a greedy algorithm is effective
-            for even very large graphs.
+            The project supports graph-based inspection of arguments, 
+            counterarguments, and evidence chains. It explored a 
+            minimum-counter-set problem motivated by NP-hard set-cover 
+            optimization. The Insights Lab compares a fast greedy 
+            heuristic that finds a usable counter-set with a brute-force
+            approach that while accurate, is too slow for large graphs.
           </p>
         </article>
 
         <aside className="callout-card">
-          <span className="eyebrow">Next Step</span>
+          <span className="eyebrow">Interactive Demo</span>
           <h3>Exploring graph algorithms</h3>
           <p>
             The demo page shows examples of different graph shapes and sizes.

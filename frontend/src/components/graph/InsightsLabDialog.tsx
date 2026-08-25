@@ -394,7 +394,7 @@ function OpenInsightsLabDialog({
   const abortControllerRef = useRef<AbortController | null>(null)
   const runGuardRef = useRef(false)
   const suiteStopRequestedRef = useRef(false)
-  const [tab, setTab] = useState<LabTab>('run')
+  const [tab, setTab] = useState<LabTab>(() => allowNewRuns ? 'run' : 'trends')
   const [expandedOperationId, setExpandedOperationId] = useState<OperationId>()
   const [runs, setRuns] = useState<PerformanceRunRecord[]>([])
   const [benchmarkSets, setBenchmarkSets] = useState<BenchmarkSet[]>([])

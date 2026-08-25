@@ -28,7 +28,7 @@ export const Default: Story = {
         },
     },
     play: async ({ canvas }) => {
-        await expect(canvas.getByText(/This form was a React learning exercise/i)).toBeVisible()
+        await expect(canvas.getByText(/This form was an early onboarding exercise/i)).toBeVisible()
         await expect(canvas.getByRole('link', { name: /Contact LogicLikely/i })).toHaveAttribute(
             'href',
             'https://www.logiclikely.com/contact',

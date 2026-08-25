@@ -28,7 +28,7 @@ export function AboutPage() {
           <h3>Frontend and backend split</h3>
           <p>
             The frontend is responsible for navigation, workspace layout, and
-            future graph interaction. The backend owns graph retrieval, shaping,
+            graph interaction. The backend owns graph retrieval, shaping,
             and the API surface that feeds the demo experience.
           </p>
         </article>
@@ -56,10 +56,9 @@ export function AboutPage() {
         <article className="feature-card">
           <h3>2026 Summer Internship Program</h3>
           <p>
-            This page site is part of a summer internship program for 2026, conducted
-            by Jacob Nuttall. Along with first-hand experience working in our 
-            development environment, the program sought to gain real analysis into
-            algorithms the company is considering.
+            Developed during Jacob Nuttall’s Summer 2026 software engineering internship 
+            project with LogicLikely. Jacob led the counter-set algorithm work and 
+            contributed to the full-stack implementation and benchmarking tools.
           </p>
         </article>
       </section>

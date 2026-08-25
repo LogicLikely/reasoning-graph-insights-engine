@@ -125,6 +125,7 @@ describe('InsightsLabDialog', () => {
       />,
     )
 
+    expect(screen.getByRole('tab', { name: 'Run' })).toHaveAttribute('aria-selected', 'true')
     const runButton = within(operationCard(/Minimal counter set/)).getByRole('button', {
       name: 'Run Minimal counter set',
     })
@@ -181,6 +182,10 @@ describe('InsightsLabDialog', () => {
       )
 
       await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+      expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getByRole('heading', { name: 'Historical trends' })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Run' }))
       const benchmarkSelect = screen.getByLabelText('Benchmark set')
       expect(benchmarkSelect).toHaveValue('')
       for (const runButton of screen.getAllByRole('button', { name: /^Run / })) {
@@ -237,6 +242,8 @@ describe('InsightsLabDialog', () => {
     )
 
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Run' }))
     expect(screen.getByLabelText('Benchmark set')).toHaveValue('')
     for (const runButton of screen.getAllByRole('button', { name: /^Run / })) {
       expect(runButton).toBeDisabled()
@@ -545,7 +552,8 @@ describe('InsightsLabDialog', () => {
     )
     expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledTimes(3)
     expect(screen.getByRole('tab', { name: /History/ })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('button', { name: 'Back to all runs' })).toHaveFocus()
+    const historyBackButton = screen.getByRole('button', { name: 'Back to all runs' })
+    await waitFor(() => expect(historyBackButton).toHaveFocus())
     expect(screen.queryByRole('region', { name: 'Performance run history' })).not.toBeInTheDocument()
   })
 
@@ -834,7 +842,8 @@ describe('InsightsLabDialog', () => {
     fireEvent.click(runButton)
 
     const cancel = await screen.findByRole('button', { name: 'Cancel run' })
-    expect(screen.getByText('Running…').closest('[role="status"]')).toHaveFocus()
+    const runningStatus = screen.getByText('Running…').closest('[role="status"]')
+    await waitFor(() => expect(runningStatus).toHaveFocus())
     expect(screen.getByRole('button', { name: 'Close Insights Lab' })).toBeDisabled()
     fireEvent.click(cancel)
 
@@ -923,7 +932,8 @@ describe('InsightsLabDialog', () => {
 
     expect(await screen.findByText('Standard stress suite complete')).toBeInTheDocument()
     expect(screen.getByText(/72 requests completed/)).toBeInTheDocument()
-    expect(screen.getByText('Standard stress suite complete').closest('[role="status"]')).toHaveFocus()
+    const suiteSummary = screen.getByText('Standard stress suite complete').closest('[role="status"]')
+    await waitFor(() => expect(suiteSummary).toHaveFocus())
     expect(sequence).toEqual(standardGraphOptions.flatMap(({ id }) => [
       `${id}:minimal`,
       `${id}:bounded`,
@@ -1036,7 +1046,8 @@ describe('InsightsLabDialog', () => {
 
     expect(await screen.findByText('Standard stress suite stopped')).toBeInTheDocument()
     expect(screen.getByText(/1 request interrupted/)).toBeInTheDocument()
-    expect(screen.getByText('Standard stress suite stopped').closest('[role="status"]')).toHaveFocus()
+    const suiteSummary = screen.getByText('Standard stress suite stopped').closest('[role="status"]')
+    await waitFor(() => expect(suiteSummary).toHaveFocus())
     expect(receivedSignal?.aborted).toBe(true)
     expect(serviceMocks.getBoundedNodeCounterSet).not.toHaveBeenCalled()
     expect(serviceMocks.getGraphBySlug).not.toHaveBeenCalled()
