@@ -15,7 +15,7 @@ export function HomePage() {
 
         <div className="hero-actions">
           <Link className="primary-link" to="/demo">
-            Open the demo shell
+            Open the demo
           </Link>
           <Link className="secondary-link" to="/about">
             Review the architecture
