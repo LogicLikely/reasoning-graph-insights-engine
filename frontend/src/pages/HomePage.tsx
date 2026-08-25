@@ -18,7 +18,7 @@ export function HomePage() {
             Open the demo
           </Link>
           <Link className="secondary-link" to="/about">
-            Review the architecture
+            Explore the project
           </Link>
         </div>
       </section>

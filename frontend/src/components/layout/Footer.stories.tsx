@@ -30,5 +30,9 @@ export const Default: Story = {
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByText(/Reasoning Graph Insights Engine/i)).toBeVisible()
+    await expect(canvas.getByRole('link', { name: 'About' })).toHaveAttribute(
+      'href',
+      '/about',
+    )
   },
 }

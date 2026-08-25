@@ -30,5 +30,8 @@ export const Default: Story = {
   },
   play: async ({ canvas }) => {
     await expect(canvas.getByText(/Map how reasoning structures hold together under pressure/i)).toBeVisible()
+    await expect(
+      canvas.getByRole('link', { name: /Explore the project/i }),
+    ).toHaveAttribute('href', '/about')
   },
 }
