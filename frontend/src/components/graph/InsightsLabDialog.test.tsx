@@ -125,6 +125,7 @@ describe('InsightsLabDialog', () => {
       />,
     )
 
+    expect(screen.getByRole('tab', { name: 'Run' })).toHaveAttribute('aria-selected', 'true')
     const runButton = within(operationCard(/Minimal counter set/)).getByRole('button', {
       name: 'Run Minimal counter set',
     })
@@ -181,6 +182,10 @@ describe('InsightsLabDialog', () => {
       )
 
       await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+      expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getByRole('heading', { name: 'Historical trends' })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Run' }))
       const benchmarkSelect = screen.getByLabelText('Benchmark set')
       expect(benchmarkSelect).toHaveValue('')
       for (const runButton of screen.getAllByRole('button', { name: /^Run / })) {
@@ -237,6 +242,8 @@ describe('InsightsLabDialog', () => {
     )
 
     await waitFor(() => expect(serviceMocks.getPerformanceRuns).toHaveBeenCalledOnce())
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Run' }))
     expect(screen.getByLabelText('Benchmark set')).toHaveValue('')
     for (const runButton of screen.getAllByRole('button', { name: /^Run / })) {
       expect(runButton).toBeDisabled()

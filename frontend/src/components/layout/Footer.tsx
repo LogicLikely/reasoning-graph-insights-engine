@@ -6,7 +6,7 @@ export function Footer() {
       <div className="site-footer__inner">
         <div className="site-footer__meta">
           <strong>Reasoning Graph Insights Engine</strong>
-          <span>Exploring graph structure NP-hard problems.</span>
+          <span>Exploring NP-hard optimization in reasoning graphs.</span>
         </div>
 
         <div className="site-footer__links">

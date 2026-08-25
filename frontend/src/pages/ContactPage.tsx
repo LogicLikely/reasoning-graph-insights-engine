@@ -195,7 +195,7 @@ export function ContactPage() {
                 <div className="contact-guidance__exercise">
                     <p>
                     </p>
-                        This form was a React learning exercise and is deliberately non-functional. 
+                        This form was an early onboarding exercise and is deliberately non-functional. 
                         It served as the basis for the more robust form at LogicLikely. 
                         Use the button to contact us directly.
                 </div>

@@ -8,7 +8,7 @@ export function NotFoundPage() {
         <span className="eyebrow">404</span>
         <h1>Page not found</h1>
         <p>
-          The route you requested is not part of the current SPA shell. You can
+          The route you requested is not available. You can
           head back to the overview or jump directly into the demo workspace.
         </p>
 
